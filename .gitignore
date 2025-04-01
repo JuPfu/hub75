@@ -1,4 +1,7 @@
+# exclude vscode directory
 .vscode/
+
+# exclude build directory
 build/
 
 # Prerequisites
