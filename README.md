@@ -92,9 +92,9 @@ This approach allows fully **chained DMA execution** without CPU intervention.
 The following diagram illustrates the interactions between **DMA channels** and **PIO state machines**:
 
 ```
-[ Pixel Data DMA ] -> [ hub75_rdata_gb888 PIO ]
+[ Pixel Data DMA ] -> [ hub75_data_rgb888 PIO ]
        |
-       |--> [ Dummy Pixel Data DMA ] -> [ hub75_rgb_data PIO ]
+       |--> [ Dummy Pixel Data DMA ] -> [ hub75_data_rgb888 PIO ]
                   |
                   |--> [ OEn Data DMA ] -> [ hub75_row PIO ]
                            |
