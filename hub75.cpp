@@ -79,7 +79,7 @@ static void oen_finished_handler()
     dma_hw->ints0 = 1u << oen_finished_chan;
 
     // Advance row addressing; reset and increment bit-plane if needed
-    if (++row_address >= (width >> 1))
+    if (++row_address >= (height >> 1))
     {
         row_address = 0;
 
