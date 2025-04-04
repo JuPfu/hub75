@@ -1,5 +1,10 @@
 # HUB75 DMA-Based Driver
 
+
+https://github.com/user-attachments/assets/7c41193c-c724-4fae-8823-af36d70fcedd
+
+*Demo video: Colours are much brighter and more brilliant in reality*
+
 ## Documentation and References
 
 This project is based on:
