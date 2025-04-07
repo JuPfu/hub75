@@ -31,7 +31,7 @@ extern volatile uint32_t *frame_buffer; ///< Frame buffer of the Hub75 driver co
 
 static volatile uint32_t interwoven_img[5][RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT]; ///< Interwoven image buffers for examples
 
-static int frame_index = 0; ///< Selector of image buffer
+static int volatile frame_index = 0; ///< Selector of image buffer
 
 using namespace pimoroni;
 
@@ -74,19 +74,14 @@ int led_init(void)
 
 /**
  * @brief Cycle through all examples by assigning an interwoven image to frame_buffer
- * 
+ *
  * @param t pointer to repeating timer
- * @return true 
+ * @return true
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
     critical_section_enter_blocking(&cs1); // Enter critical section to protect shared resources
-
-    if (++frame_index > 4)
-    {
-        frame_index = 0;
-    }
-
+    if (++frame_index > 4) frame_index = 0; // Cycle through all examples
     frame_buffer = interwoven_img[frame_index];
     critical_section_exit(&cs1); // Exit critical section
 
@@ -100,15 +95,6 @@ void core1_entry()
 {
     create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
     start_hub75_driver();
-}
-
-// Ramp up color resolution from 8 to 10 bits via gamma table look-up
-inline void extend_colorrange(uint32_t color, volatile uint32_t *target)
-{
-    uint32_t r = gamma_lut[(color & 0xff0000) >> 16];
-    uint32_t g = gamma_lut[(color & 0x00ff00) >> 8];
-    uint32_t b = gamma_lut[(color & 0x0000ff) >> 0];
-    *target = b << 20 | g << 10 | r << 0;
 }
 
 void update(
@@ -125,8 +111,8 @@ void update(
         uint j = 0;
         for (int i = 0; i < RGB_MATRIX_HEIGHT * RGB_MATRIX_WIDTH; i += 2)
         {
-            extend_colorrange(src[j], &(target[i]));
-            extend_colorrange(src[j + OFFSET], &target[i + 1]);
+            target[i] = gamma_lut[(src[j] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j] & 0xff0000) >> 16];
+            target[i + 1] = gamma_lut[(src[j + OFFSET] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j + OFFSET] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j + OFFSET] & 0xff0000) >> 16];
             j++;
         }
     }
