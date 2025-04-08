@@ -27,7 +27,7 @@
 
 extern volatile uint32_t *frame_buffer; ///< Frame buffer addrss of the Hub75 driver buffer containing interwoven pixel data for display.
 
-static int volatile frame_index = 0; ///< Selector of image buffer
+static int frame_index = 0; ///< Example selector
 
 using namespace pimoroni;
 
@@ -69,7 +69,7 @@ int led_init(void)
 }
 
 /**
- * @brief Cycle through all examples by assigning an interwoven image to frame_buffer
+ * @brief Cycle through all examples
  *
  * @param t pointer to repeating timer
  * @return true

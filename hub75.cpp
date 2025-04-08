@@ -18,6 +18,8 @@
 
 #define EXIT_FAILURE 1
 
+#define BIT_DEPTH 10 ///< Number of bit planes
+
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 volatile uint32_t *frame_buffer; ///< Interwoven image buffers for examples;
 
@@ -28,8 +30,6 @@ static void configure_dma_channels();
 static void configure_pio();
 static void setup_dma_transfers();
 static void setup_dma_irq();
-
-
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
 static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
@@ -85,7 +85,7 @@ static void oen_finished_handler()
     {
         row_address = 0;
 
-        if (++bit_plane >= 10)
+        if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
         }
@@ -130,7 +130,7 @@ void create_hub75_driver(uint w, uint h)
     width = w;
     height = h;
 
-    frame_buffer = new uint32_t[width * height]();  // Allocate memory for frame buffer and zero-initialize
+    frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
 
     configure_pio();
     configure_dma_channels();
