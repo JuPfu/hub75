@@ -25,11 +25,7 @@
 #define RGB_MATRIX_HEIGHT 64
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
-critical_section_t cs1; ///< Critical section to protect shared resources.
-
-extern volatile uint32_t *frame_buffer; ///< Frame buffer of the Hub75 driver containing interwoven pixel data for display.
-
-static volatile uint32_t interwoven_img[5][RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT]; ///< Interwoven image buffers for examples
+extern volatile uint32_t *frame_buffer; ///< Frame buffer addrss of the Hub75 driver buffer containing interwoven pixel data for display.
 
 static int volatile frame_index = 0; ///< Selector of image buffer
 
@@ -80,10 +76,8 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    critical_section_enter_blocking(&cs1); // Enter critical section to protect shared resources
-    if (++frame_index > 4) frame_index = 0; // Cycle through all examples
-    frame_buffer = interwoven_img[frame_index];
-    critical_section_exit(&cs1); // Exit critical section
+    if (++frame_index > 4)
+        frame_index = 0; // Cycle through all examples
 
     return true;
 }
@@ -98,8 +92,7 @@ void core1_entry()
 }
 
 void update(
-    PicoGraphics const *graphics, // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
-    volatile uint32_t *target     // Target image buffer - 30 bits (10 bits per color channel) in a uint32-t array in interwoven pixel BGR format
+    PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
 )
 {
     if (graphics->pen_type == PicoGraphics::PEN_RGB888)
@@ -111,14 +104,14 @@ void update(
         uint j = 0;
         for (int i = 0; i < RGB_MATRIX_HEIGHT * RGB_MATRIX_WIDTH; i += 2)
         {
-            target[i] = gamma_lut[(src[j] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j] & 0xff0000) >> 16];
-            target[i + 1] = gamma_lut[(src[j + OFFSET] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j + OFFSET] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j + OFFSET] & 0xff0000) >> 16];
+            frame_buffer[i] = gamma_lut[(src[j] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j] & 0xff0000) >> 16];
+            frame_buffer[i + 1] = gamma_lut[(src[j + OFFSET] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j + OFFSET] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j + OFFSET] & 0xff0000) >> 16];
             j++;
         }
     }
 }
 
-void ramp_up_color_resolution_and_interweave_pixel(uint8_t *src, volatile uint32_t *buffer)
+void update_bgr(uint8_t *src)
 {
     uint offset = OFFSET * 3;
     uint k = 0;
@@ -126,8 +119,8 @@ void ramp_up_color_resolution_and_interweave_pixel(uint8_t *src, volatile uint32
     // Interweave pixels as requiered by Hub75 LED panel matrix
     for (int j = 0; j < RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT; j += 2)
     {
-        buffer[j] = gamma_lut[src[k]] << 20 | gamma_lut[src[k + 1]] << 10 | gamma_lut[src[k + 2]];
-        buffer[j + 1] = gamma_lut[src[offset + k]] << 20 | gamma_lut[src[offset + k + 1]] << 10 | gamma_lut[src[offset + k + 2]];
+        frame_buffer[j] = gamma_lut[src[k]] << 20 | gamma_lut[src[k + 1]] << 10 | gamma_lut[src[k + 2]];
+        frame_buffer[j + 1] = gamma_lut[src[offset + k]] << 20 | gamma_lut[src[offset + k + 1]] << 10 | gamma_lut[src[offset + k + 2]];
         k += 3;
     }
 }
@@ -140,9 +133,6 @@ void initialize()
     // Initialize Pico SDK
     stdio_init_all();
 
-    // Initialize critical section structure which is used to protect shared resources
-    critical_section_init(&cs1);
-
     // Initialize LED - blinking at program start
     led_init();
 
@@ -154,15 +144,6 @@ int main()
 {
     initialize();
 
-    // image 1 - image data is in b8, g8, r8 format
-    ramp_up_color_resolution_and_interweave_pixel(vanessa_mai_64x64, interwoven_img[0]);
-    // The interwoven image is now ready to be displayed on the Hub75 LED panel. Just assign interwoven_img[0] to frame_buffer.
-
-    // https://lvgl.io/tools/imageconverter
-    // image 2 - image data is in b8, g8, r8 format
-    ramp_up_color_resolution_and_interweave_pixel(taylor_swift_64x64, interwoven_img[1]);
-    // The interwoven image is now ready to be displayed on the Hub75 LED panel. Just assign interwoven_img[1] to frame_buffer.
-
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
@@ -173,8 +154,6 @@ int main()
 
     // Create fire effect using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
     FireEffect fireEffect = FireEffect(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
-
-    frame_buffer = interwoven_img[0]; // Set the first image to be displayed - must be done before launching core 1 !!!
 
     multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 
@@ -189,20 +168,35 @@ int main()
 
     while (true)
     {
-        if (frame_index == 2)
+        if (frame_index == 0)
         {
+            // Vanessa Mai - image data is in b8, g8, r8 format
+            // By Lanzunlimited, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=87037267
+            update_bgr(vanessa_mai_64x64);
+        }
+        else if (frame_index == 1)
+        {
+            // Taylor Swift - image data is in b8, g8, r8 format
+            // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
+            update_bgr(taylor_swift_64x64);
+        }
+        else if (frame_index == 2)
+        {
+            // Image data is in r8, g8, b8 format
             fireEffect.burn();
-            update(&fireEffect, interwoven_img[frame_index]);
+            update(&fireEffect);
         }
         else if (frame_index == 3)
         {
+            // Image data is in r8, g8, b8 format
             rotator.draw_line();
-            update(&rotator, interwoven_img[frame_index]);
+            update(&rotator);
         }
         else if (frame_index == 4)
         {
+            // Image data is in r8, g8, b8 format
             bouncingBalls.bounce();
-            update(&bouncingBalls, interwoven_img[frame_index]);
+            update(&bouncingBalls);
         }
         sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz
     }

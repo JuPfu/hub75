@@ -18,6 +18,9 @@
 
 #define EXIT_FAILURE 1
 
+// Frame buffer for the HUB75 matrix - memory area where pixel data is stored
+volatile uint32_t *frame_buffer; ///< Interwoven image buffers for examples;
+
 // Utility function to claim a DMA channel and panic() if there are none left
 static int claim_dma_channel(const char *channel_name);
 
@@ -26,8 +29,7 @@ static void configure_pio();
 static void setup_dma_transfers();
 static void setup_dma_irq();
 
-// Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-volatile uint32_t *frame_buffer;
+
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
 static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
@@ -127,6 +129,8 @@ void create_hub75_driver(uint w, uint h)
 {
     width = w;
     height = h;
+
+    frame_buffer = new uint32_t[width * height]();  // Allocate memory for frame buffer and zero-initialize
 
     configure_pio();
     configure_dma_channels();
