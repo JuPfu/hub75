@@ -2,6 +2,12 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 
+// Pico W devices use a GPIO on the WIFI chip for the LED,
+// so when building for Pico W, CYW43_WL_GPIO_LED_PIN will be defined
+#ifdef CYW43_WL_GPIO_LED_PIN
+#include "pico/cyw43_arch.h"
+#endif
+
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
@@ -52,18 +58,45 @@ static const uint16_t gamma_lut[256] = {
     770, 777, 785, 793, 800, 808, 816, 824, 832, 839, 847, 855, 863, 872, 880, 888,
     896, 904, 912, 921, 929, 938, 946, 954, 963, 972, 980, 989, 997, 1006, 1015, 1023};
 
+// Perform initialisation
+int pico_led_init(void)
+{
+#if defined(PICO_DEFAULT_LED_PIN)
+    // A device like Pico that uses a GPIO for the LED will define PICO_DEFAULT_LED_PIN
+    // so we can use normal GPIO functionality to turn the led on and off
+    gpio_init(PICO_DEFAULT_LED_PIN);
+    gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
+    return PICO_OK;
+#elif defined(CYW43_WL_GPIO_LED_PIN)
+    // For Pico W devices we need to initialise the driver etc
+    return cyw43_arch_init();
+#endif
+}
+
+// Turn the led on or off
+void pico_set_led(bool led_on)
+{
+#if defined(PICO_DEFAULT_LED_PIN)
+    // Just set the GPIO on or off
+    gpio_put(PICO_DEFAULT_LED_PIN, led_on);
+#elif defined(CYW43_WL_GPIO_LED_PIN)
+    // Ask the wifi "driver" to set the GPIO on or off
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, led_on);
+#endif
+}
+
 // Pico 1 - please, blink LED when program starts
 int led_init(void)
 {
-    gpio_init(25);              // Initialize default LED pin
-    gpio_set_dir(25, GPIO_OUT); // Set as output
+    int rc = pico_led_init(); // Initialize the LED
+    hard_assert(rc == PICO_OK);
 
     for (int i = 0; i < 8; i++)
     {
-        gpio_put(25, true);  // Turn LED on
-        sleep_ms(500);       // Wait 500ms
-        gpio_put(25, false); // Turn LED off
-        sleep_ms(750);       // Wait 500ms
+        pico_set_led(true);
+        sleep_ms(250); // Wait 250ms
+        pico_set_led(false);
+        sleep_ms(250); // Wait 250ms
     }
     return PICO_OK;
 }
