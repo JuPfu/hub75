@@ -38,7 +38,7 @@ pico_sdk_init()
 add_executable(hub75_driver hub75_driver.cpp )
 
 pico_set_program_name(hub75_driver "hub75_driver")
-pico_set_program_version(hub75_driver "0.5")
+pico_set_program_version(hub75_driver "1.0")
 
 set(PICO_PIO_VERSION 1)
 pico_set_float_implementation(hub75_driver pico)
