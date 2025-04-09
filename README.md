@@ -128,6 +128,20 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 *Picture 3: Chained DMA Channels and assigned PIOs*
 
+---
+### Refresh Rate Performance
+
+With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates depending on the system clock:
+
+| System Clock | Refresh Rate |
+|--------------|---------------|
+| 100 MHz      | 179 Hz        |
+| 150 MHz      | 268 Hz        |
+| 200 MHz      | 358 Hz        |
+| 250 MHz      | 448 Hz        |
+
+These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
+
 ### Key Benefits of this Approach
 ✅ Fully **automated** data transfer using **chained DMA channels**.
 
