@@ -131,7 +131,7 @@ The following diagram illustrates the interactions between **DMA channels** and 
 ---
 ### Refresh Rate Performance
 
-With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates depending on the system clock:
+With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
 
 | System Clock | Refresh Rate |
 |--------------|---------------|
