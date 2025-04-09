@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
@@ -20,6 +18,27 @@
 
 #define BIT_DEPTH 10 ///< Number of bit planes
 
+// This gamma table is used to correct 8-bit (0-255) colours up to 10-bit, applying gamma correction without losing dynamic range.
+// The gamma table is from pimeroni's https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75.
+
+static const uint16_t gamma_lut[256] = {
+    0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8,
+    8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16,
+    16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 25,
+    26, 27, 29, 30, 31, 33, 34, 35, 37, 38, 40, 41, 43, 44, 46, 47,
+    49, 51, 53, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78,
+    80, 82, 85, 87, 89, 92, 94, 96, 99, 101, 104, 106, 109, 112, 114, 117,
+    120, 122, 125, 128, 131, 134, 137, 140, 143, 146, 149, 152, 155, 158, 161, 164,
+    168, 171, 174, 178, 181, 185, 188, 192, 195, 199, 202, 206, 210, 214, 217, 221,
+    225, 229, 233, 237, 241, 245, 249, 253, 257, 261, 265, 270, 274, 278, 283, 287,
+    291, 296, 300, 305, 309, 314, 319, 323, 328, 333, 338, 343, 347, 352, 357, 362,
+    367, 372, 378, 383, 388, 393, 398, 404, 409, 414, 420, 425, 431, 436, 442, 447,
+    453, 459, 464, 470, 476, 482, 488, 494, 499, 505, 511, 518, 524, 530, 536, 542,
+    548, 555, 561, 568, 574, 580, 587, 593, 600, 607, 613, 620, 627, 633, 640, 647,
+    654, 661, 668, 675, 682, 689, 696, 703, 711, 718, 725, 733, 740, 747, 755, 762,
+    770, 777, 785, 793, 800, 808, 816, 824, 832, 839, 847, 855, 863, 872, 880, 888,
+    896, 904, 912, 921, 929, 938, 946, 954, 963, 972, 980, 989, 997, 1006, 1015, 1023};
+
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 volatile uint32_t *frame_buffer; ///< Interwoven image buffers for examples;
 
@@ -39,6 +58,7 @@ static volatile uint32_t oen_finished_data = 0;
 // Width and height of the HUB75 LED matrix
 static uint width;
 static uint height;
+static uint offset;
 
 // DMA channel numbers
 int pixel_chan;
@@ -129,6 +149,7 @@ void create_hub75_driver(uint w, uint h)
 {
     width = w;
     height = h;
+    offset = width * (height >> 1);
 
     frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
 
@@ -273,4 +294,47 @@ static inline int claim_dma_channel(const char *channel_name)
         exit(EXIT_FAILURE); // Stop execution
     }
     return dma_channel;
+}
+
+void update(
+    PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
+)
+{
+    if (graphics->pen_type == PicoGraphics::PEN_RGB888)
+    {
+        uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
+
+        // Ramp up color resolution from 8 to 10 bits via gamma table look-up
+        // Interweave pixels from intermediate buffer into target image to fit the format expected by Hub75 LED panel.
+        uint j = 0;
+        for (int i = 0; i < width * height; i += 2)
+        {
+            frame_buffer[i] = gamma_lut[(src[j] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j] & 0xff0000) >> 16];
+            frame_buffer[i + 1] = gamma_lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j + offset] & 0xff0000) >> 16];
+            j++;
+        }
+    }
+}
+
+/**
+ * @brief Updates the frame buffer with pixel data from the source array.
+ *
+ * This function takes a source array of pixel data and updates the frame buffer
+ * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits
+ * using a lookup table.
+ *
+ * @param src Pointer to the source pixel data array (RGB888 format).
+ */
+void update_bgr(uint8_t *src)
+{
+    uint rgb_offset = offset * 3;
+    uint k = 0;
+    // Ramp up color resolution from 8 to 10 bits via gamma table look-up
+    // Interweave pixels as requiered by Hub75 LED panel matrix
+    for (int j = 0; j < width * height; j += 2)
+    {
+        frame_buffer[j] = gamma_lut[src[k]] << 20 | gamma_lut[src[k + 1]] << 10 | gamma_lut[src[k + 2]];
+        frame_buffer[j + 1] = gamma_lut[src[rgb_offset + k]] << 20 | gamma_lut[src[rgb_offset + k + 1]] << 10 | gamma_lut[src[rgb_offset + k + 2]];
+        k += 3;
+    }
 }

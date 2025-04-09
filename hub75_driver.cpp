@@ -1,5 +1,4 @@
 #include "pico.h"
-#include "pico/stdlib.h"
 #include "pico/multicore.h"
 
 // Pico W devices use a GPIO on the WIFI chip for the LED,
@@ -9,13 +8,15 @@
 #endif
 
 #include "hardware/clocks.h"
-#include "hardware/dma.h"
-#include "hardware/pio.h"
 #include "hardware/gpio.h"
 
 #include "libraries/pico_graphics/pico_graphics.hpp"
 
 #include "hub75.hpp"
+
+// Example images
+#include "vanessa_mai_64x64.h"
+#include "taylor_swift_64x64.h"
 
 // Example effects
 #include "antialiased_line.hpp"
@@ -23,40 +24,11 @@
 #include "rotator.cpp"
 #include "fire_effect.hpp"
 
-// Example images
-#include "vanessa_mai_64x64.h"
-#include "taylor_swift_64x64.h"
-
 #define RGB_MATRIX_WIDTH 64
 #define RGB_MATRIX_HEIGHT 64
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
-extern volatile uint32_t *frame_buffer; ///< Frame buffer addrss of the Hub75 driver buffer containing interwoven pixel data for display.
-
 static int frame_index = 0; ///< Example selector
-
-using namespace pimoroni;
-
-// This gamma table is used to correct 8-bit (0-255) colours up to 10-bit, applying gamma correction without losing dynamic range.
-// The gamma table is from pimeroni's https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75.
-
-static const uint16_t gamma_lut[256] = {
-    0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8,
-    8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15, 16,
-    16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 25,
-    26, 27, 29, 30, 31, 33, 34, 35, 37, 38, 40, 41, 43, 44, 46, 47,
-    49, 51, 53, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78,
-    80, 82, 85, 87, 89, 92, 94, 96, 99, 101, 104, 106, 109, 112, 114, 117,
-    120, 122, 125, 128, 131, 134, 137, 140, 143, 146, 149, 152, 155, 158, 161, 164,
-    168, 171, 174, 178, 181, 185, 188, 192, 195, 199, 202, 206, 210, 214, 217, 221,
-    225, 229, 233, 237, 241, 245, 249, 253, 257, 261, 265, 270, 274, 278, 283, 287,
-    291, 296, 300, 305, 309, 314, 319, 323, 328, 333, 338, 343, 347, 352, 357, 362,
-    367, 372, 378, 383, 388, 393, 398, 404, 409, 414, 420, 425, 431, 436, 442, 447,
-    453, 459, 464, 470, 476, 482, 488, 494, 499, 505, 511, 518, 524, 530, 536, 542,
-    548, 555, 561, 568, 574, 580, 587, 593, 600, 607, 613, 620, 627, 633, 640, 647,
-    654, 661, 668, 675, 682, 689, 696, 703, 711, 718, 725, 733, 740, 747, 755, 762,
-    770, 777, 785, 793, 800, 808, 816, 824, 832, 839, 847, 855, 863, 872, 880, 888,
-    896, 904, 912, 921, 929, 938, 946, 954, 963, 972, 980, 989, 997, 1006, 1015, 1023};
 
 // Perform initialisation
 int pico_led_init(void)
@@ -85,7 +57,7 @@ void pico_set_led(bool led_on)
 #endif
 }
 
-// Pico 1 - please, blink LED when program starts
+// Pico - please, blink LED when program starts
 int led_init(void)
 {
     int rc = pico_led_init(); // Initialize the LED
@@ -122,40 +94,6 @@ void core1_entry()
 {
     create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
     start_hub75_driver();
-}
-
-void update(
-    PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
-)
-{
-    if (graphics->pen_type == PicoGraphics::PEN_RGB888)
-    {
-        uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
-
-        // Ramp up color resolution from 8 to 10 bits via gamma table look-up
-        // Interweave pixels from intermediate buffer into target image to fit the format expected by Hub75 LED panel.
-        uint j = 0;
-        for (int i = 0; i < RGB_MATRIX_HEIGHT * RGB_MATRIX_WIDTH; i += 2)
-        {
-            frame_buffer[i] = gamma_lut[(src[j] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j] & 0xff0000) >> 16];
-            frame_buffer[i + 1] = gamma_lut[(src[j + OFFSET] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j + OFFSET] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j + OFFSET] & 0xff0000) >> 16];
-            j++;
-        }
-    }
-}
-
-void update_bgr(uint8_t *src)
-{
-    uint offset = OFFSET * 3;
-    uint k = 0;
-    // Ramp up color resolution from 8 to 10 bits via gamma table look-up
-    // Interweave pixels as requiered by Hub75 LED panel matrix
-    for (int j = 0; j < RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT; j += 2)
-    {
-        frame_buffer[j] = gamma_lut[src[k]] << 20 | gamma_lut[src[k + 1]] << 10 | gamma_lut[src[k + 2]];
-        frame_buffer[j + 1] = gamma_lut[src[offset + k]] << 20 | gamma_lut[src[offset + k + 1]] << 10 | gamma_lut[src[offset + k + 2]];
-        k += 3;
-    }
 }
 
 void initialize()
