@@ -157,6 +157,39 @@ By offloading tasks to **DMA and PIO**, the revised HUB75 driver achieves **high
 If you're interested in optimizing **RGB matrix panel drivers**, this implementation serves as a valuable reference for efficient DMA-based rendering.
 
 ---
+
+## How to Use This Project in VSCode
+
+You can easily use this project with VSCode, especially with the Raspberry Pi Pico SDK extension installed. Follow these steps:
+
+1. **Open VSCode and start a new window**.
+2. **Clone the repository**:
+   - Press `Ctrl+Shift+P` and select `Git: Clone`.
+   - Paste the URL: `https://github.com/JuPfu/hub75`
+   - Choose a local directory to clone the repository into.
+
+3. **Project Import Prompt**:
+   - When prompted, "Do you want to import this project as Raspberry Pi Pico project?", click **Yes**.
+
+4. **Configure Pico SDK Settings**:
+   - A settings page will open automatically.
+   - Use the default settings unless you have a specific setup.
+   - Click **Import** to finalize project setup.
+
+5. **Wait for Setup Completion**:
+   - VSCode will download required tools, the Pico SDK, and any plugins.
+
+6. **Connect the Hardware**:
+   - Make sure the HUB75 LED matrix is properly connected to the Raspberry Pi Pico.
+
+7. **Build and Upload**:
+   - Click the **Run** button in the bottom taskbar.
+   - VSCode will compile and upload the firmware to your Pico board.
+
+> 💡 If everything is set up correctly, your matrix should come to life with the updated HUB75 DMA driver.
+
+---
+
 ## Next Steps
 
 - **Add another chained DMA channel** to further reduce calls to the oen_finished_handler, trading memory for reduced CPU load.
