@@ -10,8 +10,6 @@
 #include "hardware/clocks.h"
 #include "hardware/gpio.h"
 
-#include "libraries/pico_graphics/pico_graphics.hpp"
-
 #include "hub75.hpp"
 
 // Example images
@@ -101,14 +99,13 @@ void initialize()
     // Set system clock to 250MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
     set_sys_clock_khz(250000, true);
 
-    // Initialize Pico SDK
-    stdio_init_all();
+    stdio_init_all(); // Initialize Pico SDK
 
-    // Initialize LED - blinking at program start
-    led_init();
+    led_init(); // Initialize LED - blinking at program start
 
-    // Initialize Hub75 driver on core 1
-    multicore_reset_core1();
+    multicore_reset_core1(); // Reset core 1
+
+    multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 }
 
 int main()
@@ -125,8 +122,6 @@ int main()
 
     // Create fire effect using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
     FireEffect fireEffect = FireEffect(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
-
-    multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 
     // Cycle through the examples - move to next example every 10 seconds
     struct repeating_timer timer;
@@ -169,6 +164,6 @@ int main()
             bouncingBalls.bounce();
             update(&bouncingBalls);
         }
-        sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz
+        sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }
 }

@@ -109,7 +109,7 @@ static void oen_finished_handler()
         {
             bit_plane = 0;
         }
-        // Update the PIO program to shift to the next bit plane
+        // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
     }
 
@@ -320,8 +320,7 @@ void update(
  * @brief Updates the frame buffer with pixel data from the source array.
  *
  * This function takes a source array of pixel data and updates the frame buffer
- * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits
- * using a lookup table.
+ * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
  *
  * @param src Pointer to the source pixel data array (RGB888 format).
  */
@@ -330,7 +329,7 @@ void update_bgr(uint8_t *src)
     uint rgb_offset = offset * 3;
     uint k = 0;
     // Ramp up color resolution from 8 to 10 bits via gamma table look-up
-    // Interweave pixels as requiered by Hub75 LED panel matrix
+    // Interweave pixels as required by Hub75 LED panel matrix
     for (int j = 0; j < width * height; j += 2)
     {
         frame_buffer[j] = gamma_lut[src[k]] << 20 | gamma_lut[src[k + 1]] << 10 | gamma_lut[src[k + 2]];

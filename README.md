@@ -116,8 +116,8 @@ The following diagram illustrates the interactions between **DMA channels** and 
    - This ensures correct clocking of the final piece of genuine data.
 
 3. **OEn Pulse Generation**
-   - The **OEn data DMA channel** sends 32-bit words to the **hub75_row** PIO state machine.
-   - This enables output for the required number of cycles per row.
+   - The **OEn data DMA channel** sends 32-bit words - 5 bit address information (row select) and 27 bit puls width - to the **hub75_row** PIO state machine.
+   - This output enable signal switches on those LEDs in the current row with bit set in the current bitplane for the specified number of cycles.
 
 4. **Interrupt-Driven Synchronization**
    - A final **OEn finished DMA channel** listens for the end of the pulse.
