@@ -160,7 +160,7 @@ If you're interested in optimizing **RGB matrix panel drivers**, this implementa
 
 ## How to Use This Project in VSCode
 
-You can easily use this project with VSCode, especially with the Raspberry Pi Pico SDK extension installed. Follow these steps:
+You can easily use this project with VSCode, especially with the Raspberry Pi Pico plugin installed. Follow these steps:
 
 1. **Open VSCode and start a new window**.
 2. **Clone the repository**:
