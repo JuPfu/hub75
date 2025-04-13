@@ -40,7 +40,7 @@ static const uint16_t gamma_lut[256] = {
     896, 904, 912, 921, 929, 938, 946, 954, 963, 972, 980, 989, 997, 1006, 1015, 1023};
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-volatile uint32_t *frame_buffer; ///< Interwoven image buffers for examples;
+volatile uint32_t *frame_buffer; ///< Interwoven image data for examples;
 
 // Utility function to claim a DMA channel and panic() if there are none left
 static int claim_dma_channel(const char *channel_name);
@@ -113,7 +113,7 @@ static void oen_finished_handler()
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
     }
 
-    // Compute address and bit plane for the next row
+    // Compute address and length of OEn pulse for next row
     row_in_bit_plane = row_address | ((6u << bit_plane) << 5);
     dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
 
@@ -296,6 +296,14 @@ static inline int claim_dma_channel(const char *channel_name)
     return dma_channel;
 }
 
+/**
+ * @brief Updates the frame buffer with pixel data from the source array.
+ *
+ * This function takes a source array of pixel data and updates the frame buffer
+ * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
+ *
+ * @param src Pointer to the source pixel data array (RGB888 format).
+ */
 void update(
     PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
 )
@@ -322,7 +330,7 @@ void update(
  * This function takes a source array of pixel data and updates the frame buffer
  * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
  *
- * @param src Pointer to the source pixel data array (RGB888 format).
+ * @param src Pointer to the source pixel data array (BGR888 format).
  */
 void update_bgr(uint8_t *src)
 {

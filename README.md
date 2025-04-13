@@ -181,6 +181,7 @@ You can easily use this project with VSCode, especially with the Raspberry Pi Pi
 
 6. **Connect the Hardware**:
    - Make sure the HUB75 LED matrix is properly connected to the Raspberry Pi Pico.
+   - Attach the Rasberry Pi Pico USB cable to your computer
 
 7. **Build and Upload**:
    - Click the **Run** button in the bottom taskbar.
