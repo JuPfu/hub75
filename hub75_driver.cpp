@@ -21,6 +21,7 @@
 #include "bouncing_balls.hpp"
 #include "rotator.cpp"
 #include "fire_effect.hpp"
+#include "hue_value_spectrum.hpp"
 
 #define RGB_MATRIX_WIDTH 64
 #define RGB_MATRIX_HEIGHT 64
@@ -79,7 +80,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++frame_index > 4)
+    if (++frame_index > 5)
         frame_index = 0; // Cycle through all examples
 
     return true;
@@ -123,6 +124,8 @@ int main()
     // Create fire effect using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
     FireEffect fireEffect = FireEffect(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
 
+    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+
     // Cycle through the examples - move to next example every 10 seconds
     struct repeating_timer timer;
     add_repeating_timer_ms(-10.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
@@ -163,6 +166,12 @@ int main()
             // Image data is in r8, g8, b8 format
             bouncingBalls.bounce();
             update(&bouncingBalls);
+        }
+        else if (frame_index == 5)
+        {
+            // Image data is in r8, g8, b8 format
+            hueValueSpectrum.drawShades();
+            update(&hueValueSpectrum);
         }
         sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }
