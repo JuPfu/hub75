@@ -160,21 +160,37 @@ If you're interested in optimizing **RGB matrix panel drivers**, this implementa
 
 ## How to Use This Project in VSCode
 
-You can easily use this project with VSCode, especially with the Raspberry Pi Pico plugin installed. Follow these steps:
+You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. Follow these steps:
 
 1. **Open VSCode and start a new window**.
 2. **Clone the repository**:
    - Press `Ctrl+Shift+P` and select `Git: Clone`.
    - Paste the URL: `https://github.com/JuPfu/hub75`
+
+      <img src="assets/VSCode_1.png" width="460" height="116">
+
    - Choose a local directory to clone the repository into.
 
+      <img src="assets/VSCode_2.png" width="603" height="400"> 
+
+
 3. **Project Import Prompt**:
-   - When prompted, "Do you want to import this project as Raspberry Pi Pico project?", click **Yes**.
+   - Consent to open the project.
+
+      <img src="assets/VSCode_3.png" width="603" height="400"> 
+
+   - When prompted, "Do you want to import this project as Raspberry Pi Pico project?", click **Yes** or wait a few seconds until the dialog prompt disappears by itself.
 
 4. **Configure Pico SDK Settings**:
    - A settings page will open automatically.
    - Use the default settings unless you have a specific setup.
+
+      <img src="assets/VSCode_4.png" width="603" height="400"> 
+
    - Click **Import** to finalize project setup.
+   - Switch the board-type to your Pico model.
+
+      <img src="assets/VSCode_5.png" width="599" height="415"> 
 
 5. **Wait for Setup Completion**:
    - VSCode will download required tools, the Pico SDK, and any plugins.
@@ -184,6 +200,10 @@ You can easily use this project with VSCode, especially with the Raspberry Pi Pi
    - Attach the Rasberry Pi Pico USB cable to your computer
 
 7. **Build and Upload**:
+   - Compiling the project can be done without a Pico attached to the computer.
+
+      <img src="assets/VSCode_6.png" width="600" height="416"> 
+
    - Click the **Run** button in the bottom taskbar.
    - VSCode will compile and upload the firmware to your Pico board.
 
