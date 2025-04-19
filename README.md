@@ -29,13 +29,13 @@ These enhancements lead to significant performance improvements. In tests up to 
 ---
 ## Motivation
 
-As part of a private project, I sought to gain deeper knowledge of the Raspberry Pi Pico microcontroller. I highly recommend **[Raspberry Pi Pico Lectures 2022 by Hunter Adams](https://www.youtube.com/watch?v=CAMTBzPd-WI&list=PLDqMkB5cbBA5oDg8VXM110GKc-CmvUqEZ)**—they provide excellent insights! 
+As part of a private project, I sought to gain deeper knowledge of the Raspberry Pi Pico microcontroller. I highly recommend **[Raspberry Pi Pico Lectures 2022 by Hunter Adams](https://youtu.be/CAMTBzPd-WI?feature=shared)**—they provide excellent insights! 
 
-If you are specifically interested in **PIO (Programmable Input/Output)**, start with [Lecture 15: PIO Overview and Examples](https://www.youtube.com/watch?v=5kyd7mzxRsc).
+If you are specifically interested in **PIO (Programmable Input/Output)**, start with [Lecture 15: PIO Overview and Examples](https://youtu.be/BVdaw56Ln8s?feature=shared).
 
-Inspired by Adams' discussion on **[DMA](https://www.youtube.com/watch?v=TGjUHChO1kM&list=PLDqMkB5cbBA5oDg8VXM110GKc-CmvUqEZ&index=7) and PIO co-processors**, I optimized the HUB75 driver as a self-assigned challenge.
+Inspired by Adams' discussion on **[DMA](https://youtu.be/TGjUHChO1kM?feature=shared&t=1475) and PIO co-processors**, I optimized the HUB75 driver as a self-assigned challenge.
 
-[!TIP] **[Raspberry Pi Pico Lectures 2025 by Hunter Adams](https://www.youtube.com/watch?v=a4uLrfqHZQU&list=PLDqMkB5cbBA4GisLzRSqw5x5G38M4zlkr)** is available now!
+😊 **[Raspberry Pi Pico Lectures 2025 by Hunter Adams](https://youtu.be/a4uLrfqHZQU?feature=shared")** is available now!
 
 ---
 ## Evolution of Pico HUB75 Drivers
