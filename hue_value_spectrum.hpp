@@ -15,6 +15,7 @@ class HueValueSpectrum : public PicoGraphics_PenRGB888
 private:
     uint width, height;
     float reciprocal_width, reciprocal_height;
+    float PI2 = 2.0f * M_PI;
 
 public:
     explicit HueValueSpectrum(uint width = 64, uint height = 64) : PicoGraphics_PenRGB888(width, height, nullptr), width(width), height(height) {
@@ -31,11 +32,11 @@ public:
         for (int x = 0; x < width; x++)
         {
             // calculate the overal shade
-            float f = (((sin(tt - (float)x / height / 32.) * 2.f * M_PI) + 1.0f) / 2.0f) * 255.0f;
+            float f = (((sin(tt - (float)x * reciprocal_height / 32.f) * PI2) + 1.0f) / 2.0f) * 255.0f;
             // calculate hue spectrum into rgb
-            float r = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x * reciprocal_height + 0.f) / 3.f)) + 0.5f, 1.f), 0.f);
-            float g = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x * reciprocal_height + 1.f) / 3.f)) + 0.5f, 1.f), 0.f);
-            float b = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x * reciprocal_height + 2.f) / 3.f)) + 0.5f, 1.f), 0.f);
+            float r = std::max(std::min(cosf(PI2 * (t + ((float)x * reciprocal_height + 0.f) / 3.f)), 1.f), 0.f);
+            float g = std::max(std::min(cosf(PI2 * (t + ((float)x * reciprocal_height + 1.f) / 3.f)), 1.f), 0.f);
+            float b = std::max(std::min(cosf(PI2 * (t + ((float)x * reciprocal_height + 2.f) / 3.f)), 1.f), 0.f);
 
             // iterate pixels for every row
             for (int y = 0; y < height; y++)
