@@ -21,13 +21,13 @@ public:
     void drawShades()
     {
         // Canvas loop
-        float t = (float)((millis() % 4000) / 4000.f);
-        float tt = (float)((millis() % 16000) / 16000.f);
+        float t = (float)((millis() % 8000u) / 8000.f);
+        float tt = (float)((millis() % 32000u) / 32000.f);
 
         for (int x = 0; x < width; x++)
         {
             // calculate the overal shade
-            float f = (((sin(tt - (float)x / height / 32.) * 2.f * M_PI) + 1) / 2) * 255;
+            float f = (((sin(tt - (float)x / height / 32.) * 2.f * M_PI) + 1.0f) / 2.0f) * 255.0f;
             // calculate hue spectrum into rgb
             float r = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x / height + 0.f) / 3.f)) + 0.5f, 1.f), 0.f);
             float g = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x / height + 1.f) / 3.f)) + 0.5f, 1.f), 0.f);
@@ -39,14 +39,14 @@ public:
                 if (y * 2 < height)
                 {
                     // top-middle part of screen, transition of value
-                    float t = (2.f * y + 1.0f) / height;
-                    set_pen((uint8_t)((r * t) * f + 0.5f), (uint8_t)((g * t) * f + 0.5f), (uint8_t)((b * t) * f + 0.5f));
+                    t = (2.f * y + 1.0f) / height;
+                    set_pen((uint8_t)((r * t) * f), (uint8_t)((g * t) * f), (uint8_t)((b * t) * f));
                 }
                 else
                 {
                     // middle to bottom of screen, transition of saturation
-                    float t = (2.f * (height - y) - 1.0f) / height;
-                    set_pen((uint8_t)((r * t + 1 - t) * f + 0.5f), (uint8_t)((g * t + 1 - t) * f + 0.5f), (uint8_t)((b * t + 1 - t) * f + 0.5f));
+                    t = (2.f * (height - y) - 1.0f) / height;
+                    set_pen((uint8_t)((r * t + 1.0f - t) * f), (uint8_t)((g * t + 1.0f - t) * f), (uint8_t)((b * t + 1.0f - t) * f));
                 }
                 set_pixel(Point(x, y));
             }
