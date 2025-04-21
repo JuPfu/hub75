@@ -14,9 +14,13 @@ class HueValueSpectrum : public PicoGraphics_PenRGB888
 {
 private:
     uint width, height;
+    float reciprocal_width, reciprocal_height;
 
 public:
-    explicit HueValueSpectrum(uint width = 64, uint height = 64) : PicoGraphics_PenRGB888(width, height, nullptr), width(width), height(height) {}
+    explicit HueValueSpectrum(uint width = 64, uint height = 64) : PicoGraphics_PenRGB888(width, height, nullptr), width(width), height(height) {
+        reciprocal_width = 1.0f / width;
+        reciprocal_height = 1.0f / height;
+    }
 
     void drawShades()
     {
@@ -29,9 +33,9 @@ public:
             // calculate the overal shade
             float f = (((sin(tt - (float)x / height / 32.) * 2.f * M_PI) + 1.0f) / 2.0f) * 255.0f;
             // calculate hue spectrum into rgb
-            float r = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x / height + 0.f) / 3.f)) + 0.5f, 1.f), 0.f);
-            float g = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x / height + 1.f) / 3.f)) + 0.5f, 1.f), 0.f);
-            float b = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x / height + 2.f) / 3.f)) + 0.5f, 1.f), 0.f);
+            float r = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x * reciprocal_height + 0.f) / 3.f)) + 0.5f, 1.f), 0.f);
+            float g = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x * reciprocal_height + 1.f) / 3.f)) + 0.5f, 1.f), 0.f);
+            float b = std::max(std::min(cosf(2.f * M_PI * (t + ((float)x * reciprocal_height + 2.f) / 3.f)) + 0.5f, 1.f), 0.f);
 
             // iterate pixels for every row
             for (int y = 0; y < height; y++)
@@ -39,13 +43,13 @@ public:
                 if (y * 2 < height)
                 {
                     // top-middle part of screen, transition of value
-                    t = (2.f * y + 1.0f) / height;
+                    t = (2.f * y + 1.0f) * reciprocal_height;
                     set_pen((uint8_t)((r * t) * f), (uint8_t)((g * t) * f), (uint8_t)((b * t) * f));
                 }
                 else
                 {
                     // middle to bottom of screen, transition of saturation
-                    t = (2.f * (height - y) - 1.0f) / height;
+                    t = (2.f * (height - y) - 1.0f) * reciprocal_height;
                     set_pen((uint8_t)((r * t + 1.0f - t) * f), (uint8_t)((g * t + 1.0f - t) * f), (uint8_t)((b * t + 1.0f - t) * f));
                 }
                 set_pixel(Point(x, y));
