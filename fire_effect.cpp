@@ -15,21 +15,22 @@ void FireEffect::burn()
 
       if (value > 0.5f)
       {
-        set_pen(255, 255, (int)(150 * value) + 105);
+        int r = 25 - (int)((255 * value) * 0.1f);
+        set_pen(255 - r, 255 - r, (int)(150 * value) + 105);
       }
       else if (value > 0.4f)
       {
         int b = (int)(350 * value) - 140;
-        set_pen(220, 160, b);
+        set_pen(220 + (b >> 1), 160, b);
       }
       else if (value > 0.3f)
       {
         int b = (int)(500 * value) - 150;
-        set_pen(180, 30, b);
+        set_pen(180 + (b >> 1), 30, b);
       }
       else
       {
-        int c = (int)(90 * value);
+        int c = (int)(150 * value);
         set_pen(c, c, c);
       }
 
