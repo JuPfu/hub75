@@ -160,6 +160,10 @@ If you're interested in optimizing **RGB matrix panel drivers**, this implementa
 
 ---
 
+## Demo Effects
+
+⚠️ The examples contained in hub75_lvgl.cpp have been tested with a Raspberry Pi Pico 2 microcontroller (RP2350). For a RP2040 processor you might have to comment out some demo effects due to minor memory capabilities. Ask if you need support 🙂.
+
 ## How to Use This Project in VSCode
 
 You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. Follow these steps:
