@@ -27,6 +27,11 @@
 #define RGB_MATRIX_HEIGHT 64
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
+// PanelType - either PANEL_GENERIC or PANEL_FM6126A
+#define PANEL_TYPE PANEL_GENERIC
+// stb_inverted - either true (inverted) or false (default)
+#define STB_INVERTED false
+
 static int frame_index = 0; ///< Example selector
 
 // Perform initialisation
@@ -91,7 +96,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PANEL_GENERIC, STB_INVERTED);
     start_hub75_driver();
 }
 
