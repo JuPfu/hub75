@@ -28,7 +28,7 @@
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
 // PanelType - either PANEL_GENERIC or PANEL_FM6126A
-#define PANEL_TYPE PANEL_GENERIC
+#define PANEL_TYPE PANEL_FM6126A
 // stb_inverted - either true (inverted) or false (default)
 #define STB_INVERTED false
 

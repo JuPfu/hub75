@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico2_w CACHE STRING "Board type")
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -67,12 +67,16 @@ target_sources(hub75_driver PRIVATE
 target_link_libraries(hub75_driver
         pico_stdlib
         pico_multicore
-        pico_cyw43_arch_none
         hardware_pio
         hardware_dma
         hardware_timer
         hardware_vreg
         pico_graphics)
+
+if(PICO_CYW43_SUPPORTED)
+    target_link_libraries(hub75_driver
+                          pico_cyw43_arch_none)
+endif()
 
 # Add the standard include files to the build
 target_include_directories(hub75_driver PRIVATE
