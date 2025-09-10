@@ -1,3 +1,5 @@
+[[_TOC_]]
+
 # HUB75 DMA-Based Driver
 
 
@@ -224,3 +226,85 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 - **Investigate removing the hub75_data_rgb888_set_shift method**, potentially achieving a completely DMA- and PIO-based solution with no CPU involvement.
 
 For any questions or discussions, feel free to contribute or open an issue!
+
+## Prerequisites for the Hub75 Driver
+
+This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **64×32, 32×32**, or other HUB75-compatible panels.
+
+The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks**.
+
+The default implementation looks like this (see hub75.cpp). An example of a valid alternative pin defintion is shown in [Allowed Deviations](#allowed_deviations_anchor) 
+
+   ```cpp
+   // Default wiring of HUB75 matrix to RP2350
+   #define DATA_BASE_PIN    0   // first color data pin
+   #define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
+   #define ROWSEL_BASE_PIN  6   // first row-select (address) pin
+   #define ROWSEL_N_PINS    5   // number of row-select pins (A0–A4)
+   #define CLK_PIN          11  // clock
+   #define STROBE_PIN       12  // latch (LAT)
+   #define OEN_PIN          13  // output enable (OE)
+   ```
+
+## Wiring Details
+### Color Data Pins
+
++ `DATA_BASE_PIN` = **GPIO 0** (first in a consecutive block)
++ `DATA_N_PINS` = **6** (for R0, G0, B0, R1, G1, B1)
+
+
+| Hub75 Colour Bit   | connected to      | Pico GPIO |
+|:-------------------|-------------------|:-----:|
+| R0                 |                   | 0    |
+| G0                 |                   | 1    |
+| B0                 |                   | 2    |
+| R1                 |                   | 3    |
+| G1                 |                   | 4    |
+| B1                 |                   | 5    |
+
+### Address (Row Select) Pins
+
+- `ROWSEL_BASE_PIN` = **GPIO 6**
+- `ROWSEL_N_PINS` = **5** (A0–A4)
+
+- **Consecutiveness is required** by the PIO program.
+
+| Address bit |  connected to      | Pico GPIO |
+| ----------- |--------------------|:---------:|
+| A0          |                    | 6    |
+| A1          |                    | 7    |
+| A2          |                    | 8    |
+| A3          |                    | 9    |
+| A4          |                    | 10   |
+
+### Control Pins
+
+- **CLK** (clock): GPIO 11
+- **LAT** (strobe/latch): GPIO 12
+- **OE** (output enable): GPIO 13
+
+### One Glance Mapping HUB75 Connector → Pico GPIOs
+
+The diagram shows the default mapping as defined in the hub75.cpp file.
+  
+<img src="assets/hub75_to_pico_mapping.svg">
+
+## Allowed Deviations  <a id='allowed_deviations_anchor'></a>
+
+The **only strict requirement** is that **data pins** and **row-select pins** must be in **consecutive GPIO blocks**.
+Clock, Latch, and OE pins may be freely chosen.
+
+### Example: Custom Pin Mapping
+
+```cpp
+// Row select pins moved to GPIO 15–19
+#define ROWSEL_BASE_PIN  15
+
+// Color data pins starting at GPIO 3
+#define DATA_BASE_PIN    3
+
+// Control pins assigned to arbitrarily GPIO pins
+#define CLK_PIN          0
+#define STROBE_PIN       1
+#define OEN_PIN          2
+```
