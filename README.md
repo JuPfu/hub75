@@ -25,6 +25,11 @@
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
   - [Allowed Deviations  ](#allowed-deviations--)
     - [Example: Custom Pin Mapping](#example-custom-pin-mapping)
+  - [Brightness Control](#brightness-control)
+    - [API Functions](#api-functions)
+    - [How it Works](#how-it-works)
+    - [Default Settings](#default-settings)
+    - [Practical Notes](#practical-notes)
 
 # HUB75 DMA-Based Driver
 
@@ -334,3 +339,56 @@ Clock, Latch, and OE pins may be freely chosen.
 #define STROBE_PIN       1
 #define OEN_PIN          2
 ```
+
+## Brightness Control
+
+The driver supports software-based brightness regulation in addition to the standard bitplane modulation.  
+This allows you to easily adjust overall panel brightness without changing the hardware wiring.
+
+### API Functions
+
+```cpp
+// Set the baseline brightness scaling factor (default = 6 range must in 1–255).
+// Larger values increase maximum brightness range.
+void setBasisBrightness(uint8_t factor);
+
+// Set fine-grained brightness intensity as a floating-point fraction [0.0 – 1.0].
+void setIntensity(float intensity);
+```
+### How it Works
+
+- <code>setBasisBrightness(factor)</code>
+
+  Defines the baseline scaling.
+
+  Example: <code>setBasisBrightness(6)</code> → default brightness range for typical 64×64 panels. \
+  Larger factors give more headroom for brightness but consume more **Binary Coded Modulation (BCM)** time slices.
+- <code>setIntensity(intensity)</code>
+  
+  Fine-grained adjustment from 0.0 (dark/off) to 1.0 (full brightness).\
+  This function scales the effective duty cycle within the current baseline brightness range.
+
+```cpp
+// Start with baseline factor 8 for a brighter panel
+setBasisBrightness(8);
+
+// Dim the panel to 50% of that range
+setIntensity(0.5f);
+```
+
+This results in a panel brightness of roughly 50% of the maximum possible with factor 8.
+
+### Default Settings
+
+- <code>basis_factor = 6u</code>
+- <code>intensity = 1.0f</code>
+  (full brightness within the baseline)
+
+This corresponds to the same brightness as earlier driver revisions without adjustment.
+
+### Practical Notes
+
+- Increasing the basis factor may increase peak current consumption.
+- For indoor use, values between 4–8 are usually sufficient.
+- For dimmer environments, you can keep the baseline factor low (e.g. 4) and rely on setIntensity() for smooth runtime control.
+- Both functions are non-blocking and can be called during normal operation.
