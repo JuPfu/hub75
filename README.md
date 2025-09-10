@@ -1,4 +1,30 @@
-[[_TOC_]]
+- [HUB75 DMA-Based Driver](#hub75-dma-based-driver)
+  - [Documentation and References](#documentation-and-references)
+  - [Achievements of the Revised Driver](#achievements-of-the-revised-driver)
+  - [Motivation](#motivation)
+  - [Evolution of Pico HUB75 Drivers](#evolution-of-pico-hub75-drivers)
+    - [Raspberry Pi Pico HUB75 Example](#raspberry-pi-pico-hub75-example)
+    - [Pimoroni HUB75 Driver](#pimoroni-hub75-driver)
+  - [Eliminating `hub75_wait_tx_stall`](#eliminating-hub75_wait_tx_stall)
+    - [Original `hub75_wait_tx_stall` Implementation](#original-hub75_wait_tx_stall-implementation)
+    - [Alternative Approach](#alternative-approach)
+  - [DMA Chains and PIO State Machines in the Revised HUB75 Driver](#dma-chains-and-pio-state-machines-in-the-revised-hub75-driver)
+    - [Overview](#overview)
+    - [Step-by-Step Breakdown](#step-by-step-breakdown)
+    - [Refresh Rate Performance](#refresh-rate-performance)
+    - [Key Benefits of this Approach](#key-benefits-of-this-approach)
+  - [Conclusion](#conclusion)
+  - [Demo Effects](#demo-effects)
+  - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
+  - [Next Steps](#next-steps)
+- [Prerequisites for the Hub75 Driver](#prerequisites-for-the-hub75-driver)
+  - [Wiring Details](#wiring-details)
+    - [Color Data Pins](#color-data-pins)
+    - [Address (Row Select) Pins](#address-row-select-pins)
+    - [Control Pins](#control-pins)
+    - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
+  - [Allowed Deviations  ](#allowed-deviations--)
+    - [Example: Custom Pin Mapping](#example-custom-pin-mapping)
 
 # HUB75 DMA-Based Driver
 
@@ -227,7 +253,7 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 
 For any questions or discussions, feel free to contribute or open an issue!
 
-## Prerequisites for the Hub75 Driver
+# Prerequisites for the Hub75 Driver
 
 This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **64×32, 32×32**, or other HUB75-compatible panels.
 
