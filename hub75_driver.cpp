@@ -140,6 +140,9 @@ int main()
     float hz = 60.0f;
     float ms = 1000.0f / hz;
 
+    float intensity = 1.0f;
+    float step = 0.01f;
+
     while (true)
     {
         if (frame_index == 0)
@@ -178,6 +181,20 @@ int main()
             hueValueSpectrum.drawShades();
             update(&hueValueSpectrum);
         }
+
+        // Set current brightness
+        setIntensity(intensity);
+
+        // Update intensity for next loop
+        intensity += step;
+        if (intensity >= 1.0f) {
+            intensity = 1.0f;
+            step = -step;   // start fading down
+        } else if (intensity <= 0.0f) {
+            intensity = 0.0f;
+            step = -step;   // start fading up
+        } 
+
         sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }
 }

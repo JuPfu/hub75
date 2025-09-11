@@ -17,7 +17,7 @@
 
 #define EXIT_FAILURE 1
 
-#define BIT_DEPTH 10 ///< Number of bit planes
+// #define BIT_DEPTH 10 ///< Number of bit planes
 
 // This gamma table is used to correct 8-bit (0-255) colours up to 10-bit, applying gamma correction without losing dynamic range.
 // The gamma table is from pimeroni's https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75.
@@ -58,6 +58,7 @@ static volatile uint32_t oen_finished_data = 0;
 
 const bool clk_polarity = 1;
 const bool stb_polarity = 1;
+const bool oe_polarity = 0;
 
 // Width and height of the HUB75 LED matrix
 static uint width;
@@ -91,6 +92,46 @@ static volatile uint32_t row_address = 0;
 static volatile uint32_t bit_plane = 0;
 static volatile uint32_t row_in_bit_plane = 0;
 
+// Variables for brightness control
+volatile float brightness = 1.0f;    // fine control [0.0–1.0]
+volatile uint32_t basis_factor = 6u; // baseline scaling
+
+inline uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
+{
+    return row_address | ((uint32_t)((basis_factor << bit_plane) * brightness) << 5);
+}
+
+/**
+ * @brief Set the baseline brightness scaling factor for the panel.
+ *
+ * This acts as the coarse brightness control (default = 6u).
+ *
+ * @param factor Brightness factor (must be > 0, range 1–255).
+ */
+void setBasis(uint8_t basis)
+{
+    basis_factor = (basis > 0) ? basis : 1u;
+}
+
+/**
+ * @brief Set the runtime brightness level of the panel.
+ *
+ * This acts as the fine brightness/intensity control, scaling within the
+ * current basis brightness range.
+ *
+ * @param intensity Intensity value in range [0.0f, 1.0f].
+ *        Values outside are clamped to the valid range.
+ */
+void setIntensity(float intensity)
+{
+    if (intensity < 0.0f)
+        brightness = 0.0f;
+    else if (intensity > 1.0f)
+        brightness = 1.0f;
+    else
+        brightness = intensity;
+}
+
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -118,7 +159,7 @@ static void oen_finished_handler()
     }
 
     // Compute address and length of OEn pulse for next row
-    row_in_bit_plane = row_address | ((6u << bit_plane) << 5);
+    row_in_bit_plane = set_row_in_bit_plane(row_address, bit_plane);
     dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
 
     // Restart DMA channels for the next row's data transfer
@@ -137,6 +178,70 @@ void start_hub75_driver()
 {
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
+}
+
+void FM6126A_init_register()
+{
+    // Set up GPIO
+    gpio_init(DATA_BASE_PIN);
+    gpio_set_function(DATA_BASE_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(DATA_BASE_PIN, true);
+    gpio_put(DATA_BASE_PIN, 0);
+    gpio_init((DATA_BASE_PIN + 1));
+    gpio_set_function((DATA_BASE_PIN + 1), GPIO_FUNC_SIO);
+    gpio_set_dir((DATA_BASE_PIN + 1), true);
+    gpio_put((DATA_BASE_PIN + 1), 0);
+    gpio_init((DATA_BASE_PIN + 2));
+    gpio_set_function((DATA_BASE_PIN + 2), GPIO_FUNC_SIO);
+    gpio_set_dir((DATA_BASE_PIN + 2), true);
+    gpio_put((DATA_BASE_PIN + 2), 0);
+
+    gpio_init((DATA_BASE_PIN + 3));
+    gpio_set_function((DATA_BASE_PIN + 3), GPIO_FUNC_SIO);
+    gpio_set_dir((DATA_BASE_PIN + 3), true);
+    gpio_put((DATA_BASE_PIN + 3), 0);
+    gpio_init((DATA_BASE_PIN + 4));
+    gpio_set_function((DATA_BASE_PIN + 4), GPIO_FUNC_SIO);
+    gpio_set_dir((DATA_BASE_PIN + 4), true);
+    gpio_put((DATA_BASE_PIN + 4), 0);
+    gpio_init((DATA_BASE_PIN + 5));
+    gpio_set_function((DATA_BASE_PIN + 5), GPIO_FUNC_SIO);
+    gpio_set_dir((DATA_BASE_PIN + 5), true);
+    gpio_put((DATA_BASE_PIN + 5), 0);
+
+    gpio_init(ROWSEL_BASE_PIN);
+    gpio_set_function(ROWSEL_BASE_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(ROWSEL_BASE_PIN, true);
+    gpio_put(ROWSEL_BASE_PIN, 0);
+    gpio_init((ROWSEL_BASE_PIN + 1));
+    gpio_set_function((ROWSEL_BASE_PIN + 1), GPIO_FUNC_SIO);
+    gpio_set_dir((ROWSEL_BASE_PIN + 1), true);
+    gpio_put((ROWSEL_BASE_PIN + 1), 0);
+    gpio_init((ROWSEL_BASE_PIN + 2));
+    gpio_set_function((ROWSEL_BASE_PIN + 2), GPIO_FUNC_SIO);
+    gpio_set_dir((ROWSEL_BASE_PIN + 2), true);
+    gpio_put((ROWSEL_BASE_PIN + 2), 0);
+    gpio_init((ROWSEL_BASE_PIN + 3));
+    gpio_set_function((ROWSEL_BASE_PIN + 3), GPIO_FUNC_SIO);
+    gpio_set_dir((ROWSEL_BASE_PIN + 3), true);
+    gpio_put((ROWSEL_BASE_PIN + 3), 0);
+    gpio_init((ROWSEL_BASE_PIN + 4));
+    gpio_set_function((ROWSEL_BASE_PIN + 4), GPIO_FUNC_SIO);
+    gpio_set_dir((ROWSEL_BASE_PIN + 4), true);
+    gpio_put((ROWSEL_BASE_PIN + 4), 0);
+
+    gpio_init(CLK_PIN);
+    gpio_set_function(CLK_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(CLK_PIN, true);
+    gpio_put(CLK_PIN, !clk_polarity);
+    gpio_init(STROBE_PIN);
+    gpio_set_function(STROBE_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(STROBE_PIN, true);
+    gpio_put(CLK_PIN, !stb_polarity);
+    gpio_init(OEN_PIN);
+    gpio_set_function(OEN_PIN, GPIO_FUNC_SIO);
+    gpio_set_dir(OEN_PIN, true);
+    gpio_put(CLK_PIN, !oe_polarity);
 }
 
 void FM6126A_write_register(uint16_t value, uint8_t position)
@@ -166,8 +271,18 @@ void FM6126A_write_register(uint16_t value, uint8_t position)
     }
 }
 
+/**
+ * @brief Generate initialisation sequence for FM6126A based led matrix panels.
+ *
+ * First initialise all GPIOs connected to the led matrix panel.
+ * Second send the initialisation sequence to the FM6126A based led matrix panel.
+ * The source code is based on Pimoronis Hub75 driver, see https://github.com/pimoroni/pimoroni-pico/blob/main/drivers/hub75/hub75.cpp
+ *
+ */
 void FM6126A_setup()
 {
+    FM6126A_init_register();
+
     // Ridiculous register write nonsense for the FM6126A-based 64x64 matrix
     FM6126A_write_register(0b1111111111111110, 12);
     FM6126A_write_register(0b0000001000000000, 13);
@@ -306,7 +421,7 @@ static void setup_dma_transfers()
 
     dma_channel_set_read_addr(dummy_pixel_chan, dummy_pixel_data, false);
 
-    row_in_bit_plane = row_address | ((6u << bit_plane) << 5);
+    row_in_bit_plane = set_row_in_bit_plane(row_address, bit_plane);
     dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
 
     dma_channel_config oen_finished_config = dma_channel_get_default_config(oen_finished_chan);
