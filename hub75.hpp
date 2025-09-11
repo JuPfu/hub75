@@ -17,5 +17,5 @@ void start_hub75_driver();
 void update_bgr(uint8_t *src);
 void update(PicoGraphics const *graphics);
 
-void setBasis(uint8_t factor);
+void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);

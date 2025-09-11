@@ -348,8 +348,9 @@ This allows you to easily adjust overall panel brightness without changing the h
 ### API Functions
 
 ```cpp
-// Set the baseline brightness scaling factor (default = 6 range must in 1–255).
-// Larger values increase maximum brightness range.
+// Set the baseline brightness scaling factor (default = 6 value must be in range 1–255).
+// Larger values increase the brightness of the led matrix panel.
+// Be carefull - the value 2 doubles the OEn frequency, the value 3 triples the OEn frequency, ...
 void setBasisBrightness(uint8_t factor);
 
 // Set fine-grained brightness intensity as a floating-point fraction [0.0 – 1.0].
@@ -357,12 +358,13 @@ void setIntensity(float intensity);
 ```
 ### How it Works
 
-- <code>setBasisBrightness(factor)</code>
+- <code>setBasisBrightness(basis)</code>
 
-  Defines the baseline scaling.
+  Defines the top brightness.
 
   Example: <code>setBasisBrightness(6)</code> → default brightness range for typical 64×64 panels. \
   Larger factors give more headroom for brightness but consume more **Binary Coded Modulation (BCM)** time slices.
+
 - <code>setIntensity(intensity)</code>
   
   Fine-grained adjustment from 0.0 (dark/off) to 1.0 (full brightness).\

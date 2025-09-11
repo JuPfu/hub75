@@ -108,9 +108,9 @@ inline uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
  *
  * @param factor Brightness factor (must be > 0, range 1–255).
  */
-void setBasis(uint8_t basis)
+void setBasisBrightness(uint8_t factor)
 {
-    basis_factor = (basis > 0) ? basis : 1u;
+    basis_factor = (factor > 0) ? factor : 1u;
 }
 
 /**
