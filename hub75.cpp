@@ -296,7 +296,7 @@ void FM6126A_setup()
  * @param w Width of the HUB75 display in pixels.
  * @param h Height of the HUB75 display in pixels.
  */
-void create_hub75_driver(uint w, uint h, PanelType pt, bool inverted_stb)
+void create_hub75_driver(uint w, uint h, PanelType panel_type, bool inverted_stb)
 {
     width = w;
     height = h;
@@ -304,7 +304,7 @@ void create_hub75_driver(uint w, uint h, PanelType pt, bool inverted_stb)
 
     frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
 
-    if (pt == PANEL_FM6126A)
+    if (panel_type == PANEL_FM6126A)
     {
         FM6126A_setup();
     }
