@@ -17,8 +17,6 @@
 
 #define EXIT_FAILURE 1
 
-// #define BIT_DEPTH 10 ///< Number of bit planes
-
 // This gamma table is used to correct 8-bit (0-255) colours up to 10-bit, applying gamma correction without losing dynamic range.
 // The gamma table is from pimeroni's https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75.
 
