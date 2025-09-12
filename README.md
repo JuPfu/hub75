@@ -348,12 +348,12 @@ Clock, Latch, and OE pins may be freely chosen.
 
 ## How to Use a 64×32 HUB75 Matrix Panel
 
-The Hub75 driver is designed for 64×64 panels, but it also supports **64×32 panels** (half the height).  
-The electrical connections are identical — the difference lies in how rows are addressed and how the frame buffer is filled.
+The Hub75 driver is designed for 64×64 panels, but it also supports **64×32 panels** (half the height) and other panel dimensions.  
+The electrical connections for 64x32 panels are nearly identical to 64x64 panels — the difference lies in how rows are addressed and how the frame buffer is filled.
 
 ### Wiring
 
-Use the same pin definitions as for a 64×64 panel, **except** for the `ROWSEL_N_PINS` definition which must be changed to `4` (A0–A3).  
+In file `hub75_driver.cpp` use the same pin definitions as for a 64×64 panel, **except** for the `ROWSEL_N_PINS` definition which must be changed to `4` (A0–A3).  
 Address line **A4 is not connected**.
 
    ```cpp
@@ -369,7 +369,7 @@ Address line **A4 is not connected**.
 
 ### Initialization of Matrix Panel Dimension
 
-At the top of file `hub75_driver.cpp` set the RGB_MATRIX_HEIGHT to the height of the panel (32 in this example).
+At the top of file `hub75_driver.cpp` set the `RGB_MATRIX_HEIGHT` to the height of the panel (32 in this example).
 
    ```cpp
    #define RGB_MATRIX_WIDTH 64

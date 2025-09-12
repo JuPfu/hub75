@@ -23,12 +23,22 @@
 #include "fire_effect.hpp"
 #include "hue_value_spectrum.hpp"
 
+// Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
 #define RGB_MATRIX_WIDTH 64
 #define RGB_MATRIX_HEIGHT 64
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
+// Panel type FM6126A receives some initial incantation sequence. 
+// This should usualy have no effect on generic matirx panels. 
+// You might see a short lighting of some leds for generic panels. 
+// To suppress this effect set PANEL_TYPE to PANEL_GENERIC.
+
 // PanelType - either PANEL_GENERIC or PANEL_FM6126A
 #define PANEL_TYPE PANEL_FM6126A
+
+// Some matrix panels have inverted STROBE signals.
+// If your data-sheet says so set STB_INVERTED to true.
+
 // stb_inverted - either true (inverted) or false (default)
 #define STB_INVERTED false
 
