@@ -96,7 +96,7 @@ volatile uint32_t basis_factor = 6u; // baseline scaling
 
 inline uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
 {
-    return row_address | ((uint32_t)((basis_factor << bit_plane) * brightness) << 5);
+    return row_address | ((uint32_t)((basis_factor << bit_plane) * brightness) << ROWSEL_N_PINS);
 }
 
 /**
