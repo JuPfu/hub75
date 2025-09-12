@@ -29,7 +29,7 @@
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
 // Panel type FM6126A receives some initial incantation sequence. 
-// This should usualy have no effect on generic matirx panels. 
+// This should usually have no effect on generic matrix panels. 
 // You might see a short lighting of some leds for generic panels. 
 // To suppress this effect set PANEL_TYPE to PANEL_GENERIC.
 

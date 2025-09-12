@@ -334,11 +334,11 @@ Clock, Latch, and OE pins may be freely chosen.
 ### Example: Custom Pin Mapping
 
 ```cpp
-// Row select pins moved to GPIO 15–19
-#define ROWSEL_BASE_PIN  15
+#define ROWSEL_BASE_PIN  15  // Row select pins moved to GPIO 15–19
+#define ROWSEL_N_PINS    5   // number of row-select pins (A0–A4)
 
-// Color data pins starting at GPIO 3
-#define DATA_BASE_PIN    3
+#define DATA_BASE_PIN    3   // Color data pins starting at GPIO 3
+#define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
 
 // Control pins assigned to arbitrarily GPIO pins
 #define CLK_PIN          0
@@ -348,7 +348,7 @@ Clock, Latch, and OE pins may be freely chosen.
 
 ## How to Use a 64×32 HUB75 Matrix Panel
 
-The Hub75 driver is designed for 64×64 panels, but it also supports **64×32 panels** (half the height) and other panel dimensions.  
+The Hub75 driver is designed for 64×64 panels, but it also supports **64×32 panels** (half the height) and other panel dimensions e.g. **128x64**.  
 The electrical connections for 64x32 panels are nearly identical to 64x64 panels — the difference lies in how rows are addressed and how the frame buffer is filled.
 
 ### Wiring
