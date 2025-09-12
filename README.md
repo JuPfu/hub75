@@ -25,11 +25,17 @@
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
   - [Allowed Deviations  ](#allowed-deviations--)
     - [Example: Custom Pin Mapping](#example-custom-pin-mapping)
+  - [How to Use a 64×32 HUB75 Matrix Panel](#how-to-use-a-6432-hub75-matrix-panel)
+    - [Wiring](#wiring)
+    - [Initialization of Matrix Panel Dimension](#initialization-of-matrix-panel-dimension)
+    - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios-1)
+    - [Frame Buffer Layout](#frame-buffer-layout)
+    - [Practical Notes](#practical-notes)
   - [Brightness Control](#brightness-control)
     - [API Functions](#api-functions)
     - [How it Works](#how-it-works)
     - [Default Settings](#default-settings)
-    - [Practical Notes](#practical-notes)
+    - [Practical Notes](#practical-notes-1)
 
 # HUB75 DMA-Based Driver
 
@@ -339,6 +345,59 @@ Clock, Latch, and OE pins may be freely chosen.
 #define STROBE_PIN       1
 #define OEN_PIN          2
 ```
+
+## How to Use a 64×32 HUB75 Matrix Panel
+
+The Hub75 driver is designed for 64×64 panels, but it also supports **64×32 panels** (half the height).  
+The electrical connections are identical — the difference lies in how rows are addressed and how the frame buffer is filled.
+
+### Wiring
+
+Use the same pin definitions as for a 64×64 panel, **except** for the `ROWSEL_N_PINS` definition which must be changed to `4` (A0–A3).  
+Address line **A4 is not connected**.
+
+   ```cpp
+   // Default wiring of HUB75 matrix to RP2350
+   #define DATA_BASE_PIN    0   // first color data pin
+   #define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
+   #define ROWSEL_BASE_PIN  6   // first row-select (address) pin
+   #define ROWSEL_N_PINS    4   // number of row-select pins (A0–A3)
+   #define CLK_PIN          11  // clock
+   #define STROBE_PIN       12  // latch (LAT)
+   #define OEN_PIN          13  // output enable (OE)
+   ```
+
+### Initialization of Matrix Panel Dimension
+
+At the top of file `hub75_driver.cpp` set the RGB_MATRIX_HEIGHT to the height of the panel (32 in this example).
+
+   ```cpp
+   #define RGB_MATRIX_WIDTH 64
+   #define RGB_MATRIX_HEIGHT 32
+   #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
+   ```
+
+### One Glance Mapping HUB75 Connector → Pico GPIOs
+
+The diagram shows the mapping for a 64x32 matrix panel. Address line A4 is not connected!
+  
+<img src="assets/hub75_to_pico_mapping_64x32.svg">
+
+### Frame Buffer Layout
+
+- A 64×32 panel uses half the memory of a 64×64 panel.
+- Each refresh cycle addresses 16 row pairs (instead of 32).
+- The driver automatically adjusts its addressing logic based on the height you specify.
+
+### Practical Notes
+
+Not all of the demo effects will show correctly for a 64x32 matrix panel. The first two demo effects use image data for a 64x64 layout. You will see some output, but it will look weird.
+
+The `bouncing balls` effect will not show the complete text as the position is hard coded. The `fire_effect` and the `rotator`might look as they should be.
+
+Have fun with adapting the source code or with implementing your own effects.
+
+Do not hesitate to contact me - I will gladly answer your questions! 
 
 ## Brightness Control
 

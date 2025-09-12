@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
+  <!-- Styles -->
+  <style>
+    .box { fill:#f7f7f9; stroke:#222; stroke-width:1.5; rx:6; }
+    .label { font: 14px sans-serif; fill:#111; }
+    .pin { font: 12px monospace; fill:#111; white-space: pre}
+    .conn { stroke:#2b7cff; stroke-width:1.6; marker-end:url(#arr);white-space: pre}
+    .title { font: 16px bold sans-serif; fill:#111; }
+    .badge { font: 13px sans-serif; font-weight:600; fill:#111; }
+    .hub-label, .pico-label { font: 15px sans-serif; font-weight:700; fill:#fff; }
+    .hub-tag { fill:#2b7cff; stroke:none; rx:4; }
+  </style>
+
+  <!-- Arrow marker -->
+  <defs>
+    <marker id="arr" markerWidth="6" markerHeight="6" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#2b7cff"></path>
+    </marker>
+  </defs>
+
+  <!-- HUB75 box -->
+  <rect x="20" y="40" width="360" height="350" class="box"/>
+  <!-- HUB75 label outside box -->
+  <rect x="20" y="10" width="120" height="28" rx="5" class="hub-tag" />
+  <text x="80" y="30" text-anchor="middle" class="hub-label">HUB75</text>
+
+  <!-- HUB75 pins list (compact, left column) -->
+  <g transform="translate(40,70)">
+    <text x="0" y="0" class="label">Connector pins (example):</text>
+
+    <!-- Row 1: Data top half -->
+    <text x="0" y="28" class="pin">R0  ─ pin1</text>
+    <text x="0" y="48" class="pin">G0  ─ pin2</text>
+    <text x="0" y="68" class="pin">B0  ─ pin3</text>
+    <text x="0" y="88" class="pin">R1  ─ pin4</text>
+    <text x="0" y="108" class="pin">G1  ─ pin5</text>
+    <text x="0" y="128" class="pin">B1  ─ pin6</text>
+
+    <!-- Row select -->
+    <text x="0" y="158" class="pin">A0  ─ pin7</text>
+    <text x="0" y="178" class="pin">A1  ─ pin8</text>
+    <text x="0" y="198" class="pin">A2  ─ pin9</text>
+    <text x="0" y="218" class="pin">A3  ─ pin10</text>
+    <text x="0" y="238" class="pin">A4  ─ pin11</text>
+
+    <!-- Control pins -->
+    <text x="0" y="268" class="pin">CLK ─ pin12</text>
+    <text x="0" y="288" class="pin">LAT ─ pin13</text>
+    <text x="0" y="308" class="pin">OE  ─ pin14</text>
+  </g>
+
+  <!-- Pico box -->
+  <rect x="520" y="40" width="340" height="350" class="box"/>
+  <!-- Pico label outside box -->
+  <rect x="740" y="10" width="120" height="28" rx="5" fill="#2b7cff"/>
+  <text x="800" y="30" text-anchor="middle" class="pico-label">Pico</text>
+
+  <!-- Pico pins list (right column) -->
+  <g transform="translate(540,70)">
+    <text x="0" y="0" class="label">Using GPIO numbers:</text>
+
+    <text x="0" y="28" class="pin">GPIO0  ─ DATA R0 (data pins aka colours)</text>
+    <text x="0" y="48" class="pin">GPIO1  ─ DATA G0</text>
+    <text x="0" y="68" class="pin">GPIO2  ─ DATA B0</text>
+    <text x="0" y="88" class="pin">GPIO3  ─ DATA R1</text>
+    <text x="0" y="108" class="pin">GPIO4  ─ DATA G1</text>
+    <text x="0" y="128" class="pin">GPIO5  ─ DATA B1</text>
+
+    <text x="0" y="158" class="pin">GPIO6  ─ A0 (row select)</text>
+    <text x="0" y="178" class="pin">GPIO7  ─ A1</text>
+    <text x="0" y="198" class="pin">GPIO8  ─ A2</text>
+    <text x="0" y="218" class="pin">GPIO9  ─ A3</text>
+    <text x="0" y="238" class="pin">GPIO10 ─ A4</text>
+
+    <text x="0" y="268" class="pin">GPIO11 ─ CLK (CLOCK)</text>
+    <text x="0" y="288" class="pin">GPIO12 ─ LAT (STROBE)</text>
+    <text x="0" y="308" class="pin">GPIO13 ─ OE (OEN)</text>
+  </g>
+
+  <!-- Connections (simplified straight lines) -->
+  <!-- Data 0..5 -->
+  <line x1="130" y1="93" x2="535" y2="93" class="conn"/>
+  <line x1="130" y1="113" x2="535" y2="113" class="conn"/>
+  <line x1="130" y1="133" x2="535" y2="133" class="conn"/>
+  <line x1="130" y1="153" x2="535" y2="153" class="conn"/>
+  <line x1="130" y1="173" x2="535" y2="173" class="conn"/>
+  <line x1="130" y1="193" x2="535" y2="193" class="conn"/>
+
+  <!-- Address A0..A4 -->
+  <line x1="130" y1="223" x2="535" y2="223" class="conn"/>
+  <line x1="130" y1="243" x2="535" y2="243" class="conn"/>
+  <line x1="130" y1="263" x2="535" y2="263" class="conn"/>
+  <line x1="130" y1="283" x2="535" y2="283" class="conn"/>
+
+  <!-- CLK, LAT, OE -->
+  <line x1="130" y1="333" x2="535" y2="333" class="conn"/>
+  <line x1="130" y1="353" x2="535" y2="353" class="conn"/>
+  <line x1="130" y1="373" x2="535" y2="373" class="conn"/>
+
+  <!-- small legends -->
+  <text x="400" y="30" class="badge">Data lines (R0..B1) must be consecutive GPIOs</text>
+  <text x="400" y="410" class="badge">Address lines (A0..A4) must be consecutive GPIOs</text>
+</svg>
