@@ -17,6 +17,37 @@
 
 #define EXIT_FAILURE 1
 
+#define CIE_LUT
+
+#ifdef CIE_LUT
+
+#define LUT cie_lut
+
+// deduced from https://jared.geek.nz/2013/02/linear-led-pwm/
+// The CIE 1931 lightness formula is what actually describes how we perceive light.
+
+static const uint16_t cie_lut[256] = {
+    0,    0,    1,    1,    2,    2,    3,    3,    4,    4,    4,    5,    5,    6,    6,    7,
+    7,    8,    8,    8,    9,    9,   10,   10,   11,   11,   12,   12,   13,   13,   14,   15,
+   15,   16,   17,   17,   18,   19,   19,   20,   21,   22,   22,   23,   24,   25,   26,   27,
+   28,   29,   30,   31,   32,   33,   34,   35,   36,   37,   38,   39,   40,   42,   43,   44,
+   45,   47,   48,   50,   51,   52,   54,   55,   57,   58,   60,   61,   63,   65,   66,   68,
+   70,   71,   73,   75,   77,   79,   81,   83,   84,   86,   88,   90,   93,   95,   97,   99,
+  101,  103,  106,  108,  110,  113,  115,  118,  120,  123,  125,  128,  130,  133,  136,  138,
+  141,  144,  147,  149,  152,  155,  158,  161,  164,  167,  171,  174,  177,  180,  183,  187,
+  190,  194,  197,  200,  204,  208,  211,  215,  218,  222,  226,  230,  234,  237,  241,  245,
+  249,  254,  258,  262,  266,  270,  275,  279,  283,  288,  292,  297,  301,  306,  311,  315,
+  320,  325,  330,  335,  340,  345,  350,  355,  360,  365,  370,  376,  381,  386,  392,  397,
+  403,  408,  414,  420,  425,  431,  437,  443,  449,  455,  461,  467,  473,  480,  486,  492,
+  499,  505,  512,  518,  525,  532,  538,  545,  552,  559,  566,  573,  580,  587,  594,  601,
+  609,  616,  624,  631,  639,  646,  654,  662,  669,  677,  685,  693,  701,  709,  717,  726,
+  734,  742,  751,  759,  768,  776,  785,  794,  802,  811,  820,  829,  838,  847,  857,  866,
+  875,  885,  894,  903,  913,  923,  932,  942,  952,  962,  972,  982,  992, 1002, 1013, 1023,
+};
+#else
+
+#define LUT gamma_lut
+
 // This gamma table is used to correct 8-bit (0-255) colours up to 10-bit, applying gamma correction without losing dynamic range.
 // The gamma table is from pimeroni's https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75.
 
@@ -37,6 +68,7 @@ static const uint16_t gamma_lut[256] = {
     653, 660, 667, 674, 681, 689, 696, 703, 710, 717, 725, 732, 739, 747, 754, 762,
     769, 777, 784, 792, 800, 807, 815, 823, 831, 839, 847, 855, 863, 871, 879, 887,
     895, 903, 912, 920, 928, 937, 945, 954, 962, 971, 979, 988, 997, 1005, 1014, 1023};
+#endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 volatile uint32_t *frame_buffer; ///< Interwoven image data for examples;
@@ -485,8 +517,8 @@ void update(
         uint j = 0;
         for (int i = 0; i < width * height; i += 2)
         {
-            frame_buffer[i] = gamma_lut[(src[j] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j] & 0xff0000) >> 16];
-            frame_buffer[i + 1] = gamma_lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | gamma_lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | gamma_lut[(src[j + offset] & 0xff0000) >> 16];
+            frame_buffer[i] = LUT[(src[j] & 0x0000ff) >> 0] << 20 | LUT[(src[j] & 0x00ff00) >> 8] << 10 | LUT[(src[j] & 0xff0000) >> 16];
+            frame_buffer[i + 1] = LUT[(src[j + offset] & 0x0000ff) >> 0] << 20 | LUT[(src[j + offset] & 0x00ff00) >> 8] << 10 | LUT[(src[j + offset] & 0xff0000) >> 16];
             j++;
         }
     }
@@ -508,8 +540,8 @@ void update_bgr(uint8_t *src)
     // Interweave pixels as required by Hub75 LED panel matrix
     for (int j = 0; j < width * height; j += 2)
     {
-        frame_buffer[j] = gamma_lut[src[k]] << 20 | gamma_lut[src[k + 1]] << 10 | gamma_lut[src[k + 2]];
-        frame_buffer[j + 1] = gamma_lut[src[rgb_offset + k]] << 20 | gamma_lut[src[rgb_offset + k + 1]] << 10 | gamma_lut[src[rgb_offset + k + 2]];
+        frame_buffer[j] = LUT[src[k]] << 20 | LUT[src[k + 1]] << 10 | LUT[src[k + 2]];
+        frame_buffer[j + 1] = LUT[src[rgb_offset + k]] << 20 | LUT[src[rgb_offset + k + 1]] << 10 | LUT[src[rgb_offset + k + 2]];
         k += 3;
     }
 }

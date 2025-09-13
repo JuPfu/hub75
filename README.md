@@ -369,12 +369,12 @@ Address line **A4 is not connected**.
 
 ### Initialization of Matrix Panel Dimension
 
-At the top of file `hub75_driver.cpp` set the `RGB_MATRIX_HEIGHT` to the height of the panel (32 in this example).
+At the top of file `hub75_driver.cpp` set the `MATRIX_PANEL_HEIGHT` to the height of the panel (32 in this example).
 
    ```cpp
-   #define RGB_MATRIX_WIDTH 64
-   #define RGB_MATRIX_HEIGHT 32
-   #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
+   #define MATRIX_PANEL_WIDTH 64
+   #define MATRIX_PANEL_HEIGHT 32
+   #define OFFSET MATRIX_PANEL_WIDTH *(MATRIX_PANEL_HEIGHT >> 1)
    ```
 
 ### One Glance Mapping HUB75 Connector → Pico GPIOs
