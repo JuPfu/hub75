@@ -14,7 +14,7 @@ enum PanelType
 
 void create_hub75_driver(uint w, uint h, PanelType pt, bool stb_inverted);
 void start_hub75_driver();
-void update_bgr(uint8_t *src);
+void update_bgr(const uint8_t *src);
 void update(PicoGraphics const *graphics);
 
 void setBasisBrightness(uint8_t factor);

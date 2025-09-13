@@ -36,6 +36,10 @@
     - [How it Works](#how-it-works)
     - [Default Settings](#default-settings)
     - [Practical Notes](#practical-notes-1)
+  - [Scan Rate Support](#scan-rate-support)
+    - [Multiplexing Modes (Rows Lit Simultaneously)](#multiplexing-modes-rows-lit-simultaneously)
+    - [Example: 64×64 panel, 1:32 scan](#example-6464-panel-132-scan)
+    - [How to Configure](#how-to-configure)
 
 # HUB75 DMA-Based Driver
 
@@ -453,3 +457,36 @@ This corresponds to the same brightness as earlier driver revisions without adju
 - For indoor use, values between 4–8 are usually sufficient.
 - For dimmer environments, you can keep the baseline factor low (e.g. 4) and rely on setIntensity() for smooth runtime control.
 - Both functions are non-blocking and can be called during normal operation.
+
+## Scan Rate Support
+
+### Multiplexing Modes (Rows Lit Simultaneously)
+
+Many HUB75 panel datasheets describe the **scan rate** using terms like *1:16* or *1:32*.  
+This can be confusing, because the actual driver behavior is about **how many rows are lit simultaneously**.
+
+To make things explicit, this driver uses **multiplexing defines**:
+
+| Multiplexing Mode         | Rows Lit at Once | Typical Datasheet Scan Rate | Example Panels               |
+|----------------------------|------------------|-----------------------------|------------------------------|
+| `#define HUB75_MULTIPLEX_2_ROWS` | 2 rows          | 1:32                        | 64×64 (1:32), 64×32 (1:16)   |
+| `#define HUB75_MULTIPLEX_4_ROWS` | 4 rows          | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
+
+### Example: 64×64 panel, 1:32 scan
+- Datasheet says **1:32** (one out of 32 row groups active at a time).  
+- This means **2 rows lit simultaneously**.  
+- In code, use:
+  ```c
+  #define HUB75_MULTIPLEX_2_ROWS
+  ```
+
+### How to Configure
+In your build, define the scan rate that matches your panel:
+
+```cpp
+// Example for 64×64 panels (1/32 scan) - two rows lit simultaneously
+#define HUB75_MULTIPLEX_2_ROWS
+
+// Example for 64×32 panels (1/8 scan) - four rows lit simultaneously
+#define HUB75_MULTIPLEX_4_ROWS
+```
