@@ -25,10 +25,10 @@
 // Define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_2_ROWS to fit your matrix panel.
 
 #define HUB75_MULTIPLEX_2_ROWS   // two rows lit simultaneously
-// #define HUB75_MULTIPLEX_2_ROWS   // four rows lit simultaneously
+// #define HUB75_MULTIPLEX_4_ROWS   // four rows lit simultaneously
 
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_MULTIPLEX_2_ROWS)
-#error "You must define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_2_ROWS to match your panel's scan rate"
+#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_MULTIPLEX_4_ROWS)
+#error "You must define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_4_ROWS to match your panel's scan rate"
 #endif
 
 

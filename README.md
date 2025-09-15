@@ -486,7 +486,15 @@ In your build, define the scan rate that matches your panel:
 ```cpp
 // Example for 64×64 panels (1/32 scan) - two rows lit simultaneously
 #define HUB75_MULTIPLEX_2_ROWS
+// Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
+// That is 32 = 2 to the power of 5 - we need 5 row select pins  
+#define ROWSEL_N_PINS 5
 
 // Example for 64×32 panels (1/8 scan) - four rows lit simultaneously
 #define HUB75_MULTIPLEX_4_ROWS
+// Set the number of address lines - 4 rows lit simultaneously leaves 8 rows to be adressed via row select.
+// That is 8 = 2 to the power of 3 - we need 3 row select pins  
+#define ROWSEL_N_PINS 3
 ```
+
+**⚠️ Do not forget to adapt the number of address lines to fit your matrix panel**
