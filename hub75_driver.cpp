@@ -141,9 +141,9 @@ int main()
 
     HueValueSpectrum hueValueSpectrum = HueValueSpectrum(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
 
-    // Cycle through the examples - move to next example every 10 seconds
+    // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
-    add_repeating_timer_ms(-10.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
+    add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
 
     // The Hub75 driver is constantly running on core 1 with a frequency much higher than 200Hz. CPU load on core 1 is low due to DMA and PIO usage.
     // The animated examples are updated at 60Hz.
@@ -195,12 +195,12 @@ int main()
 
         // matrix panel brightness will vary
         float value = sin(intensity);
-        setIntensity(value * value * value * value);
+        // setIntensity(value * value * value * value);
 
         // Update intensity for next loop
         intensity += step;
         if (intensity >= M_PI) {
-            intensity = 0.0f;
+            // intensity = 0.0f;
         } 
 
         sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
