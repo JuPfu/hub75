@@ -134,7 +134,7 @@ static volatile uint32_t row_in_bit_plane = 0;
 
 // Choose accumulator precision: >= 10. 16 is a good default.
 #ifndef ACC_BITS
-#define ACC_BITS 16
+#define ACC_BITS 18
 #endif
 
 // Derived constants
