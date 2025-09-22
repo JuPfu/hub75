@@ -28,9 +28,9 @@
 #define RGB_MATRIX_HEIGHT 64
 #define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
-// Panel type FM6126A receives some initial incantation sequence. 
-// This should usually have no effect on generic matrix panels. 
-// You might see a short lighting of some leds for generic panels. 
+// Panel type FM6126A receives some initial incantation sequence.
+// This should usually have no effect on generic matrix panels.
+// You might see a short lighting of some leds for generic panels.
 // To suppress this effect set PANEL_TYPE to PANEL_GENERIC.
 
 // PanelType - either PANEL_GENERIC or PANEL_FM6126A
@@ -42,7 +42,7 @@
 // stb_inverted - either true (inverted) or false (default)
 #define STB_INVERTED false
 
-static int frame_index = 0; ///< Example selector
+static int demo_index = 0; ///< Example selector
 
 // Perform initialisation
 int pico_led_init(void)
@@ -95,9 +95,10 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++frame_index > 5)
-        frame_index = 0; // Cycle through all examples
-
+    if (++demo_index > 5)
+    {
+        demo_index = 0; // Cycle through all examples
+    }
     return true;
 }
 
@@ -112,8 +113,8 @@ void core1_entry()
 
 void initialize()
 {
-    // Set system clock to 250MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(250000, true);
+    // Set system clock to 200MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
+    set_sys_clock_khz(200000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
@@ -156,52 +157,54 @@ int main()
 
     while (true)
     {
-        if (frame_index == 0)
-        {
-            // Vanessa Mai - image data is in b8, g8, r8 format
-            // By Lanzunlimited, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=87037267
-            update_bgr(vanessa_mai_64x64);
-        }
-        else if (frame_index == 1)
-        {
-            // Taylor Swift - image data is in b8, g8, r8 format
-            // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-            update_bgr(taylor_swift_64x64);
-        }
-        else if (frame_index == 2)
-        {
-            // Image data is in r8, g8, b8 format
-            fireEffect.burn();
-            update(&fireEffect);
-        }
-        else if (frame_index == 3)
-        {
-            // Image data is in r8, g8, b8 format
-            rotator.draw_line();
-            update(&rotator);
-        }
-        else if (frame_index == 4)
+        if (demo_index == 0)
         {
             // Image data is in r8, g8, b8 format
             bouncingBalls.bounce();
             update(&bouncingBalls);
         }
-        else if (frame_index == 5)
+        else if (demo_index == 1)
+        {
+            // Image data is in r8, g8, b8 format
+            fireEffect.burn();
+            update(&fireEffect);
+        }
+        else if (demo_index == 2)
+        {
+            // Taylor Swift - image data is in b8, g8, r8 format
+            // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
+            update_bgr(taylor_swift_64x64);
+        }
+        else if (demo_index == 3)
+        {
+            // Image data is in r8, g8, b8 format
+            rotator.draw_line();
+            update(&rotator);
+        }
+        else if (demo_index == 4)
         {
             // Image data is in r8, g8, b8 format
             hueValueSpectrum.drawShades();
             update(&hueValueSpectrum);
         }
 
+        else if (demo_index == 5)
+        {
+            // Vanessa Mai - image data is in b8, g8, r8 format
+            // By Lanzunlimited, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=87037267
+            update_bgr(vanessa_mai_64x64);
+        }
+
         // matrix panel brightness will vary
         float value = sin(intensity);
-        // setIntensity(value * value * value * value);
+        setIntensity(value * value * value * value);
 
         // Update intensity for next loop
         intensity += step;
-        if (intensity >= M_PI) {
-            // intensity = 0.0f;
-        } 
+        if (intensity >= M_PI)
+        {
+            intensity = 0.0f;
+        }
 
         sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }

@@ -24,17 +24,12 @@
 // ...
 // Define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_2_ROWS to fit your matrix panel.
 
-#define HUB75_MULTIPLEX_2_ROWS   // two rows lit simultaneously
+#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 // #define HUB75_MULTIPLEX_4_ROWS   // four rows lit simultaneously
 
 #if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_MULTIPLEX_4_ROWS)
 #error "You must define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_4_ROWS to match your panel's scan rate"
 #endif
-
-
-#define CIE_LUT
-
-#ifdef CIE_LUT
 
 // Deduced from https://jared.geek.nz/2013/02/linear-led-pwm/
 // The CIE 1931 lightness formula is what actually describes how we perceive light.
@@ -56,29 +51,6 @@ static const uint16_t lut[256] = {
     609, 616, 624, 631, 639, 646, 654, 662, 669, 677, 685, 693, 701, 709, 717, 726,
     734, 742, 751, 759, 768, 776, 785, 794, 802, 811, 820, 829, 838, 847, 857, 866,
     875, 885, 894, 903, 913, 923, 932, 942, 952, 962, 972, 982, 992, 1002, 1013, 1023};
-#else
-
-// This gamma table is used to correct 8-bit (0-255) colours up to 10-bit, applying gamma correction without losing dynamic range.
-// The gamma table is from pimeroni's https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75.
-
-static const uint16_t lut[256] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
-    16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-    32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-    48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63,
-    64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79,
-    80, 82, 84, 87, 89, 91, 94, 96, 98, 101, 103, 106, 109, 111, 114, 117,
-    119, 122, 125, 128, 130, 133, 136, 139, 142, 145, 148, 151, 155, 158, 161, 164,
-    167, 171, 174, 177, 181, 184, 188, 191, 195, 198, 202, 206, 209, 213, 217, 221,
-    225, 228, 232, 236, 240, 244, 248, 252, 257, 261, 265, 269, 274, 278, 282, 287,
-    291, 295, 300, 304, 309, 314, 318, 323, 328, 333, 337, 342, 347, 352, 357, 362,
-    367, 372, 377, 382, 387, 393, 398, 403, 408, 414, 419, 425, 430, 436, 441, 447,
-    452, 458, 464, 470, 475, 481, 487, 493, 499, 505, 511, 517, 523, 529, 535, 542,
-    548, 554, 561, 567, 573, 580, 586, 593, 599, 606, 613, 619, 626, 633, 640, 647,
-    653, 660, 667, 674, 681, 689, 696, 703, 710, 717, 725, 732, 739, 747, 754, 762,
-    769, 777, 784, 792, 800, 807, 815, 823, 831, 839, 847, 855, 863, 871, 879, 887,
-    895, 903, 912, 920, 928, 937, 945, 954, 962, 971, 979, 988, 997, 1005, 1014, 1023};
-#endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 volatile uint32_t *frame_buffer; ///< Interwoven image data for examples;
@@ -134,7 +106,7 @@ static volatile uint32_t row_in_bit_plane = 0;
 
 // Choose accumulator precision: >= 10. 16 is a good default.
 #ifndef ACC_BITS
-#define ACC_BITS 18
+#define ACC_BITS 16
 #endif
 
 // Derived constants
@@ -206,9 +178,21 @@ static void init_accumulators()
  */
 static void free_accumulators()
 {
-    if (acc_r) { delete[] acc_r; acc_r = nullptr; }
-    if (acc_g) { delete[] acc_g; acc_g = nullptr; }
-    if (acc_b) { delete[] acc_b; acc_b = nullptr; }
+    if (acc_r)
+    {
+        delete[] acc_r;
+        acc_r = nullptr;
+    }
+    if (acc_g)
+    {
+        delete[] acc_g;
+        acc_g = nullptr;
+    }
+    if (acc_b)
+    {
+        delete[] acc_b;
+        acc_b = nullptr;
+    }
 }
 
 /**
@@ -388,7 +372,7 @@ void create_hub75_driver(uint w, uint h, PanelType panel_type, bool inverted_stb
 #endif
 
     frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
-    
+
     init_accumulators();
 
     if (panel_type == PANEL_FM6126A)
@@ -566,7 +550,7 @@ static inline int claim_dma_channel(const char *channel_name)
  * The LUT (lut[]) maps 8-bit input -> 10-bit output (0..1023). We scale that
  * mapped value into the accumulator (left shift by ACC_SHIFT) and keep the
  * fractional remainder in the accumulator across frames.
- * 
+ *
  * @param src Graphics object to be updated - RGB888 format, 24-bits in uint32_t array
  */
 void update(
@@ -578,13 +562,13 @@ void update(
         uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
         uint j = 0;
+        const size_t pixels = width * height;
 #ifdef HUB75_MULTIPLEX_2_ROWS
-        const size_t pixels = (size_t)width * (size_t)height;
         for (int i = 0; i < (int)pixels; i += 2)
         {
             // Top pixel (index j)
             uint32_t s0 = src[j];
-            uint8_t r0 = (s0 & 0x0000ff) >> 0;  // keep your original byte mapping
+            uint8_t r0 = (s0 & 0x0000ff) >> 0;
             uint8_t g0 = (s0 & 0x00ff00) >> 8;
             uint8_t b0 = (s0 & 0xff0000) >> 16;
 
@@ -602,6 +586,9 @@ void update(
             acc_r[j] -= (out_r0 << ACC_SHIFT);
             acc_g[j] -= (out_g0 << ACC_SHIFT);
             acc_b[j] -= (out_b0 << ACC_SHIFT);
+
+            // Pack into interleaved frame_buffer
+            frame_buffer[i] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
 
             // Bottom pixel (index j + offset)
             uint32_t s1 = src[j + offset];
@@ -621,8 +608,7 @@ void update(
             acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
             acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
 
-            // Pack into interleaved frame_buffer (same packing as before)
-            frame_buffer[i] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
+            // Pack into interleaved frame_buffer
             frame_buffer[i + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
 
             ++j;
@@ -630,7 +616,6 @@ void update(
 
 #elif defined HUB75_MULTIPLEX_4_ROWS
         // For four-rows-lit multiplexing we step by 4 and use offsets 0, offset, 2*offset, 3*offset
-        const size_t pixels = (size_t)width * (size_t)height;
         for (int i = 0; i < (int)pixels; i += 4)
         {
             // index base j refers to the top of the group
@@ -696,7 +681,7 @@ void update(
             acc_g[j + 3 * offset] -= (out_g3 << ACC_SHIFT);
             acc_b[j + 3 * offset] -= (out_b3 << ACC_SHIFT);
 
-            // pack
+            // Pack into interleaved frame_buffer
             frame_buffer[i] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
             frame_buffer[i + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
             frame_buffer[i + 2] = (out_r2 << 20) | (out_g2 << 10) | out_b2;
@@ -707,7 +692,6 @@ void update(
 #endif
     }
 }
-
 
 /**
  * @brief Updates the frame buffer with pixel data from the source array.
@@ -726,7 +710,7 @@ void update_bgr(const uint8_t *src)
     for (int j = 0; j < (int)pixels; j += 2)
     {
         // top
-        uint8_t r0 = src[k];        // keep your original sematics: src[k] maps to channel used previously
+        uint8_t r0 = src[k];
         uint8_t g0 = src[k + 1];
         uint8_t b0 = src[k + 2];
 
@@ -741,6 +725,9 @@ void update_bgr(const uint8_t *src)
         acc_r[j] -= (out_r0 << ACC_SHIFT);
         acc_g[j] -= (out_g0 << ACC_SHIFT);
         acc_b[j] -= (out_b0 << ACC_SHIFT);
+
+        // Pack into interleaved frame_buffer
+        frame_buffer[j] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
 
         // bottom
         uint8_t r1 = src[rgb_offset + k];
@@ -759,7 +746,7 @@ void update_bgr(const uint8_t *src)
         acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
         acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
 
-        frame_buffer[j]     = (out_r0 << 20) | (out_g0 << 10) | out_b0;
+        // Pack into interleaved frame_buffer
         frame_buffer[j + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
 
         k += 3;
@@ -783,6 +770,9 @@ void update_bgr(const uint8_t *src)
         acc_g[j] -= (out_g0 << ACC_SHIFT);
         acc_b[j] -= (out_b0 << ACC_SHIFT);
 
+        // Pack into interleaved frame_buffer
+        frame_buffer[j] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
+
         // 2nd
         uint8_t r1 = src[rgb_offset + k];
         uint8_t g1 = src[rgb_offset + k + 1];
@@ -797,6 +787,9 @@ void update_bgr(const uint8_t *src)
         acc_r[j + offset] -= (out_r1 << ACC_SHIFT);
         acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
         acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
+
+        // Pack into interleaved frame_buffer
+        frame_buffer[j + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
 
         // 3rd
         uint8_t r2 = src[2 * rgb_offset + k];
@@ -813,6 +806,9 @@ void update_bgr(const uint8_t *src)
         acc_g[j + 2 * offset] -= (out_g2 << ACC_SHIFT);
         acc_b[j + 2 * offset] -= (out_b2 << ACC_SHIFT);
 
+        // Pack into interleaved frame_buffer
+        frame_buffer[j + 2] = (out_r2 << 20) | (out_g2 << 10) | out_b2;
+
         // 4th
         uint8_t r3 = src[3 * rgb_offset + k];
         uint8_t g3 = src[3 * rgb_offset + k + 1];
@@ -828,9 +824,7 @@ void update_bgr(const uint8_t *src)
         acc_g[j + 3 * offset] -= (out_g3 << ACC_SHIFT);
         acc_b[j + 3 * offset] -= (out_b3 << ACC_SHIFT);
 
-        frame_buffer[j]     = (out_r0 << 20) | (out_g0 << 10) | out_b0;
-        frame_buffer[j + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
-        frame_buffer[j + 2] = (out_r2 << 20) | (out_g2 << 10) | out_b2;
+        // Pack into interleaved frame_buffer
         frame_buffer[j + 3] = (out_r3 << 20) | (out_g3 << 10) | out_b3;
 
         k += 3;

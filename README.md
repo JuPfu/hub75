@@ -31,6 +31,7 @@
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios-1)
     - [Frame Buffer Layout](#frame-buffer-layout)
     - [Practical Notes](#practical-notes)
+  - [Increased Perceptual Colour Depth (Temporal Dithering)](#increased-perceptual-colour-depth-temporal-dithering)
   - [Brightness Control](#brightness-control)
     - [API Functions](#api-functions)
     - [How it Works](#how-it-works)
@@ -402,6 +403,24 @@ The `bouncing balls` effect will not show the complete text as the position is h
 Have fun with adapting the source code or with implementing your own effects.
 
 Do not hesitate to contact me - I will gladly answer your questions! 
+
+## Increased Perceptual Colour Depth (Temporal Dithering)
+
+The HUB75 driver outputs native 10-bit colour planes (R/G/B = 10 bits each) because the PIO/DMA pipeline currently packs one pixel (R = 10 bits/G = 10 bits/B = 10 bits) into a single 32-bit word.
+
+To improve perceived colour gradation beyond 10 bits per channel without changing the PIO/DMA format, the driver uses **temporal dithering** (an accumulator-based method):
+
+- Internally each pixel keeps a higher-precision accumulator (e.g. 18 bits).
+- Each frame we output the top 10 bits to the panel and retain the lower bits in the accumulator.
+- Over successive frames the lower bits average out, producing a perception closer to 12–14 bits of colour depth.
+
+**Pros**
+- Big visual improvement for gradients and subtle colours.
+- Negligible CPU overhead.
+
+**Cons**
+- Small extra RAM for accumulators. Memory usage for a 64x64 panel increases for about 48KB ( 64 x 64 * 3 * sizeof(uint32_t)).
+
 
 ## Brightness Control
 
