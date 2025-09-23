@@ -13,7 +13,16 @@
     - [Step-by-Step Breakdown](#step-by-step-breakdown)
     - [Refresh Rate Performance](#refresh-rate-performance)
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
-  - [Conclusion](#conclusion)
+  - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
+  - [Improved Colour Perception](#improved-colour-perception)
+    - [Increased Perceptual Colour Depth (Temporal Dithering)](#increased-perceptual-colour-depth-temporal-dithering)
+    - [✅ Advantages](#-advantages)
+    - [⚠️ Trade-offs](#️-trade-offs)
+  - [Brightness Control](#brightness-control)
+    - [API Functions](#api-functions)
+    - [How it Works](#how-it-works)
+    - [Default Settings](#default-settings)
+    - [Practical Notes](#practical-notes)
   - [Demo Effects](#demo-effects)
   - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
   - [Next Steps](#next-steps)
@@ -30,12 +39,6 @@
     - [Initialization of Matrix Panel Dimension](#initialization-of-matrix-panel-dimension)
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios-1)
     - [Frame Buffer Layout](#frame-buffer-layout)
-    - [Practical Notes](#practical-notes)
-  - [Increased Perceptual Colour Depth (Temporal Dithering)](#increased-perceptual-colour-depth-temporal-dithering)
-  - [Brightness Control](#brightness-control)
-    - [API Functions](#api-functions)
-    - [How it Works](#how-it-works)
-    - [Default Settings](#default-settings)
     - [Practical Notes](#practical-notes-1)
   - [Scan Rate Support](#scan-rate-support)
     - [Multiplexing Modes (Rows Lit Simultaneously)](#multiplexing-modes-rows-lit-simultaneously)
@@ -196,13 +199,89 @@ These results demonstrate stable operation and high-performance display renderin
 ✅ Ensures **precise timing** without unnecessary stalling.
 
 ---
-## Conclusion
+## Conclusion for DMA and PIO based Approach
 
 By offloading tasks to **DMA and PIO**, the revised HUB75 driver achieves **higher performance**, **simpler interrupt handling**, and **better synchronization**. This approach significantly reduces CPU overhead while eliminating artifacts like **ghosting** at high clock speeds.
 
 If you're interested in optimizing **RGB matrix panel drivers**, this implementation serves as a valuable reference for efficient DMA-based rendering.
 
 ---
+## Improved Colour Perception
+
+The graphics system for the demo effects operates in **RGB888** format (8 bits per channel, 24 bits per pixel). To better match human vision, colours are first mapped using the [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/). This mapping effectively expands the usable range to **10 bits per channel**.
+
+The HUB75 driver takes advantage of this: its PIO/DMA pipeline packs each pixel as a **32-bit word** with 10 bits for red, 10 bits for green, and 10 bits for blue.
+
+---
+
+### Increased Perceptual Colour Depth (Temporal Dithering)
+
+To go beyond native 10-bit precision without changing the data format, the driver employs  **temporal dithering** (an accumulator-based technique):
+
+- Each pixel maintains a high-precision accumulator (e.g. 18 bits).  
+- On every refresh, the top 10 bits are sent to the panel, while the lower bits remain stored.  
+- Over successive frames, these residuals accumulate, averaging out to produce smoother gradients.  
+
+This results in a perceived colour depth equivalent to **12–14 bits per channel**.
+
+### ✅ Advantages
+- Noticeable improvement in gradients and subtle colour transitions.  
+- Minimal CPU overhead (shifts and adds only).  
+
+### ⚠️ Trade-offs
+- Requires additional RAM for accumulators.  
+  For a 64×64 panel:  
+  `64 × 64 × 3 × sizeof(uint32_t) ≈ 48 KB`.
+
+## Brightness Control
+
+In addition to bitplane modulation, the driver supports **software-based brightness regulation**. This allows easy adjustment of overall panel brightness without hardware changes.
+
+### API Functions
+
+```cpp
+// Set the baseline brightness scaling factor (default = 6, range 1–255).
+// Larger values increase brightness but also raise OEn frequency.
+void setBasisBrightness(uint8_t factor);
+
+// Set fine-grained brightness intensity as a fraction [0.0 – 1.0].
+void setIntensity(float intensity);
+```
+
+### How it Works
+
+- <code>setBasisBrightness(basis)</code>
+
+  Defines the top brightness.
+
+  Example: <code>setBasisBrightness(6)</code> → default brightness range for typical 64×64 panels. \
+  Larger factors give more headroom for brightness but consume more **Binary Coded Modulation (BCM)** time slices.
+
+- <code>setIntensity(intensity)</code>
+  
+  Fine-grained adjustment from 0.0 (dark/off) to 1.0 (full brightness).\
+  This function scales the effective duty cycle within the current baseline brightness range.
+
+```cpp
+// Example: brighten the panel, then dim at runtime
+setBasisBrightness(8); // Start with baseline factor 8 for a brighter panel
+setIntensity(0.5f);    // Show at 50% of that baseline
+```
+### Default Settings
+
+- <code>basis_factor = 6u</code>
+- <code>intensity = 1.0f</code>
+  (full brightness within the baseline)
+
+This corresponds to the same brightness as earlier driver revisions without adjustment.
+
+### Practical Notes
+
+- Increasing the basis factor may increase peak current consumption.
+- For indoor use, values between 4–8 are usually sufficient.
+- For dimmer environments, you can keep the baseline factor low (e.g. 4) and rely on setIntensity() for smooth runtime control.
+- Both functions are non-blocking and can be called during normal operation.
+
 
 ## Demo Effects
 
@@ -403,79 +482,6 @@ The `bouncing balls` effect will not show the complete text as the position is h
 Have fun with adapting the source code or with implementing your own effects.
 
 Do not hesitate to contact me - I will gladly answer your questions! 
-
-## Increased Perceptual Colour Depth (Temporal Dithering)
-
-The HUB75 driver outputs native 10-bit colour planes (R/G/B = 10 bits each) because the PIO/DMA pipeline currently packs one pixel (R = 10 bits/G = 10 bits/B = 10 bits) into a single 32-bit word.
-
-To improve perceived colour gradation beyond 10 bits per channel without changing the PIO/DMA format, the driver uses **temporal dithering** (an accumulator-based method):
-
-- Internally each pixel keeps a higher-precision accumulator (e.g. 18 bits).
-- Each frame we output the top 10 bits to the panel and retain the lower bits in the accumulator.
-- Over successive frames the lower bits average out, producing a perception closer to 12–14 bits of colour depth.
-
-**Pros**
-- Big visual improvement for gradients and subtle colours.
-- Negligible CPU overhead.
-
-**Cons**
-- Small extra RAM for accumulators. Memory usage for a 64x64 panel increases for about 48KB ( 64 x 64 * 3 * sizeof(uint32_t)).
-
-
-## Brightness Control
-
-The driver supports software-based brightness regulation in addition to the standard bitplane modulation.  
-This allows you to easily adjust overall panel brightness without changing the hardware wiring.
-
-### API Functions
-
-```cpp
-// Set the baseline brightness scaling factor (default = 6 value must be in range 1–255).
-// Larger values increase the brightness of the led matrix panel.
-// Be carefull - the value 2 doubles the OEn frequency, the value 3 triples the OEn frequency, ...
-void setBasisBrightness(uint8_t factor);
-
-// Set fine-grained brightness intensity as a floating-point fraction [0.0 – 1.0].
-void setIntensity(float intensity);
-```
-### How it Works
-
-- <code>setBasisBrightness(basis)</code>
-
-  Defines the top brightness.
-
-  Example: <code>setBasisBrightness(6)</code> → default brightness range for typical 64×64 panels. \
-  Larger factors give more headroom for brightness but consume more **Binary Coded Modulation (BCM)** time slices.
-
-- <code>setIntensity(intensity)</code>
-  
-  Fine-grained adjustment from 0.0 (dark/off) to 1.0 (full brightness).\
-  This function scales the effective duty cycle within the current baseline brightness range.
-
-```cpp
-// Start with baseline factor 8 for a brighter panel
-setBasisBrightness(8);
-
-// Dim the panel to 50% of that range
-setIntensity(0.5f);
-```
-
-This results in a panel brightness of roughly 50% of the maximum possible with factor 8.
-
-### Default Settings
-
-- <code>basis_factor = 6u</code>
-- <code>intensity = 1.0f</code>
-  (full brightness within the baseline)
-
-This corresponds to the same brightness as earlier driver revisions without adjustment.
-
-### Practical Notes
-
-- Increasing the basis factor may increase peak current consumption.
-- For indoor use, values between 4–8 are usually sufficient.
-- For dimmer environments, you can keep the baseline factor low (e.g. 4) and rely on setIntensity() for smooth runtime control.
-- Both functions are non-blocking and can be called during normal operation.
 
 ## Scan Rate Support
 
