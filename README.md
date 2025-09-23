@@ -230,8 +230,7 @@ This results in a perceived colour depth equivalent to **12–14 bits per channe
 
 ### ⚠️ Trade-offs
 - Requires additional RAM for accumulators.  
-  For a 64×64 panel:  
-  `64 × 64 × 3 × sizeof(uint32_t) ≈ 48 KB`.
+  For a 64×64 panel: `64 × 64 × 3 × sizeof(uint32_t) ≈ 48 KB`.
 
 ## Brightness Control
 
