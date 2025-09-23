@@ -535,14 +535,30 @@ static inline int claim_dma_channel(const char *channel_name)
     return dma_channel;
 }
 
-/**
- * @brief Updates the frame buffer with pixel data from the source array.
- *
- * This function takes a source array of pixel data and updates the frame buffer
- * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
- *
- * @param src Pointer to the source pixel data array (RGB888 format).
- */
+inline __attribute__((always_inline)) uint32_t temporal_dithering(size_t j, uint32_t pixel)
+{
+    uint8_t r = (pixel & 0x0000ff) >> 0;
+    uint8_t g = (pixel & 0x00ff00) >> 8;
+    uint8_t b = (pixel & 0xff0000) >> 16;
+
+    // Add CIE mapped value into accumulator (preserving LUT mapping)
+    acc_r[j] += ((uint32_t)lut[r] << ACC_SHIFT);
+    acc_g[j] += ((uint32_t)lut[g] << ACC_SHIFT);
+    acc_b[j] += ((uint32_t)lut[b] << ACC_SHIFT);
+
+    // Output 10 bits for each colour channel
+    uint32_t out_r = acc_r[j] >> ACC_SHIFT;
+    uint32_t out_g = acc_g[j] >> ACC_SHIFT;
+    uint32_t out_b = acc_b[j] >> ACC_SHIFT;
+
+    // Subtract used contribution to preserve error
+    acc_r[j] -= (out_r << ACC_SHIFT);
+    acc_g[j] -= (out_g << ACC_SHIFT);
+    acc_b[j] -= (out_b << ACC_SHIFT);
+
+    return (out_r << 20) | (out_g << 10) | out_b;
+}
+
 /**
  * @brief Update frame_buffer from PicoGraphics source (RGB888 / packed 32-bit),
  *        using accumulator temporal dithering while preserving the LUT mapping.
@@ -561,136 +577,47 @@ void update(
     {
         uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
-        uint j = 0;
         const size_t pixels = width * height;
 #ifdef HUB75_MULTIPLEX_2_ROWS
-        for (int i = 0; i < (int)pixels; i += 2)
+        for (size_t i = 0, j = 0; i < pixels; i += 2, ++j)
         {
-            // Top pixel (index j)
-            uint32_t s0 = src[j];
-            uint8_t r0 = (s0 & 0x0000ff) >> 0;
-            uint8_t g0 = (s0 & 0x00ff00) >> 8;
-            uint8_t b0 = (s0 & 0xff0000) >> 16;
-
-            // Add CIE/gamma-mapped value into accumulator (preserving LUT mapping)
-            acc_r[j] += ((uint32_t)lut[r0] << ACC_SHIFT);
-            acc_g[j] += ((uint32_t)lut[g0] << ACC_SHIFT);
-            acc_b[j] += ((uint32_t)lut[b0] << ACC_SHIFT);
-
-            // Output top 10 bits
-            uint32_t out_r0 = acc_r[j] >> ACC_SHIFT;
-            uint32_t out_g0 = acc_g[j] >> ACC_SHIFT;
-            uint32_t out_b0 = acc_b[j] >> ACC_SHIFT;
-
-            // Subtract used contribution to preserve error
-            acc_r[j] -= (out_r0 << ACC_SHIFT);
-            acc_g[j] -= (out_g0 << ACC_SHIFT);
-            acc_b[j] -= (out_b0 << ACC_SHIFT);
-
-            // Pack into interleaved frame_buffer
-            frame_buffer[i] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
-
-            // Bottom pixel (index j + offset)
-            uint32_t s1 = src[j + offset];
-            uint8_t r1 = (s1 & 0x0000ff) >> 0;
-            uint8_t g1 = (s1 & 0x00ff00) >> 8;
-            uint8_t b1 = (s1 & 0xff0000) >> 16;
-
-            acc_r[j + offset] += ((uint32_t)lut[r1] << ACC_SHIFT);
-            acc_g[j + offset] += ((uint32_t)lut[g1] << ACC_SHIFT);
-            acc_b[j + offset] += ((uint32_t)lut[b1] << ACC_SHIFT);
-
-            uint32_t out_r1 = acc_r[j + offset] >> ACC_SHIFT;
-            uint32_t out_g1 = acc_g[j + offset] >> ACC_SHIFT;
-            uint32_t out_b1 = acc_b[j + offset] >> ACC_SHIFT;
-
-            acc_r[j + offset] -= (out_r1 << ACC_SHIFT);
-            acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
-            acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
-
-            // Pack into interleaved frame_buffer
-            frame_buffer[i + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
-
-            ++j;
+            frame_buffer[i] = temporal_dithering(j, src[j]);
+            frame_buffer[i + 1] = temporal_dithering(j + offset, src[j + offset]);
         }
-
 #elif defined HUB75_MULTIPLEX_4_ROWS
         // For four-rows-lit multiplexing we step by 4 and use offsets 0, offset, 2*offset, 3*offset
-        for (int i = 0; i < (int)pixels; i += 4)
+        for (size_t i = 0, j = 0; i < pixels; i += 4, ++j)
         {
-            // index base j refers to the top of the group
-            uint32_t s0 = src[j];
-            uint32_t s1 = src[j + offset];
-            uint32_t s2 = src[j + 2 * offset];
-            uint32_t s3 = src[j + 3 * offset];
+            size_t j0 = j;
+            size_t j1 = j0 + offset;
+            size_t j2 = j1 + offset;
+            size_t j3 = j2 + offset;
 
-            uint8_t r0 = (s0 & 0x0000ff) >> 0;
-            uint8_t g0 = (s0 & 0x00ff00) >> 8;
-            uint8_t b0 = (s0 & 0xff0000) >> 16;
-
-            uint8_t r1 = (s1 & 0x0000ff) >> 0;
-            uint8_t g1 = (s1 & 0x00ff00) >> 8;
-            uint8_t b1 = (s1 & 0xff0000) >> 16;
-
-            uint8_t r2 = (s2 & 0x0000ff) >> 0;
-            uint8_t g2 = (s2 & 0x00ff00) >> 8;
-            uint8_t b2 = (s2 & 0xff0000) >> 16;
-
-            uint8_t r3 = (s3 & 0x0000ff) >> 0;
-            uint8_t g3 = (s3 & 0x00ff00) >> 8;
-            uint8_t b3 = (s3 & 0xff0000) >> 16;
-
-            // Accumulate and extract for each of the 4
-            acc_r[j] += ((uint32_t)lut[r0] << ACC_SHIFT);
-            acc_g[j] += ((uint32_t)lut[g0] << ACC_SHIFT);
-            acc_b[j] += ((uint32_t)lut[b0] << ACC_SHIFT);
-            uint32_t out_r0 = acc_r[j] >> ACC_SHIFT;
-            uint32_t out_g0 = acc_g[j] >> ACC_SHIFT;
-            uint32_t out_b0 = acc_b[j] >> ACC_SHIFT;
-            acc_r[j] -= (out_r0 << ACC_SHIFT);
-            acc_g[j] -= (out_g0 << ACC_SHIFT);
-            acc_b[j] -= (out_b0 << ACC_SHIFT);
-
-            acc_r[j + offset] += ((uint32_t)lut[r1] << ACC_SHIFT);
-            acc_g[j + offset] += ((uint32_t)lut[g1] << ACC_SHIFT);
-            acc_b[j + offset] += ((uint32_t)lut[b1] << ACC_SHIFT);
-            uint32_t out_r1 = acc_r[j + offset] >> ACC_SHIFT;
-            uint32_t out_g1 = acc_g[j + offset] >> ACC_SHIFT;
-            uint32_t out_b1 = acc_b[j + offset] >> ACC_SHIFT;
-            acc_r[j + offset] -= (out_r1 << ACC_SHIFT);
-            acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
-            acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
-
-            acc_r[j + 2 * offset] += ((uint32_t)lut[r2] << ACC_SHIFT);
-            acc_g[j + 2 * offset] += ((uint32_t)lut[g2] << ACC_SHIFT);
-            acc_b[j + 2 * offset] += ((uint32_t)lut[b2] << ACC_SHIFT);
-            uint32_t out_r2 = acc_r[j + 2 * offset] >> ACC_SHIFT;
-            uint32_t out_g2 = acc_g[j + 2 * offset] >> ACC_SHIFT;
-            uint32_t out_b2 = acc_b[j + 2 * offset] >> ACC_SHIFT;
-            acc_r[j + 2 * offset] -= (out_r2 << ACC_SHIFT);
-            acc_g[j + 2 * offset] -= (out_g2 << ACC_SHIFT);
-            acc_b[j + 2 * offset] -= (out_b2 << ACC_SHIFT);
-
-            acc_r[j + 3 * offset] += ((uint32_t)lut[r3] << ACC_SHIFT);
-            acc_g[j + 3 * offset] += ((uint32_t)lut[g3] << ACC_SHIFT);
-            acc_b[j + 3 * offset] += ((uint32_t)lut[b3] << ACC_SHIFT);
-            uint32_t out_r3 = acc_r[j + 3 * offset] >> ACC_SHIFT;
-            uint32_t out_g3 = acc_g[j + 3 * offset] >> ACC_SHIFT;
-            uint32_t out_b3 = acc_b[j + 3 * offset] >> ACC_SHIFT;
-            acc_r[j + 3 * offset] -= (out_r3 << ACC_SHIFT);
-            acc_g[j + 3 * offset] -= (out_g3 << ACC_SHIFT);
-            acc_b[j + 3 * offset] -= (out_b3 << ACC_SHIFT);
-
-            // Pack into interleaved frame_buffer
-            frame_buffer[i] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
-            frame_buffer[i + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
-            frame_buffer[i + 2] = (out_r2 << 20) | (out_g2 << 10) | out_b2;
-            frame_buffer[i + 3] = (out_r3 << 20) | (out_g3 << 10) | out_b3;
-
-            ++j;
+            frame_buffer[i] = temporal_dithering(j0, src[j0]);
+            frame_buffer[i + 1] = temporal_dithering(j1, src[j1]);
+            frame_buffer[i + 2] = temporal_dithering(j2, src[j2]);
+            frame_buffer[i + 3] = temporal_dithering(j3, src[j3]);
         }
 #endif
     }
+}
+
+inline __attribute__((always_inline)) uint32_t temporal_dithering_bgr(size_t j, uint8_t r, uint8_t g, uint8_t b)
+{
+    acc_r[j] += ((uint32_t)lut[r] << ACC_SHIFT);
+    acc_g[j] += ((uint32_t)lut[g] << ACC_SHIFT);
+    acc_b[j] += ((uint32_t)lut[b] << ACC_SHIFT);
+
+    uint32_t out_r = acc_r[j] >> ACC_SHIFT;
+    uint32_t out_g = acc_g[j] >> ACC_SHIFT;
+    uint32_t out_b = acc_b[j] >> ACC_SHIFT;
+
+    acc_r[j] -= (out_r << ACC_SHIFT);
+    acc_g[j] -= (out_g << ACC_SHIFT);
+    acc_b[j] -= (out_b << ACC_SHIFT);
+
+    // Pack pixel
+    return (out_r << 20) | (out_g << 10) | out_b;
 }
 
 /**
@@ -705,129 +632,24 @@ void update_bgr(const uint8_t *src)
 {
     const size_t pixels = (size_t)width * (size_t)height;
     const uint rgb_offset = offset * 3;
-    uint k = 0;
 #ifdef HUB75_MULTIPLEX_2_ROWS
-    for (int j = 0; j < (int)pixels; j += 2)
+    for (size_t i = 0, j = 0; i < pixels; j += 3, i += 2)
     {
-        // top
-        uint8_t r0 = src[k];
-        uint8_t g0 = src[k + 1];
-        uint8_t b0 = src[k + 2];
-
-        acc_r[j] += ((uint32_t)lut[r0] << ACC_SHIFT);
-        acc_g[j] += ((uint32_t)lut[g0] << ACC_SHIFT);
-        acc_b[j] += ((uint32_t)lut[b0] << ACC_SHIFT);
-
-        uint32_t out_r0 = acc_r[j] >> ACC_SHIFT;
-        uint32_t out_g0 = acc_g[j] >> ACC_SHIFT;
-        uint32_t out_b0 = acc_b[j] >> ACC_SHIFT;
-
-        acc_r[j] -= (out_r0 << ACC_SHIFT);
-        acc_g[j] -= (out_g0 << ACC_SHIFT);
-        acc_b[j] -= (out_b0 << ACC_SHIFT);
-
-        // Pack into interleaved frame_buffer
-        frame_buffer[j] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
-
-        // bottom
-        uint8_t r1 = src[rgb_offset + k];
-        uint8_t g1 = src[rgb_offset + k + 1];
-        uint8_t b1 = src[rgb_offset + k + 2];
-
-        acc_r[j + offset] += ((uint32_t)lut[r1] << ACC_SHIFT);
-        acc_g[j + offset] += ((uint32_t)lut[g1] << ACC_SHIFT);
-        acc_b[j + offset] += ((uint32_t)lut[b1] << ACC_SHIFT);
-
-        uint32_t out_r1 = acc_r[j + offset] >> ACC_SHIFT;
-        uint32_t out_g1 = acc_g[j + offset] >> ACC_SHIFT;
-        uint32_t out_b1 = acc_b[j + offset] >> ACC_SHIFT;
-
-        acc_r[j + offset] -= (out_r1 << ACC_SHIFT);
-        acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
-        acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
-
-        // Pack into interleaved frame_buffer
-        frame_buffer[j + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
-
-        k += 3;
+        frame_buffer[i] = temporal_dithering_bgr(i, src[j], src[j + 1], src[j + 2]);
+        frame_buffer[i + 1] = temporal_dithering_bgr(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
-
 #elif defined HUB75_MULTIPLEX_4_ROWS
-    for (int j = 0; j < (int)pixels; j += 4)
+    for (size_t i = 0, j = 0; i < pixels; j += 3, i += 4)
     {
-        // top
-        uint8_t r0 = src[k];
-        uint8_t g0 = src[k + 1];
-        uint8_t b0 = src[k + 2];
+        size_t j0 = j;
+        size_t j1 = j0 + rgb_offset;
+        size_t j2 = j1 + rgb_offset;
+        size_t j3 = j2 + rgb_offset;
 
-        acc_r[j] += ((uint32_t)lut[r0] << ACC_SHIFT);
-        acc_g[j] += ((uint32_t)lut[g0] << ACC_SHIFT);
-        acc_b[j] += ((uint32_t)lut[b0] << ACC_SHIFT);
-        uint32_t out_r0 = acc_r[j] >> ACC_SHIFT;
-        uint32_t out_g0 = acc_g[j] >> ACC_SHIFT;
-        uint32_t out_b0 = acc_b[j] >> ACC_SHIFT;
-        acc_r[j] -= (out_r0 << ACC_SHIFT);
-        acc_g[j] -= (out_g0 << ACC_SHIFT);
-        acc_b[j] -= (out_b0 << ACC_SHIFT);
-
-        // Pack into interleaved frame_buffer
-        frame_buffer[j] = (out_r0 << 20) | (out_g0 << 10) | out_b0;
-
-        // 2nd
-        uint8_t r1 = src[rgb_offset + k];
-        uint8_t g1 = src[rgb_offset + k + 1];
-        uint8_t b1 = src[rgb_offset + k + 2];
-
-        acc_r[j + offset] += ((uint32_t)lut[r1] << ACC_SHIFT);
-        acc_g[j + offset] += ((uint32_t)lut[g1] << ACC_SHIFT);
-        acc_b[j + offset] += ((uint32_t)lut[b1] << ACC_SHIFT);
-        uint32_t out_r1 = acc_r[j + offset] >> ACC_SHIFT;
-        uint32_t out_g1 = acc_g[j + offset] >> ACC_SHIFT;
-        uint32_t out_b1 = acc_b[j + offset] >> ACC_SHIFT;
-        acc_r[j + offset] -= (out_r1 << ACC_SHIFT);
-        acc_g[j + offset] -= (out_g1 << ACC_SHIFT);
-        acc_b[j + offset] -= (out_b1 << ACC_SHIFT);
-
-        // Pack into interleaved frame_buffer
-        frame_buffer[j + 1] = (out_r1 << 20) | (out_g1 << 10) | out_b1;
-
-        // 3rd
-        uint8_t r2 = src[2 * rgb_offset + k];
-        uint8_t g2 = src[2 * rgb_offset + k + 1];
-        uint8_t b2 = src[2 * rgb_offset + k + 2];
-
-        acc_r[j + 2 * offset] += ((uint32_t)lut[r2] << ACC_SHIFT);
-        acc_g[j + 2 * offset] += ((uint32_t)lut[g2] << ACC_SHIFT);
-        acc_b[j + 2 * offset] += ((uint32_t)lut[b2] << ACC_SHIFT);
-        uint32_t out_r2 = acc_r[j + 2 * offset] >> ACC_SHIFT;
-        uint32_t out_g2 = acc_g[j + 2 * offset] >> ACC_SHIFT;
-        uint32_t out_b2 = acc_b[j + 2 * offset] >> ACC_SHIFT;
-        acc_r[j + 2 * offset] -= (out_r2 << ACC_SHIFT);
-        acc_g[j + 2 * offset] -= (out_g2 << ACC_SHIFT);
-        acc_b[j + 2 * offset] -= (out_b2 << ACC_SHIFT);
-
-        // Pack into interleaved frame_buffer
-        frame_buffer[j + 2] = (out_r2 << 20) | (out_g2 << 10) | out_b2;
-
-        // 4th
-        uint8_t r3 = src[3 * rgb_offset + k];
-        uint8_t g3 = src[3 * rgb_offset + k + 1];
-        uint8_t b3 = src[3 * rgb_offset + k + 2];
-
-        acc_r[j + 3 * offset] += ((uint32_t)lut[r3] << ACC_SHIFT);
-        acc_g[j + 3 * offset] += ((uint32_t)lut[g3] << ACC_SHIFT);
-        acc_b[j + 3 * offset] += ((uint32_t)lut[b3] << ACC_SHIFT);
-        uint32_t out_r3 = acc_r[j + 3 * offset] >> ACC_SHIFT;
-        uint32_t out_g3 = acc_g[j + 3 * offset] >> ACC_SHIFT;
-        uint32_t out_b3 = acc_b[j + 3 * offset] >> ACC_SHIFT;
-        acc_r[j + 3 * offset] -= (out_r3 << ACC_SHIFT);
-        acc_g[j + 3 * offset] -= (out_g3 << ACC_SHIFT);
-        acc_b[j + 3 * offset] -= (out_b3 << ACC_SHIFT);
-
-        // Pack into interleaved frame_buffer
-        frame_buffer[j + 3] = (out_r3 << 20) | (out_g3 << 10) | out_b3;
-
-        k += 3;
+        frame_buffer[i] = temporal_dithering_bgr(i, src[j0], src[j0 + 1], src[j0 + 2]);
+        frame_buffer[i + 1] = temporal_dithering_bgr(i, src[j1], src[j1 + 1], src[j1 + 2]);
+        frame_buffer[i + 2] = temporal_dithering_bgr(i, src[j2], src[j2 + 1], src[j2 + 2]);
+        frame_buffer[i + 3] = temporal_dithering_bgr(i, src[j3], src[j3 + 1], src[j3 + 2]);
     }
 #endif
 }

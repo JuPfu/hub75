@@ -28,7 +28,7 @@
   - [Next Steps](#next-steps)
 - [Prerequisites for the Hub75 Driver](#prerequisites-for-the-hub75-driver)
   - [Wiring Details](#wiring-details)
-    - [Color Data Pins](#color-data-pins)
+    - [Colour Data Pins](#colour-data-pins)
     - [Address (Row Select) Pins](#address-row-select-pins)
     - [Control Pins](#control-pins)
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
@@ -367,7 +367,7 @@ The default implementation looks like this (see hub75.cpp). An example of a vali
    ```
 
 ## Wiring Details
-### Color Data Pins
+### Colour Data Pins
 
 + `DATA_BASE_PIN` = **GPIO 0** (first in a consecutive block)
 + `DATA_N_PINS` = **6** (for R0, G0, B0, R1, G1, B1)
