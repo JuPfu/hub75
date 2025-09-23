@@ -17,6 +17,8 @@
 
 #define EXIT_FAILURE 1
 
+#define TEMPORAL_DITHERING // use temporal dithering if defined
+
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x32 matrix panel means 32 pixel height divided by 16 pixel results in 2 rows lit simultaneously.
@@ -535,6 +537,7 @@ static inline int claim_dma_channel(const char *channel_name)
     return dma_channel;
 }
 
+#ifdef TEMPORAL_DITHERING
 inline __attribute__((always_inline)) uint32_t temporal_dithering(size_t j, uint32_t pixel)
 {
     uint8_t r = (pixel & 0x0000ff) >> 0;
@@ -601,7 +604,49 @@ void update(
 #endif
     }
 }
+#elif not defined TEMPORAL_DITHERING
+/**
+ * @brief Updates the frame buffer with pixel data from the source array.
+ *
+ * This function takes a source array of pixel data and updates the frame buffer
+ * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
+ *
+ * @param src Pointer to the source pixel data array (RGB888 format).
+ */
+void update(
+    PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
+)
+{
+    if (graphics->pen_type == PicoGraphics::PEN_RGB888)
+    {
+        uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
+        // Ramping up color resolution from 8 to 10 bits via CIE luminance respectively gamma table look-up.
+        // Interweave pixels from intermediate buffer into target image to fit the format expected by Hub75 LED panel.
+        uint j = 0;
+
+#ifdef HUB75_MULTIPLEX_2_ROWS
+        for (int i = 0; i < width * height; i += 2)
+        {
+            frame_buffer[i] = lut[(src[j] & 0x0000ff) >> 0] << 20 | lut[(src[j] & 0x00ff00) >> 8] << 10 | lut[(src[j] & 0xff0000) >> 16];
+            frame_buffer[i + 1] = lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + offset] & 0xff0000) >> 16];
+            j++;
+        }
+#elif defined HUB75_MULTIPLEX_4_ROWS
+        for (int i = 0; i < width * height; i += 4)
+        {
+            frame_buffer[i] = lut[(src[j] & 0x0000ff) >> 0] << 20 | lut[(src[j] & 0x00ff00) >> 8] << 10 | lut[(src[j] & 0xff0000) >> 16];
+            frame_buffer[i + 1] = lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + offset] & 0xff0000) >> 16];
+            frame_buffer[i + 2] = lut[(src[j + 2 * offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + 2 * offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + 2 * offset] & 0xff0000) >> 16];
+            frame_buffer[i + 3] = lut[(src[j + 3 * offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + 3 * offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + 3 * offset] & 0xff0000) >> 16];
+            j++;
+        }
+#endif
+    }
+}
+#endif
+
+#ifdef TEMPORAL_DITHERING
 inline __attribute__((always_inline)) uint32_t temporal_dithering_bgr(size_t j, uint8_t r, uint8_t g, uint8_t b)
 {
     acc_r[j] += ((uint32_t)lut[r] << ACC_SHIFT);
@@ -653,3 +698,39 @@ void update_bgr(const uint8_t *src)
     }
 #endif
 }
+
+#elif not defined TEMPORAL_DITHERING
+/**
+ * @brief Updates the frame buffer with pixel data from the source array.
+ *
+ * This function takes a source array of pixel data and updates the frame buffer
+ * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
+ *
+ * @param src Pointer to the source pixel data array (BGR888 format).
+ */
+void update_bgr(const uint8_t *src)
+{
+    uint rgb_offset = offset * 3;
+    uint k = 0;
+    // Ramping up color resolution from 8 to 10 bits via CIE luminance respectively gamma table look-up.
+    // Interweave pixels as required by Hub75 LED panel matrix
+
+#ifdef HUB75_MULTIPLEX_2_ROWS
+    for (int j = 0; j < width * height; j += 2)
+    {
+        frame_buffer[j] = lut[src[k]] << 20 | lut[src[k + 1]] << 10 | lut[src[k + 2]];
+        frame_buffer[j + 1] = lut[src[rgb_offset + k]] << 20 | lut[src[rgb_offset + k + 1]] << 10 | lut[src[rgb_offset + k + 2]];
+        k += 3;
+    }
+#elif defined HUB75_MULTIPLEX_4_ROWS
+    for (int j = 0; j < width * height; j += 4)
+    {
+        frame_buffer[j] = lut[src[k]] << 20 | lut[src[k + 1]] << 10 | lut[src[k + 2]];
+        frame_buffer[j + 1] = lut[src[rgb_offset + k]] << 20 | lut[src[rgb_offset + k + 1]] << 10 | lut[src[rgb_offset + k + 2]];
+        frame_buffer[j + 2] = lut[src[2 * rgb_offset + k]] << 20 | lut[src[2 * rgb_offset + k + 1]] << 10 | lut[src[2 * rgb_offset + k + 2]];
+        frame_buffer[j + 3] = lut[src[3 * rgb_offset + k]] << 20 | lut[src[3 * rgb_offset + k + 1]] << 10 | lut[src[3 * rgb_offset + k + 2]];
+        k += 3;
+    }
+#endif
+}
+#endif
