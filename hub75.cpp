@@ -2,6 +2,7 @@
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "pico/sync.h"
 
 #include "hub75.hpp"
 #include "hub75.pio.h"
@@ -140,12 +141,44 @@ static uint32_t *acc_g = nullptr;
 static uint32_t *acc_b = nullptr;
 
 // Variables for brightness control
-volatile float brightness = 1.0f;    // fine control [0.0–1.0]
-volatile uint32_t basis_factor = 6u; // baseline scaling
+// Q format shift: Q16 gives 1.0 == (1 << 16) == 65536
+#define BRIGHTNESS_FP_SHIFT 16u
 
-inline uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
+// Brightness as fixed-point Q16 (volatile because it may be changed at runtime)
+static volatile uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default == 1.0
+
+// Precomputed scaled basis per bit plane to avoid calculating in ISR
+static volatile uint32_t scaled_basis[BIT_DEPTH];
+
+// Basis factor (coarse brightness); keep as before
+static volatile uint32_t basis_factor = 6u;
+
+inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
 {
-    return row_address | ((uint32_t)((basis_factor << bit_plane) * brightness) << ROWSEL_N_PINS);
+    // scaled_basis[bit_plane] already includes brightness scaling.
+    // left shift by ROWSEL_N_PINS to form the OEn-length encoding (unchanged from your scheme).
+    return row_address | (scaled_basis[bit_plane] << ROWSEL_N_PINS);
+}
+
+// Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
+// scaled_basis[b] = (basis_factor << b) * brightness_fp  >> BRIGHTNESS_FP_SHIFT
+static void recompute_scaled_basis()
+{
+    uint32_t tmp[BIT_DEPTH];
+
+    for (int b = 0; b < BIT_DEPTH; ++b)
+    {
+        // base = basis_factor << b
+        // use 64-bit intermediate to avoid overflow during multiply
+        uint64_t base = (uint64_t)basis_factor << b;
+        tmp[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
+    }
+
+    // update scaled_basis atomically w.r.t. interrupts reading it
+    uint32_t irq = save_and_disable_interrupts();
+    for (int b = 0; b < BIT_DEPTH; ++b)
+        scaled_basis[b] = tmp[b];
+    restore_interrupts(irq);
 }
 
 /**
@@ -157,7 +190,8 @@ inline uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
  */
 void setBasisBrightness(uint8_t factor)
 {
-    basis_factor = (factor > 0) ? factor : 1u;
+    basis_factor = (factor > 0u) ? factor : 1u;
+    recompute_scaled_basis();
 }
 
 /**
@@ -171,12 +205,20 @@ void setBasisBrightness(uint8_t factor)
  */
 void setIntensity(float intensity)
 {
-    if (intensity < 0.0f)
-        brightness = 0.0f;
-    else if (intensity > 1.0f)
-        brightness = 1.0f;
+    if (intensity <= 0.0f)
+    {
+        brightness_fp = 0;
+    }
+    else if (intensity >= 1.0f)
+    {
+        brightness_fp = (1u << BRIGHTNESS_FP_SHIFT);
+    }
     else
-        brightness = intensity;
+    {
+        // stable conversion to Q16
+        brightness_fp = (uint32_t)(intensity * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
+    }
+    recompute_scaled_basis();
 }
 
 /**
