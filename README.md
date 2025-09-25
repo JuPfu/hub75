@@ -407,7 +407,7 @@ The default implementation looks like this (see hub75.cpp). An example of a vali
 
 The diagram shows the default mapping as defined in the hub75.cpp file.
   
-<img src="assets/hub75_to_pico_mapping.svg">
+<img src="assets/pico_wiring.png">
 
 ## Allowed Deviations  <a id='allowed_deviations_anchor'></a>
 
