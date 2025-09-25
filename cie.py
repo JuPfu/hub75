@@ -6,7 +6,7 @@
 from sys import stdout
 
 TABLE_SIZE = 256 # Number of steps (brightness)
-RESOLUTION = 2**14 # PWM resolution (10-bit = 1024)
+RESOLUTION = 2**16 # PWM resolution (10-bit = 1024)
 
 def cie1931(L):
     L *= 100.0

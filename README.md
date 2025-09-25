@@ -46,21 +46,22 @@
 
 # HUB75 DMA-Based Driver
 
-
-https://github.com/user-attachments/assets/7c41193c-c724-4fae-8823-af36d70fcedd
+<https://github.com/user-attachments/assets/7c41193c-c724-4fae-8823-af36d70fcedd>
 
 *Demo video: Colours are much brighter and more brilliant in reality*
 
 ## Documentation and References
 
 This project is based on:
+
 - [Raspberry Pi's pico-examples/pio/hub75](https://github.com/raspberrypi/pico-examples)
 - [Pimoroni's HUB75 driver](https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75)
 
-To understand how RGB matrix panels work, refer to the article **[Everything You Didn't Want to Know About RGB Matrix Panels](https://learn.adafruit.com/adafruit-gfx-graphics-library/what-is-the-gfx-library)**. 
+To understand how RGB matrix panels work, refer to the article **[Everything You Didn't Want to Know About RGB Matrix Panels](https://learn.adafruit.com/adafruit-gfx-graphics-library/what-is-the-gfx-library)**.
 For details on Binary Coded Modulation (BCM), see **[LED Dimming Using Binary Code Modulation](https://www.ti.com/lit/an/slva377a/slva377a.pdf)**.
 
 ---
+
 ## Achievements of the Revised Driver
 
 The modifications to the Pimoroni HUB75 driver result in the following improvements:
@@ -73,9 +74,10 @@ The modifications to the Pimoroni HUB75 driver result in the following improveme
 These enhancements lead to significant performance improvements. In tests up to a **250 MHz system clock**, no ghost images were observed.
 
 ---
+
 ## Motivation
 
-As part of a private project, I sought to gain deeper knowledge of the Raspberry Pi Pico microcontroller. I highly recommend **[Raspberry Pi Pico Lectures 2022 by Hunter Adams](https://youtu.be/CAMTBzPd-WI?feature=shared)**—they provide excellent insights! 
+As part of a private project, I sought to gain deeper knowledge of the Raspberry Pi Pico microcontroller. I highly recommend **[Raspberry Pi Pico Lectures 2022 by Hunter Adams](https://youtu.be/CAMTBzPd-WI?feature=shared)**—they provide excellent insights!
 
 If you are specifically interested in **PIO (Programmable Input/Output)**, start with [Lecture 14: Introducing PIO](https://youtu.be/BVdaw56Ln8s?feature=shared) and [Lecture 15: PIO Overview and Examples](https://youtu.be/wet9CYpKZOQ).
 
@@ -84,6 +86,7 @@ Inspired by Adams' discussion on **[DMA](https://youtu.be/TGjUHChO1kM?feature=sh
 😊 **[Raspberry Pi Pico Lectures 2025 by Hunter Adams](https://youtu.be/a4uLrfqHZQU?feature=shared")** is available now!
 
 ---
+
 ## Evolution of Pico HUB75 Drivers
 
 ### Raspberry Pi Pico HUB75 Example
@@ -98,6 +101,7 @@ The **Pico HUB75 example** demonstrates connecting an **HUB75 LED matrix panel**
 ### Pimoroni HUB75 Driver
 
 The **Pimoroni HUB75 driver** improves performance by:
+
 - Switching from **row-wise** to **plane-wise** modulation handling.
 - Using **DMA** to transfer pixel data to the PIO state machine.
 - Still relying on `hub75_wait_tx_stall` for synchronization.
@@ -107,15 +111,18 @@ The **Pimoroni HUB75 driver** improves performance by:
 *Picture 1: Pimoroni's Hub75 Driver DMA Section*
 
 ---
+
 ## Eliminating `hub75_wait_tx_stall`
 
 Both the **Raspberry Pi and Pimoroni** implementations use `hub75_wait_tx_stall`, which ensures:
+
 - The state machine **stalls** on an empty TX FIFO.
 - The system **waits** until the OEn pulse has finished.
 
 However, this blocking method **prevents an efficient DMA-based approach**.
 
 ### Original `hub75_wait_tx_stall` Implementation
+
 ```c
 static inline void hub75_wait_tx_stall(PIO pio, uint sm) {
     uint32_t txstall_mask = 1u << (PIO_FDEBUG_TXSTALL_LSB + sm);
@@ -125,8 +132,11 @@ static inline void hub75_wait_tx_stall(PIO pio, uint sm) {
     }
 }
 ```
+
 ### Alternative Approach
+
 Instead of waiting for TX FIFO stalling, we can:
+
 1. Modify the **PIO program** to emit a signal once the OEn pulse completes.
 2. Set up a **DMA channel** to listen for this signal.
 3. Establish an **interrupt handler** to trigger once the signal is received.
@@ -138,6 +148,7 @@ This approach allows fully **chained DMA execution** without CPU intervention.
 *Picture 2: Modified hub75_row Program*
 
 ---
+
 ## DMA Chains and PIO State Machines in the Revised HUB75 Driver
 
 ### Overview
@@ -153,6 +164,7 @@ The following diagram illustrates the interactions between **DMA channels** and 
                            |
                            |--> [ OEn Finished DMA ] (Triggers interrupt)
 ```
+
 ### Step-by-Step Breakdown
 
 1. **Pixel Data Transfer**
@@ -171,12 +183,12 @@ The following diagram illustrates the interactions between **DMA channels** and 
    - A final **OEn finished DMA channel** listens for the end of the pulse.
    - An **interrupt handler** (`oen_finished_handler`) resets DMA for the next cycle.
 
-
 ![hub75_dma](assets/hub75_dma.png)
 
 *Picture 3: Chained DMA Channels and assigned PIOs*
 
 ---
+
 ### Refresh Rate Performance
 
 With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
@@ -191,6 +203,7 @@ With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rate
 These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
 
 ### Key Benefits of this Approach
+
 ✅ Fully **automated** data transfer using **chained DMA channels**.
 
 ✅ Eliminates **CPU-intensive** busy-waiting (`hub75_wait_tx_stall`).
@@ -198,6 +211,7 @@ These results demonstrate stable operation and high-performance display renderin
 ✅ Ensures **precise timing** without unnecessary stalling.
 
 ---
+
 ## Conclusion for DMA and PIO based Approach
 
 By offloading tasks to **DMA and PIO**, the revised HUB75 driver achieves **higher performance**, **simpler interrupt handling**, and **better synchronization**. This approach significantly reduces CPU overhead while eliminating artifacts like **ghosting** at high clock speeds.
@@ -205,9 +219,10 @@ By offloading tasks to **DMA and PIO**, the revised HUB75 driver achieves **high
 If you're interested in optimizing **RGB matrix panel drivers**, this implementation serves as a valuable reference for efficient DMA-based rendering.
 
 ---
+
 ## Improved Colour Perception
 
-The graphics system for the demo effects operates in **RGB888** format (8 bits per channel, 24 bits per pixel). To better match human vision, colours are first mapped using the [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/). This mapping effectively expands the usable range to **10 bits per channel**.
+The graphics system for the demo effects operates in **RGB888** format (8 bits per channel, 24 bits per pixel). To better match human vision, colours are mapped using the [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/). This mapping effectively expands the usable range to **10 bits per channel**.
 
 The HUB75 driver takes advantage of this: its PIO/DMA pipeline packs each pixel as a **32-bit word** with 10 bits for red, 10 bits for green, and 10 bits for blue.
 
@@ -217,17 +232,19 @@ The HUB75 driver takes advantage of this: its PIO/DMA pipeline packs each pixel 
 
 To go beyond native 10-bit precision without changing the data format, the driver employs  **temporal dithering** (an accumulator-based technique):
 
-- Each pixel maintains a high-precision accumulator (e.g. 18 bits).  
+- Each pixel maintains a high-precision accumulator (e.g. 16 bits).  
 - On every refresh, the top 10 bits are sent to the panel, while the lower bits remain stored.  
 - Over successive frames, these residuals accumulate, averaging out to produce smoother gradients.  
 
 This results in a perceived colour depth equivalent to **12–14 bits per channel**.
 
 ### ✅ Advantages
+
 - Noticeable improvement in gradients and subtle colour transitions.  
 - Minimal CPU overhead (shifts and adds only).  
 
 ### ⚠️ Trade-offs
+
 - Requires additional RAM for accumulators.  
   For a 64×64 panel: `64 × 64 × 3 × sizeof(uint32_t) ≈ 48 KB`.
 
@@ -265,6 +282,7 @@ void setIntensity(float intensity);
 setBasisBrightness(8); // Start with baseline factor 8 for a brighter panel
 setIntensity(0.5f);    // Show at 50% of that baseline
 ```
+
 ### Default Settings
 
 - <code>basis_factor = 6u</code>
@@ -279,7 +297,6 @@ This corresponds to the same brightness as earlier driver revisions without adju
 - For indoor use, values between 4–8 are usually sufficient.
 - For dimmer environments, you can keep the baseline factor low (e.g. 4) and rely on setIntensity() for smooth runtime control.
 - Both functions are non-blocking and can be called during normal operation.
-
 
 ## Demo Effects
 
@@ -298,13 +315,12 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 
    - Choose a local directory to clone the repository into.
 
-      <img src="assets/VSCode_2.png" width="603" height="400"> 
-
+      <img src="assets/VSCode_2.png" width="603" height="400">
 
 3. **Project Import Prompt**:
    - Consent to open the project.
 
-      <img src="assets/VSCode_3.png" width="603" height="400"> 
+      <img src="assets/VSCode_3.png" width="603" height="400">
 
    - When prompted, "Do you want to import this project as Raspberry Pi Pico project?", click **Yes** or wait a few seconds until the dialog prompt disappears by itself.
 
@@ -312,12 +328,12 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
    - A settings page will open automatically.
    - Use the default settings unless you have a specific setup.
 
-      <img src="assets/VSCode_4.png" width="603" height="400"> 
+      <img src="assets/VSCode_4.png" width="603" height="400">
 
    - Click **Import** to finalize project setup.
    - Switch the board-type to your Pico model.
 
-      <img src="assets/VSCode_5.png" width="599" height="415"> 
+      <img src="assets/VSCode_5.png" width="599" height="415">
 
 5. **Wait for Setup Completion**:
    - VSCode will download required tools, the Pico SDK, and any plugins.
@@ -329,7 +345,7 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 7. **Build and Upload**:
    - Compiling the project can be done without a Pico attached to the computer.
 
-      <img src="assets/VSCode_6.png" width="600" height="416"> 
+      <img src="assets/VSCode_6.png" width="600" height="416">
 
    - Click the **Run** button in the bottom taskbar.
    - VSCode will compile and upload the firmware to your Pico board.
@@ -352,7 +368,7 @@ This driver is designed for a **64×64 LED matrix panel**. It can be adapted for
 
 The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks**.
 
-The default implementation looks like this (see hub75.cpp). An example of a valid alternative pin defintion is shown in [Allowed Deviations](#allowed_deviations_anchor) 
+The default implementation looks like this (see hub75.cpp). An example of a valid alternative pin defintion is shown in [Allowed Deviations](#allowed_deviations_anchor)
 
    ```cpp
    // Default wiring of HUB75 matrix to RP2350
@@ -366,11 +382,11 @@ The default implementation looks like this (see hub75.cpp). An example of a vali
    ```
 
 ## Wiring Details
+
 ### Colour Data Pins
 
-+ `DATA_BASE_PIN` = **GPIO 0** (first in a consecutive block)
-+ `DATA_N_PINS` = **6** (for R0, G0, B0, R1, G1, B1)
-
+- `DATA_BASE_PIN` = **GPIO 0** (first in a consecutive block)
+- `DATA_N_PINS` = **6** (for R0, G0, B0, R1, G1, B1)
 
 | Hub75 Colour Bit   | connected to      | Pico GPIO |
 |:-------------------|-------------------|:-----:|
@@ -435,8 +451,7 @@ The electrical connections for 64x32 panels are nearly identical to 64x64 panels
 
 ### Wiring
 
-In file `hub75_driver.cpp` use the same pin definitions as for a 64×64 panel, **except** for the `ROWSEL_N_PINS` definition which must be changed to `4` (A0–A3).  
-Address line **A4 is not connected**.
+In file `hub75_driver.cpp` use the same pin definitions as for a 64×64 panel, **except** for the `ROWSEL_N_PINS` definition which must be changed to `4` (A0–A3). Address line **A4 is not connected**.
 
    ```cpp
    // Default wiring of HUB75 matrix to RP2350
@@ -473,7 +488,7 @@ The `bouncing balls` effect will not show the complete text as the position is h
 
 Have fun with adapting the source code or with implementing your own effects.
 
-Do not hesitate to contact me - I will gladly answer your questions! 
+Do not hesitate to contact me - I will gladly answer your questions!
 
 ## Scan Rate Support
 
@@ -490,14 +505,17 @@ To make things explicit, this driver uses **multiplexing defines**:
 | `#define HUB75_MULTIPLEX_4_ROWS` | 4 rows          | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
 
 ### Example: 64×64 panel, 1:32 scan
+
 - Datasheet says **1:32** (one out of 32 row groups active at a time).  
 - This means **2 rows lit simultaneously**.  
 - In code, use:
+
   ```c
   #define HUB75_MULTIPLEX_2_ROWS
   ```
 
 ### How to Configure
+
 In your build, define the scan rate that matches your panel:
 
 ```cpp
