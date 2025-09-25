@@ -17,7 +17,7 @@
 
 #define EXIT_FAILURE 1
 
-#define TEMPORAL_DITHERING // use temporal dithering if defined
+#define TEMPORAL_DITHERING // use temporal dithering - remove define to use no dithering
 
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
@@ -36,6 +36,25 @@
 // Deduced from https://jared.geek.nz/2013/02/linear-led-pwm/
 // The CIE 1931 lightness formula is what actually describes how we perceive light.
 
+#ifdef TEMPORAL_DITHERING
+static const uint16_t lut[256] = {
+    0, 7, 14, 21, 28, 36, 43, 50, 57, 64, 71, 78, 85, 92, 100, 107,
+    114, 121, 128, 135, 142, 149, 157, 164, 172, 180, 189, 197, 206, 215, 225, 234,
+    244, 254, 265, 276, 287, 298, 310, 322, 334, 346, 359, 373, 386, 400, 414, 428,
+    443, 458, 474, 490, 506, 522, 539, 557, 574, 592, 610, 629, 648, 668, 688, 708,
+    729, 750, 771, 793, 815, 838, 861, 885, 909, 933, 958, 983, 1009, 1035, 1061, 1088,
+    1116, 1144, 1172, 1201, 1230, 1260, 1290, 1321, 1353, 1384, 1417, 1449, 1482, 1516, 1550, 1585,
+    1621, 1656, 1693, 1729, 1767, 1805, 1843, 1882, 1922, 1962, 2003, 2044, 2085, 2128, 2171, 2214,
+    2258, 2303, 2348, 2394, 2440, 2487, 2535, 2583, 2632, 2681, 2731, 2782, 2833, 2885, 2938, 2991,
+    3045, 3099, 3154, 3210, 3266, 3323, 3381, 3439, 3498, 3558, 3618, 3679, 3741, 3803, 3867, 3930,
+    3995, 4060, 4126, 4193, 4260, 4328, 4397, 4466, 4536, 4607, 4679, 4752, 4825, 4899, 4973, 5049,
+    5125, 5202, 5280, 5358, 5437, 5517, 5598, 5680, 5762, 5845, 5929, 6014, 6100, 6186, 6273, 6361,
+    6450, 6540, 6630, 6722, 6814, 6907, 7001, 7095, 7191, 7287, 7385, 7483, 7582, 7682, 7782, 7884,
+    7986, 8090, 8194, 8299, 8405, 8512, 8620, 8729, 8838, 8949, 9060, 9173, 9286, 9400, 9516, 9632,
+    9749, 9867, 9986, 10106, 10227, 10348, 10471, 10595, 10720, 10845, 10972, 11100, 11228, 11358, 11489, 11620,
+    11753, 11887, 12021, 12157, 12294, 12432, 12570, 12710, 12851, 12993, 13136, 13279, 13424, 13570, 13718, 13866,
+    14015, 14165, 14317, 14469, 14622, 14777, 14933, 15089, 15247, 15406, 15566, 15727, 15890, 16053, 16217, 16383};
+#else
 static const uint16_t lut[256] = {
     0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7,
     7, 8, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 15,
@@ -53,6 +72,7 @@ static const uint16_t lut[256] = {
     609, 616, 624, 631, 639, 646, 654, 662, 669, 677, 685, 693, 701, 709, 717, 726,
     734, 742, 751, 759, 768, 776, 785, 794, 802, 811, 820, 829, 838, 847, 857, 866,
     875, 885, 894, 903, 913, 923, 932, 942, 952, 962, 972, 982, 992, 1002, 1013, 1023};
+#endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 volatile uint32_t *frame_buffer; ///< Interwoven image data for examples;
@@ -106,9 +126,9 @@ static volatile uint32_t row_address = 0;
 static volatile uint32_t bit_plane = 0;
 static volatile uint32_t row_in_bit_plane = 0;
 
-// Choose accumulator precision: >= 10. 16 is a good default.
+// Accumulator precision has to fit the lut precision.
 #ifndef ACC_BITS
-#define ACC_BITS 16
+#define ACC_BITS 14
 #endif
 
 // Derived constants
@@ -544,17 +564,17 @@ inline __attribute__((always_inline)) uint32_t temporal_dithering(size_t j, uint
     uint8_t g = (pixel & 0x00ff00) >> 8;
     uint8_t b = (pixel & 0xff0000) >> 16;
 
-    // Add CIE mapped value into accumulator (preserving LUT mapping)
-    acc_r[j] += ((uint32_t)lut[r] << ACC_SHIFT);
-    acc_g[j] += ((uint32_t)lut[g] << ACC_SHIFT);
-    acc_b[j] += ((uint32_t)lut[b] << ACC_SHIFT);
+    // Add higher precision (14-bit) mapped values into accumulator
+    acc_r[j] += lut[r];
+    acc_g[j] += lut[g];
+    acc_b[j] += lut[b];
 
-    // Output 10 bits for each colour channel
-    uint32_t out_r = acc_r[j] >> ACC_SHIFT;
+    // Quantize down to 10-bit output
+    uint32_t out_r = acc_r[j] >> ACC_SHIFT; // 10 bits
     uint32_t out_g = acc_g[j] >> ACC_SHIFT;
     uint32_t out_b = acc_b[j] >> ACC_SHIFT;
 
-    // Subtract used contribution to preserve error
+    // Subtract used portion, keep remainder for error feedback
     acc_r[j] -= (out_r << ACC_SHIFT);
     acc_g[j] -= (out_g << ACC_SHIFT);
     acc_b[j] -= (out_b << ACC_SHIFT);
@@ -649,19 +669,21 @@ void update(
 #ifdef TEMPORAL_DITHERING
 inline __attribute__((always_inline)) uint32_t temporal_dithering_bgr(size_t j, uint8_t r, uint8_t g, uint8_t b)
 {
-    acc_r[j] += ((uint32_t)lut[r] << ACC_SHIFT);
-    acc_g[j] += ((uint32_t)lut[g] << ACC_SHIFT);
-    acc_b[j] += ((uint32_t)lut[b] << ACC_SHIFT);
+    // Add higher precision (14-bit) mapped values into accumulator
+    acc_r[j] += lut[r];
+    acc_g[j] += lut[g];
+    acc_b[j] += lut[b];
 
-    uint32_t out_r = acc_r[j] >> ACC_SHIFT;
+    // Quantize down to 10-bit output
+    uint32_t out_r = acc_r[j] >> ACC_SHIFT; // 10 bits
     uint32_t out_g = acc_g[j] >> ACC_SHIFT;
     uint32_t out_b = acc_b[j] >> ACC_SHIFT;
 
+    // Subtract used portion, keep remainder for error feedback
     acc_r[j] -= (out_r << ACC_SHIFT);
     acc_g[j] -= (out_g << ACC_SHIFT);
     acc_b[j] -= (out_b << ACC_SHIFT);
 
-    // Pack pixel
     return (out_r << 20) | (out_g << 10) | out_b;
 }
 
