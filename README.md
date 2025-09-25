@@ -37,7 +37,6 @@
   - [How to Use a 64×32 HUB75 Matrix Panel](#how-to-use-a-6432-hub75-matrix-panel)
     - [Wiring](#wiring)
     - [Initialization of Matrix Panel Dimension](#initialization-of-matrix-panel-dimension)
-    - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios-1)
     - [Frame Buffer Layout](#frame-buffer-layout)
     - [Practical Notes](#practical-notes-1)
   - [Scan Rate Support](#scan-rate-support)
@@ -459,12 +458,6 @@ At the top of file `hub75_driver.cpp` set the `MATRIX_PANEL_HEIGHT` to the heigh
    #define MATRIX_PANEL_HEIGHT 32
    #define OFFSET MATRIX_PANEL_WIDTH *(MATRIX_PANEL_HEIGHT >> 1)
    ```
-
-### One Glance Mapping HUB75 Connector → Pico GPIOs
-
-The diagram shows the mapping for a 64x32 matrix panel. Address line A4 is not connected!
-  
-<img src="assets/hub75_to_pico_mapping_64x32.svg">
 
 ### Frame Buffer Layout
 
