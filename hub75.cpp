@@ -162,7 +162,7 @@ inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
 // scaled_basis[b] = (basis_factor << b) * brightness_fp  >> BRIGHTNESS_FP_SHIFT
-static void recompute_scaled_basis()
+__attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
 {
     uint32_t tmp[BIT_DEPTH];
 
@@ -637,7 +637,7 @@ inline __attribute__((always_inline)) uint32_t temporal_dithering(size_t j, uint
  *
  * @param src Graphics object to be updated - RGB888 format, 24-bits in uint32_t array
  */
-void update(
+__attribute__((optimize("unroll-loops"))) void update(
     PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, 24-bits in uint32_t array
 )
 {
@@ -678,7 +678,7 @@ void update(
  *
  * @param src Pointer to the source pixel data array (RGB888 format).
  */
-void update(
+__attribute__((optimize("unroll-loops"))) void update(
     PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, this is 24-bits (8 bits per color channel) in a uint32_t array
 )
 {
@@ -740,7 +740,7 @@ inline __attribute__((always_inline)) uint32_t temporal_dithering_bgr(size_t j, 
  *
  * @param src Graphics object to be updated - RGB888 format, 24-bits in uint32_t array
  */
-void update_bgr(const uint8_t *src)
+__attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
     const size_t pixels = (size_t)width * (size_t)height;
     const uint rgb_offset = offset * 3;
@@ -775,7 +775,7 @@ void update_bgr(const uint8_t *src)
  *
  * @param src Pointer to the source pixel data array (BGR888 format).
  */
-void update_bgr(const uint8_t *src)
+__attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
     uint rgb_offset = offset * 3;
     uint k = 0;
