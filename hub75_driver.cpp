@@ -152,7 +152,7 @@ int main()
     float ms = 1000.0f / hz;
 
     // set brightness of panel
-    float intensity = 1.0f;
+    float intensity = 0.0f;
     float step = 0.01f;
 
     while (true)
