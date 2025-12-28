@@ -57,12 +57,12 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
         pio_gpio_init(pio, i);
-    pio_gpio_init(pio, latch_base_pin);
-    pio_gpio_init(pio, latch_base_pin + 1);
+    pio_gpio_init(pio, latch_base_pin); // aka STROBE pin
+    pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
 
     pio_sm_config c = hub75_row_program_get_default_config(offset);
     sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
-    sm_config_set_sideset_pins(&c, latch_base_pin);
+    sm_config_set_sideset_pins(&c, latch_base_pin); // STROBE pin and OEn pin
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_out_shift(&c, true, true, 32);
     pio_sm_init(pio, sm, offset, &c);

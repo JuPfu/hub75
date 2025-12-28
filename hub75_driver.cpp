@@ -22,6 +22,7 @@
 #include "rotator.cpp"
 #include "fire_effect.hpp"
 #include "hue_value_spectrum.hpp"
+#include "pixel_fill.hpp"
 
 // Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
 #define RGB_MATRIX_WIDTH 64
@@ -34,7 +35,7 @@
 // To suppress this effect set PANEL_TYPE to PANEL_GENERIC.
 
 // PanelType - either PANEL_GENERIC or PANEL_FM6126A
-#define PANEL_TYPE PANEL_FM6126A
+#define PANEL_TYPE PANEL_GENERIC
 
 // Some matrix panels have inverted STROBE signals.
 // If your data-sheet says so set STB_INVERTED to true.
@@ -95,7 +96,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 5)
+    if (++demo_index > 6)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -142,6 +143,8 @@ int main()
 
     HueValueSpectrum hueValueSpectrum = HueValueSpectrum(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
 
+    PixelFill pixelFill = PixelFill(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
     add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
@@ -152,7 +155,8 @@ int main()
     float ms = 1000.0f / hz;
 
     // set brightness of panel
-    float intensity = 0.0f;
+    float intensity = 1.0f;
+    setIntensity(intensity);
     float step = 0.01f;
 
     while (true)
@@ -193,6 +197,12 @@ int main()
             // Vanessa Mai - image data is in b8, g8, r8 format
             // By Lanzunlimited, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=87037267
             update_bgr(vanessa_mai_64x64);
+        }
+        else if (demo_index == 6)
+        {
+            // Image data is in r8, g8, b8 format
+            pixelFill.fill(0, (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) -1);
+            update(&pixelFill);
         }
 
         // matrix panel brightness will vary

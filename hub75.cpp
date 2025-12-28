@@ -18,7 +18,7 @@
 
 #define EXIT_FAILURE 1
 
-#define TEMPORAL_DITHERING // use temporal dithering - remove define to use no dithering
+// #define TEMPORAL_DITHERING // use temporal dithering - remove define to use no dithering
 
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
@@ -156,8 +156,8 @@ static volatile uint32_t basis_factor = 6u;
 inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
 {
     // scaled_basis[bit_plane] already includes brightness scaling.
-    // left shift by ROWSEL_N_PINS to form the OEn-length encoding.
-    return row_address | (scaled_basis[bit_plane] << ROWSEL_N_PINS);
+    // left shift by 5 to form the OEn-length encoding.
+    return row_address | (scaled_basis[bit_plane] << 5);
 }
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
@@ -621,7 +621,7 @@ inline __attribute__((always_inline)) uint32_t temporal_dithering(size_t j, uint
     uint8_t g = (pixel & 0x00ff00) >> 8;
     uint8_t b = (pixel & 0xff0000) >> 16;
 
-    // Add higher precision (14-bit) mapped values into accumulator
+    // Add higher precision (ACC_BITS here 16-bit) mapped values into accumulator
     acc_r[j] += lut[r];
     acc_g[j] += lut[g];
     acc_b[j] += lut[b];

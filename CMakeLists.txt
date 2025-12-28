@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico2_w CACHE STRING "Board type")
+set(PICO_BOARD pico_w CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -59,6 +59,7 @@ target_sources(hub75_driver PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/antialiased_line.cpp
         ${CMAKE_CURRENT_LIST_DIR}/fire_effect.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rotator.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/hue_value_spectrum.hpp
         ${CMAKE_CURRENT_LIST_DIR}/hub75_driver.cpp
         )
