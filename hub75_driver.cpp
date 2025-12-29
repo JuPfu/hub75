@@ -27,7 +27,6 @@
 // Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
 #define RGB_MATRIX_WIDTH 64
 #define RGB_MATRIX_HEIGHT 64
-#define OFFSET RGB_MATRIX_WIDTH *(RGB_MATRIX_HEIGHT >> 1)
 
 // Panel type FM6126A receives some initial incantation sequence.
 // This should usually have no effect on generic matrix panels.
@@ -207,7 +206,7 @@ int main()
 
         // matrix panel brightness will vary
         float value = sin(intensity);
-        setIntensity(value * value * value * value);
+        setIntensity(MAX(0.15, (value * value * value * value)));
 
         // Update intensity for next loop
         intensity += step;

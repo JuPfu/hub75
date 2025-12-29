@@ -1,5 +1,5 @@
 #include "hershey_fonts.hpp"
-#include "common/unicode_sorta.hpp"
+#include "../../common/unicode_sorta.hpp"
 #include <cmath>
 
 namespace hershey {
