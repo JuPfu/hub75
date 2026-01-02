@@ -13,7 +13,7 @@
 #define ROWSEL_BASE_PIN 6   // start gpio of address pins
 #endif
 #ifndef ROWSEL_N_PINS 
-#define ROWSEL_N_PINS 5     // count of consequtive address pins
+#define ROWSEL_N_PINS 4     // count of consequtive address pins
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11
@@ -27,8 +27,6 @@
 
 #define EXIT_FAILURE 1
 
-#define TEMPORAL_DITHERING // use temporal dithering - remove define to use no dithering
-
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x32 matrix panel means 32 pixel height divided by 16 pixel results in 2 rows lit simultaneously.
@@ -39,8 +37,9 @@
 
 #define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 // #define HUB75_MULTIPLEX_4_ROWS   // four rows lit simultaneously
+// #define HUB75_P3_1415_16S_64X64
 
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_MULTIPLEX_4_ROWS)
+#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_MULTIPLEX_4_ROWS) && !defined(HUB75_P3_1415_16S_64X64)
 #error "You must define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_4_ROWS to match your panel's scan rate"
 #endif
 

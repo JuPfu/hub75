@@ -33,6 +33,9 @@ public:
 
     void fill(int start, int end)
     {
+        static const uint32_t col[] = {0xFF0000, 0x00FF00, 0x0000FF, 0xa06090, 0xFFFF00, 0xFF00FF, 0xF0F0F0, 0xFFAA55,
+                                        0x00F00F, 0x00F0FF, 0x00FFFF, 0x0F0000, 0x0F000F, 0x0F00F0, 0x0F00FF, 0x0F0F00};
+
         if (j >= w)
         {
             j = 0;
@@ -43,13 +46,28 @@ public:
 
         c = (l * h + j) % 256;
 
-        if ((l * h + j) < ((w * h) >> 1))
-        {
-            drawPixel(j, l, MIN(255, c % 256u) /*col[(j*32+l)%8]*/);
+        if ( (l * h + j) < 2 * w ) {
+            drawPixel(j, l, col[1]);  // green
         }
-        else
+        else if ((l * h + j) < 4 * w) {
+            drawPixel(j, l, col[3]);   // brown
+        }
+        else if ((l * h + j) < 6 * w) {
+            drawPixel(j, l, col[4]);   // yellow
+        }
+        else if ((l * h + j) < ((w * h) >> 2))
         {
-            drawPixel(j, l, MIN(((255u - c) % 256u), 255u) << 8u /*col[(j*32+l)%8]*/);
+            drawPixel(j, l, col[6]);  // grey
+        }
+        else if ((l * h + j) < ((w * h) >> 1))
+        {
+            drawPixel(j, l, col[2]); // blue
+        }
+        else if ((l * h + j) < (48 * w)) {
+            drawPixel(j, l, col[4]); // yellow
+        }
+        else {
+            drawPixel(j, l, col[0]); // red
         }
         j++;
     }
