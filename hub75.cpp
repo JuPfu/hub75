@@ -942,59 +942,35 @@ __attribute__((optimize("unroll-loops"))) void update(
         uint quarter3 = 2 * quarter;
         uint quarter4 = 3 * quarter;
 
-        uint i = 0; // pixel counter
+        uint p = 0; // per line pixel counter
 
-        for (uint line = 0, l = 0, counter = 0; line < (height >> 2);)
+        // Number of logical rows processed
+        uint line = 0;
+
+        // Framebuffer write pointer
+        volatile uint32_t *dst = frame_buffer;
+
+        // Each iteration processes 4 physical rows (2 scan-row pairs)
+        while (line < (height >> 2))
         {
             // even src lines
-            frame_buffer[l + i] = temporal_dithering(quarter2, src[quarter2]); quarter2++;
-            frame_buffer[l + i + 1] = temporal_dithering(quarter4, src[quarter4]); quarter4++;
+            dst[0] = temporal_dithering(quarter2, src[quarter2]); quarter2++;
+            dst[1] = temporal_dithering(quarter4, src[quarter4]); quarter4++;
             // odd src lines
-            frame_buffer[l + 2 * width + i] = temporal_dithering(quarter1, src[quarter1]); quarter1++;
-            frame_buffer[l + 2 * width + i + 1] = temporal_dithering(quarter3, src[quarter3]); quarter3++;
+            dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1]); quarter1++;
+            dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3]); quarter3++;
 
-            i += 2;
+            dst += 2;
+            p++;
 
-            if (++counter >= width)
+            // End of logical row
+            if (p == width)
             {
-                counter = 0;
+                p = 0;
                 line++;
-                l += 2 * width;
+                dst += 2 * width; // advance to next scan-row pair
             }
         }
-        // const uint total_pixels = width * height;
-
-        // const uint quarter = total_pixels >> 2;
-
-        // uint quarter1 = 0 * quarter;
-        // uint quarter2 = 1 * quarter;
-        // uint quarter3 = 2 * quarter;
-        // uint quarter4 = 3 * quarter;
-
-        // for (uint i = 0, line = 0; i < total_pixels;)
-        // {
-        //     if (!(line & 1)) // even src lines
-        //     {
-        //         for (uint j = 0; j < width; j++)
-        //         {
-        //             frame_buffer[i++] = temporal_dithering(quarter2, src[quarter2]); // second quarter
-        //             frame_buffer[i++] = temporal_dithering(quarter4, src[quarter4]); // fourth quarter
-        //             quarter2++;
-        //             quarter4++;
-        //         }
-        //     }
-        //     else // odd src lines
-        //     {
-        //         for (uint j = 0; j < width; j++)
-        //         {
-        //             frame_buffer[i++] = temporal_dithering(quarter1, src[quarter1]); // first quarter
-        //             frame_buffer[i++] = temporal_dithering(quarter3, src[quarter3]); // third quarter
-        //             quarter1++;
-        //             quarter3++;
-        //         }
-        //     }
-        //     line++;
-        // }
 #endif
     }
 }
@@ -1059,25 +1035,34 @@ __attribute__((optimize("unroll-loops"))) void update(
         uint quarter3 = 2 * quarter;
         uint quarter4 = 3 * quarter;
 
-        for (uint i = 0, line = 0; i < total_pixels;)
+        uint p = 0; // per line pixel counter
+
+        // Number of logical rows processed
+        uint line = 0;
+
+        // Framebuffer write pointer
+        volatile uint32_t *dst = frame_buffer;
+
+        // Each iteration processes 4 physical rows (2 scan-row pairs)
+        while (line < (height >> 2))
         {
-            if (!(line & 1)) // even src lines
+            // even src lines
+            dst[0] = pack_lut_rgb(src[quarter2++], lut);
+            dst[1] = pack_lut_rgb(src[quarter4++], lut);
+            // odd src lines
+            dst[2 * width + 0] = pack_lut_rgb(src[quarter1++], lut);
+            dst[2 * width + 1] = pack_lut_rgb(src[quarter3++], lut);
+
+            dst += 2;
+            p++;
+
+            // End of logical row
+            if (p == width)
             {
-                for (uint j = 0; j < width; j++)
-                {
-                    frame_buffer[i++] = pack_lut_rgb(src[quarter2++], lut); // second quarter
-                    frame_buffer[i++] = pack_lut_rgb(src[quarter4++], lut); // fourth quarter
-                }
+                p = 0;
+                line++;
+                dst += 2 * width; // advance to next scan-row pair
             }
-            else // odd src lines
-            {
-                for (uint j = 0; j < width; j++)
-                {
-                    frame_buffer[i++] = pack_lut_rgb(src[quarter1++], lut); // first quarter
-                    frame_buffer[i++] = pack_lut_rgb(src[quarter3++], lut); // third quarter
-                }
-            }
-            line++;
         }
 #endif
     }
@@ -1150,39 +1135,44 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[fb_index + 1] = temporal_dithering(index, src[index * 3 + eight_rows_offset], src[index * 3 + 1 + eight_rows_offset], src[index * 3 + 2 + eight_rows_offset]);
     }
 #elif defined HUB75_P3_1415_16S_64X64
-    const uint total_pixels = width * height;
+        const uint total_pixels = width * height;
 
-    const uint quarter = (total_pixels >> 2) * 3;
+        const uint quarter = (total_pixels >> 2) * 3;
 
-    uint quarter1 = 0 * quarter;
-    uint quarter2 = 1 * quarter;
-    uint quarter3 = 2 * quarter;
-    uint quarter4 = 3 * quarter;
+        uint quarter1 = 0 * quarter;
+        uint quarter2 = 1 * quarter;
+        uint quarter3 = 2 * quarter;
+        uint quarter4 = 3 * quarter;
 
-    for (uint i = 0, line = 0; i < total_pixels;)
-    {
-        if (!(line & 1)) // even src lines
+        uint p = 0; // per line pixel counter
+
+        // Number of logical rows processed
+        uint line = 0;
+
+        // Framebuffer write pointer
+        volatile uint32_t *dst = frame_buffer;
+
+        // Each iteration processes 4 physical rows (2 scan-row pairs)
+        while (line < (height >> 2))
         {
-            for (uint j = 0; j < width; j++)
+            // even src lines
+            dst[0] = temporal_dithering(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]); quarter2 += 3;
+            dst[1] = temporal_dithering(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]); quarter4 += 3;
+            // odd src lines
+            dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]); quarter1 += 3;
+            dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]); quarter3 += 3;
+
+            dst += 2;
+            p++;
+
+            // End of logical row
+            if (p == width)
             {
-                frame_buffer[i++] = temporal_dithering(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]); // second quarter
-                frame_buffer[i++] = temporal_dithering(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]); // fourth quarter
-                quarter2 += 3;
-                quarter4 += 3;
+                p = 0;
+                line++;
+                dst += 2 * width; // advance to next scan-row pair
             }
         }
-        else // odd src lines
-        {
-            for (uint j = 0; j < width; j++)
-            {
-                frame_buffer[i++] = temporal_dithering(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]); // first quarter
-                frame_buffer[i++] = temporal_dithering(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]); // third quarter
-                quarter1 += 3;
-                quarter3 += 3;
-            }
-        }
-        line++;
-    }
 #endif
 }
 
@@ -1218,39 +1208,44 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[k + 1] = (lut[src[(index + eight_rows_offset) * 3 + 2]] << 20) | (lut[src[(index + eight_rows_offset) * 3 + 1]] << 10) | (lut[src[(index + eight_rows_offset) * 3 + 0]]);
     }
 #elif defined HUB75_P3_1415_16S_64X64
-    const uint total_pixels = width * height;
+        const uint total_pixels = width * height;
 
-    const uint quarter = (total_pixels >> 2) * 3;
+        const uint quarter = (total_pixels >> 2) * 3;
 
-    uint quarter1 = 0 * quarter;
-    uint quarter2 = 1 * quarter;
-    uint quarter3 = 2 * quarter;
-    uint quarter4 = 3 * quarter;
+        uint quarter1 = 0 * quarter;
+        uint quarter2 = 1 * quarter;
+        uint quarter3 = 2 * quarter;
+        uint quarter4 = 3 * quarter;
 
-    for (uint i = 0, line = 0; i < total_pixels;)
-    {
-        if (!(line & 1)) // even src lines
+        uint p = 0; // per line pixel counter
+
+        // Number of logical rows processed
+        uint line = 0;
+
+        // Framebuffer write pointer
+        volatile uint32_t *dst = frame_buffer;
+
+        // Each iteration processes 4 physical rows (2 scan-row pairs)
+        while (line < (height >> 2))
         {
-            for (uint j = 0; j < width; j++)
+            // even src lines
+            dst[0] = lut[src[quarter2 + 0]] << 20 | lut[src[quarter2 + 1]] << 10 | lut[src[quarter2 + 2]]; quarter2 += 3;
+            dst[1] = lut[src[quarter4 + 0]] << 20 | lut[src[quarter4 + 1]] << 10 | lut[src[quarter4 + 2]]; quarter4 += 3;
+            // odd src lines
+            dst[2 * width + 0] = lut[src[quarter1 + 0]] << 20 | lut[src[quarter1 + 1]] << 10 | lut[src[quarter1 + 2]]; quarter1 += 3;
+            dst[2 * width + 1] = lut[src[quarter3 + 0]] << 20 | lut[src[quarter3 + 1]] << 10 | lut[src[quarter3 + 2]]; quarter3 += 3;
+
+            dst += 2;
+            p++;
+
+            // End of logical row
+            if (p == width)
             {
-                frame_buffer[i++] = lut[src[quarter2 + 0]] << 20 | lut[src[quarter2 + 1]] << 10 | lut[src[quarter2 + 2]]; // second quarter
-                frame_buffer[i++] = lut[src[quarter4 + 0]] << 20 | lut[src[quarter4 + 1]] << 10 | lut[src[quarter4 + 2]]; // fourth quarter
-                quarter2 += 3;
-                quarter4 += 3;
+                p = 0;
+                line++;
+                dst += 2 * width; // advance to next scan-row pair
             }
         }
-        else // odd src lines
-        {
-            for (uint j = 0; j < width; j++)
-            {
-                frame_buffer[i++] = lut[src[quarter1 + 0]] << 20 | lut[src[quarter1 + 1]] << 10 | lut[src[quarter1 + 2]]; // first quarter
-                frame_buffer[i++] = lut[src[quarter3 + 0]] << 20 | lut[src[quarter3 + 1]] << 10 | lut[src[quarter3 + 2]]; // third quarter
-                quarter1 += 3;
-                quarter3 += 3;
-            }
-        }
-        line++;
-    }
 #endif
 }
 #endif
