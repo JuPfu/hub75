@@ -206,7 +206,6 @@ static void init_accumulators(std::size_t pixel_count)
     acc_b.assign(pixel_count, 0);
 }
 
-
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -943,30 +942,59 @@ __attribute__((optimize("unroll-loops"))) void update(
         uint quarter3 = 2 * quarter;
         uint quarter4 = 3 * quarter;
 
-        for (uint i = 0, line = 0; i < total_pixels;)
+        uint i = 0; // pixel counter
+
+        for (uint line = 0, l = 0, counter = 0; line < (height >> 2);)
         {
-            if (!(line & 1)) // even src lines
+            // even src lines
+            frame_buffer[l + i] = temporal_dithering(quarter2, src[quarter2]); quarter2++;
+            frame_buffer[l + i + 1] = temporal_dithering(quarter4, src[quarter4]); quarter4++;
+            // odd src lines
+            frame_buffer[l + 2 * width + i] = temporal_dithering(quarter1, src[quarter1]); quarter1++;
+            frame_buffer[l + 2 * width + i + 1] = temporal_dithering(quarter3, src[quarter3]); quarter3++;
+
+            i += 2;
+
+            if (++counter >= width)
             {
-                for (uint j = 0; j < width; j++)
-                {
-                    frame_buffer[i++] = temporal_dithering(quarter2, src[quarter2]); // second quarter
-                    frame_buffer[i++] = temporal_dithering(quarter4, src[quarter4]); // fourth quarter
-                    quarter2++;
-                    quarter4++;
-                }
+                counter = 0;
+                line++;
+                l += 2 * width;
             }
-            else // odd src lines
-            {
-                for (uint j = 0; j < width; j++)
-                {
-                    frame_buffer[i++] = temporal_dithering(quarter1, src[quarter1]); // first quarter
-                    frame_buffer[i++] = temporal_dithering(quarter3, src[quarter3]); // third quarter
-                    quarter1++;
-                    quarter3++;
-                }
-            }
-            line++;
         }
+        // const uint total_pixels = width * height;
+
+        // const uint quarter = total_pixels >> 2;
+
+        // uint quarter1 = 0 * quarter;
+        // uint quarter2 = 1 * quarter;
+        // uint quarter3 = 2 * quarter;
+        // uint quarter4 = 3 * quarter;
+
+        // for (uint i = 0, line = 0; i < total_pixels;)
+        // {
+        //     if (!(line & 1)) // even src lines
+        //     {
+        //         for (uint j = 0; j < width; j++)
+        //         {
+        //             frame_buffer[i++] = temporal_dithering(quarter2, src[quarter2]); // second quarter
+        //             frame_buffer[i++] = temporal_dithering(quarter4, src[quarter4]); // fourth quarter
+        //             quarter2++;
+        //             quarter4++;
+        //         }
+        //     }
+        //     else // odd src lines
+        //     {
+        //         for (uint j = 0; j < width; j++)
+        //         {
+        //             frame_buffer[i++] = temporal_dithering(quarter1, src[quarter1]); // first quarter
+        //             frame_buffer[i++] = temporal_dithering(quarter3, src[quarter3]); // third quarter
+        //             quarter1++;
+        //             quarter3++;
+        //         }
+        //     }
+        //     line++;
+        // }
 #endif
     }
 }
