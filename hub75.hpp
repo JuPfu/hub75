@@ -2,6 +2,10 @@
 
 #include "libraries/pico_graphics/pico_graphics.hpp"
 
+// Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
+#define RGB_MATRIX_WIDTH 64
+#define RGB_MATRIX_HEIGHT 64
+
 // Wiring of the HUB75 matrix
 #ifndef DATA_BASE_PIN       // start gpio pin of consequtive color pins e.g., r1, g1, b1, r2, g2, b2
 #define DATA_BASE_PIN 0
@@ -13,7 +17,7 @@
 #define ROWSEL_BASE_PIN 6   // start gpio of address pins
 #endif
 #ifndef ROWSEL_N_PINS 
-#define ROWSEL_N_PINS 4     // count of consequtive address pins
+#define ROWSEL_N_PINS 5     // count of consequtive address pins
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11

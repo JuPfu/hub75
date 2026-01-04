@@ -407,16 +407,6 @@ void FM6126A_setup()
     // FM6126A_write_register(WREG2, 13);
 }
 
-// void FM6126A_setup()
-// {
-//     PIO pio = pio0;
-//     uint sm = 0;
-
-//     FM6126A panel(/*pin_r1=*/DATA_BASE_PIN, /*pin_clk=*/CLK_PIN, /*pin_lat=*/STROBE_PIN, /*pin_oe=*/OEN_PIN);
-
-//     panel.initialize();
-// }
-
 void RUL6024_init_register()
 {
     // Set up GPIO
@@ -677,7 +667,7 @@ void setup_map(uint16_t *src_map)
  * @param w Width of the HUB75 display in pixels.
  * @param h Height of the HUB75 display in pixels.
  */
-void create_hub75_driver(uint w, uint h, PanelType panel_type = PANEL_GENERIC, bool inverted_stb = false)
+void create_hub75_driver(uint w, uint h, PanelType panel_type = PanelType::PANEL_GENERIC, bool inverted_stb = false)
 {
     width = w;
     height = h;
@@ -708,6 +698,8 @@ void create_hub75_driver(uint w, uint h, PanelType panel_type = PANEL_GENERIC, b
     configure_dma_channels();
     setup_dma_transfers();
     setup_dma_irq();
+
+    // recompute_scaled_basis();
 }
 
 /**

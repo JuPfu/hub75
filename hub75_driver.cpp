@@ -24,10 +24,6 @@
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
 
-// Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
-#define RGB_MATRIX_WIDTH 64
-#define RGB_MATRIX_HEIGHT 64
-
 // Panel type FM6126A receives some initial incantation sequence.
 // This should usually have no effect on generic matrix panels.
 // You might see a short lighting of some leds for generic panels.
@@ -107,7 +103,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PANEL_GENERIC, STB_INVERTED);
+    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PanelType::PANEL_GENERIC, STB_INVERTED);
     start_hub75_driver();
 }
 
@@ -149,13 +145,13 @@ int main()
     add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
 
     // The Hub75 driver is constantly running on core 1 with a frequency much higher than 200Hz. CPU load on core 1 is low due to DMA and PIO usage.
-    // The animated examples are updated at 60Hz.
+    // The animated examples are updated at 100Hz.
     float hz = 100.0f;
     float ms = 1000.0f / hz;
 
     // set brightness of panel
     float intensity = 1.0f;
-    setIntensity(intensity);
+    // setIntensity(intensity);
     float step = 0.01f;
 
     while (true)
