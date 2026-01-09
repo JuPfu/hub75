@@ -56,8 +56,6 @@ static const uint16_t lut[256] = {
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 volatile __attribute__((aligned(4))) uint32_t *frame_buffer; ///< Interwoven image data for examples;
 
-static __attribute__((aligned(2))) uint16_t *src_map;
-
 // Utility function to claim a DMA channel and panic() if there are none left
 static int claim_dma_channel(const char *channel_name);
 
@@ -492,7 +490,6 @@ void RUL6024_write_command(uint8_t command)
     switch (command)
     {
     case CMD_RESET_OEN:
-        printf("DO RESET_OEN COMMAND\n");
         // The reset signal of the time-sharing display function is 1 LE width first, followed by 2 LE widths.
 
         gpio_put(OEN_PIN, HIGH);
@@ -637,26 +634,6 @@ void RUL6024_setup()
     // RUL6024_write_command(CMD_DATA_LATCH);
 }
 
-void setup_map(uint16_t *src_map)
-{
-    const int total_pixels = width * height >> 1;
-    const int four_rows_offset = width * 4;
-
-    for (int j = 0, line = 0, counter = 0; j < total_pixels; ++j)
-    {
-        if ((j & 8) == 0)
-            src_map[j] = j - (line << 3);
-        else
-            src_map[j] = j - ((line + 1) << 3) + four_rows_offset;
-
-        if (++counter >= 16)
-        {
-            counter = 0;
-            line++;
-        }
-    }
-}
-
 /**
  * @brief Initializes the HUB75 display by setting up DMA and PIO subsystems.
  *
@@ -680,16 +657,11 @@ void create_hub75_driver(uint w, uint h, PanelType panel_type = PanelType::PANEL
     offset = width * (height >> 2);
 #endif
 
-#if defined(HUB75_MULTIPLEX_4_ROWS)
-    src_map = new uint16_t[width * height >> 1](); // Precomputed index lookup
-    setup_map(src_map);
-#endif
-
 #ifdef TEMPORAL_DITHERING
     init_accumulators(width * height);
 #endif
 
-    if (panel_type == PANEL_FM6126A)
+    if (panel_type == PanelType::PANEL_FM6126A)
     {
         FM6126A_setup();
     }
@@ -699,7 +671,7 @@ void create_hub75_driver(uint w, uint h, PanelType panel_type = PanelType::PANEL
     setup_dma_transfers();
     setup_dma_irq();
 
-    // recompute_scaled_basis();
+    recompute_scaled_basis();
 }
 
 /**
@@ -777,7 +749,8 @@ static void dma_input_channel_setup(uint channel,
     channel_config_set_transfer_data_size(&conf, dma_size);
     channel_config_set_read_increment(&conf, read_incr);
     channel_config_set_write_increment(&conf, false);
-    channel_config_set_dreq(&conf, pio_get_dreq(pio, sm, true));
+    uint dreq = pio_get_dreq(pio_config.data_pio, pio_config.sm_data, true);
+    channel_config_set_dreq(&conf, dreq);
 
     channel_config_set_chain_to(&conf, chain_to);
 
@@ -805,6 +778,7 @@ static void setup_dma_transfers()
 #elif defined(HUB75_MULTIPLEX_4_ROWS) || defined(HUB75_P3_1415_16S_64X64)
     dma_input_channel_setup(pixel_chan, width << 2, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
 #endif
+
     dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
     dma_input_channel_setup(oen_chan, 1, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
@@ -906,7 +880,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     {
         __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
-#ifdef HUB75_MULTIPLEX_2_ROWS
+#if defined(HUB75_MULTIPLEX_2_ROWS)
         const size_t pixels = width * height;
         for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
         {
@@ -914,15 +888,44 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index + 1] = temporal_dithering(j + offset, src[j + offset]);
         }
 #elif defined HUB75_MULTIPLEX_4_ROWS
-        // For four-rows-lit multiplexing we step by 4 and use offsets 0, offset, 2*offset, 3*offset
-        int eight_rows_offset = width * 8;
-        int total_pixels = width * height >> 1;
+        int fb_index = 0;
+        int line = 0;
+        int counter = 0;
+        const int wh = width >> 1;
+        const int four_rows_offset = 4 * width;
+        const int eight_rows_offset = 8 * width;
+        const int total_pixels = (width * height) >> 1;
 
-        for (int j = 0, fb_index = 0; j < total_pixels; ++j, fb_index += 2)
+        for (auto j = 0; j < total_pixels; j++, fb_index += 2)
         {
-            uint32_t index = src_map[j];
-            frame_buffer[fb_index] = temporal_dithering(index, src[index]);
-            frame_buffer[fb_index + 1] = temporal_dithering(index + eight_rows_offset, src[index + eight_rows_offset]);
+            const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+
+            if (toggle)
+            {
+                int32_t index = j - (line << 3);
+
+                // --- first quarter of panel ---
+                uint32_t c = src[index];
+                frame_buffer[fb_index] = temporal_dithering(index, src[index]);
+                // --- third quarter of panel ---
+                index += eight_rows_offset;
+                frame_buffer[fb_index + 1] = temporal_dithering(index, src[index]);
+            }
+            else
+            {
+                int32_t index = four_rows_offset + j - ((line + 1) << 3);
+
+                // --- second quarter of panel ---
+                frame_buffer[fb_index] = temporal_dithering(index, src[index]);
+                // --- fourth quarter of panel ---
+                index += eight_rows_offset;
+                frame_buffer[fb_index + 1] = temporal_dithering(index, src[index]);
+            }
+            if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+            {
+                counter = 0;
+                line++;
+            }
         }
 #elif defined HUB75_P3_1415_16S_64X64
         const uint total_pixels = width * height;
@@ -946,11 +949,15 @@ __attribute__((optimize("unroll-loops"))) void update(
         while (line < (height >> 2))
         {
             // even src lines
-            dst[0] = temporal_dithering(quarter2, src[quarter2]); quarter2++;
-            dst[1] = temporal_dithering(quarter4, src[quarter4]); quarter4++;
+            dst[0] = temporal_dithering(quarter2, src[quarter2]);
+            quarter2++;
+            dst[1] = temporal_dithering(quarter4, src[quarter4]);
+            quarter4++;
             // odd src lines
-            dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1]); quarter1++;
-            dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3]); quarter3++;
+            dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1]);
+            quarter1++;
+            dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3]);
+            quarter3++;
 
             dst += 2;
             p++;
@@ -1008,14 +1015,45 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[i + 1] = lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + offset] & 0xff0000) >> 16];
         }
 #elif defined HUB75_MULTIPLEX_4_ROWS
+        int fb_index = 0;
+        int line = 0;
+        int counter = 0;
+        const int wh = width >> 1;
+        const int four_rows_offset = 4 * width;
         const int eight_rows_offset = 8 * width;
         const int total_pixels = (width * height) >> 1;
 
-        for (int j = 0, fb_index = 0; j < total_pixels; ++j, fb_index += 2)
+        for (auto j = 0; j < total_pixels; j++, fb_index += 2)
         {
-            uint32_t index = src_map[j];
-            frame_buffer[fb_index] = pack_lut_rgb(src[index], lut);
-            frame_buffer[fb_index + 1] = pack_lut_rgb(src[index + eight_rows_offset], lut);
+            const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+
+            if (toggle)
+            {
+                int32_t index = j - (line << 3);
+
+                // --- first quarter of panel ---
+                uint32_t c = src[index];
+                frame_buffer[fb_index] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
+                // --- third quarter of panel ---
+                c = src[index + eight_rows_offset];
+                frame_buffer[fb_index + 1] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
+            }
+            else
+            {
+                int32_t index = four_rows_offset + j - ((line + 1) << 3);
+
+                // --- second quarter of panel ---
+                uint32_t c = src[index];
+                frame_buffer[fb_index] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
+                // --- fourth quarter of panel ---
+                c = src[index + eight_rows_offset];
+                frame_buffer[fb_index + 1] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
+            }
+            if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+            {
+                counter = 0;
+                line++;
+            }
         }
 #elif defined HUB75_P3_1415_16S_64X64
         const uint total_pixels = width * height;
@@ -1117,54 +1155,85 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i + 1] = temporal_dithering(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
 #elif defined HUB75_MULTIPLEX_4_ROWS
+    int fb_index = 0;
+    int line = 0;
+    int counter = 0;
+    const int wh = width >> 1;
+    const int four_rows_offset = 4 * width * 3;
     const int eight_rows_offset = 8 * width * 3;
     const int total_pixels = (width * height) >> 1;
 
-    for (int j = 0, fb_index = 0; j < total_pixels; ++j, fb_index += 2)
+    for (auto j = 0; j < total_pixels; j++, fb_index += 2)
     {
-        uint32_t index = src_map[j];
-        frame_buffer[fb_index] = temporal_dithering(index, src[index * 3], src[index * 3 + 1], src[index * 3 + 2]);
-        frame_buffer[fb_index + 1] = temporal_dithering(index, src[index * 3 + eight_rows_offset], src[index * 3 + 1 + eight_rows_offset], src[index * 3 + 2 + eight_rows_offset]);
+        const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+
+        if (toggle)
+        {
+            // --- first quarter of panel ---
+            int32_t index = (j - (line << 3)) * 3;
+            frame_buffer[fb_index] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
+            // --- third quarter of panel ---
+            index += eight_rows_offset;
+            frame_buffer[fb_index + 1] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
+        }
+        else
+        {
+            // --- second quarter of panel ---
+            int32_t index = (four_rows_offset + j - ((line + 1) << 3)) * 3;
+            frame_buffer[fb_index] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
+            // --- fourth quarter of panel ---
+            index += eight_rows_offset;
+            frame_buffer[fb_index + 1] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
+        }
+        if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+        {
+            counter = 0;
+            line++;
+        }
     }
 #elif defined HUB75_P3_1415_16S_64X64
-        const uint total_pixels = width * height;
+    const uint total_pixels = width * height;
 
-        const uint quarter = (total_pixels >> 2) * 3;
+    const uint quarter = (total_pixels >> 2) * 3;
 
-        uint quarter1 = 0 * quarter;
-        uint quarter2 = 1 * quarter;
-        uint quarter3 = 2 * quarter;
-        uint quarter4 = 3 * quarter;
+    uint quarter1 = 0 * quarter;
+    uint quarter2 = 1 * quarter;
+    uint quarter3 = 2 * quarter;
+    uint quarter4 = 3 * quarter;
 
-        uint p = 0; // per line pixel counter
+    uint p = 0; // per line pixel counter
 
-        // Number of logical rows processed
-        uint line = 0;
+    // Number of logical rows processed
+    uint line = 0;
 
-        // Framebuffer write pointer
-        volatile uint32_t *dst = frame_buffer;
+    // Framebuffer write pointer
+    volatile uint32_t *dst = frame_buffer;
 
-        // Each iteration processes 4 physical rows (2 scan-row pairs)
-        while (line < (height >> 2))
+    // Each iteration processes 4 physical rows (2 scan-row pairs)
+    while (line < (height >> 2))
+    {
+        // even src lines
+        dst[0] = temporal_dithering(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]);
+        quarter2 += 3;
+        dst[1] = temporal_dithering(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]);
+        quarter4 += 3;
+        // odd src lines
+        dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
+        quarter1 += 3;
+        dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
+        quarter3 += 3;
+
+        dst += 2;
+        p++;
+
+        // End of logical row
+        if (p == width)
         {
-            // even src lines
-            dst[0] = temporal_dithering(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]); quarter2 += 3;
-            dst[1] = temporal_dithering(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]); quarter4 += 3;
-            // odd src lines
-            dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]); quarter1 += 3;
-            dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]); quarter3 += 3;
-
-            dst += 2;
-            p++;
-
-            // End of logical row
-            if (p == width)
-            {
-                p = 0;
-                line++;
-                dst += 2 * width; // advance to next scan-row pair
-            }
+            p = 0;
+            line++;
+            dst += 2 * width; // advance to next scan-row pair
         }
+    }
 #endif
 }
 
@@ -1190,54 +1259,85 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[j + 1] = lut[src[rgb_offset + k]] << 20 | lut[src[rgb_offset + k + 1]] << 10 | lut[src[rgb_offset + k + 2]];
     }
 #elif defined HUB75_MULTIPLEX_4_ROWS
-    const int eight_rows_offset = 8 * width;
+    int fb_index = 0;
+    int line = 0;
+    int counter = 0;
+    const int wh = width >> 1;
+    const int four_rows_offset = 4 * width * 3;
+    const int eight_rows_offset = 8 * width * 3;
     const int total_pixels = (width * height) >> 1;
 
-    for (int j = 0, k = 0; j < total_pixels; j += 1, k += 2)
+    for (auto j = 0; j < total_pixels; j++, fb_index += 2)
     {
-        uint32_t index = src_map[j];
-        frame_buffer[k] = (lut[src[index * 3 + 2]] << 20) | (lut[src[index * 3 + 1]] << 10) | (lut[src[index * 3 + 0]]);
-        frame_buffer[k + 1] = (lut[src[(index + eight_rows_offset) * 3 + 2]] << 20) | (lut[src[(index + eight_rows_offset) * 3 + 1]] << 10) | (lut[src[(index + eight_rows_offset) * 3 + 0]]);
+        const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+
+        if (toggle)
+        {
+            // --- first quarter of panel ---
+            int32_t index = (j - (line << 3)) * 3;
+            frame_buffer[fb_index] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | (lut[src[index + 2]]);
+            // --- third quarter of panel ---
+            index += eight_rows_offset;
+            frame_buffer[fb_index + 1] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | (lut[src[index + 2]]);
+        }
+        else
+        {
+            // --- second quarter of panel ---
+            int32_t index = four_rows_offset + (j - ((line + 1) << 3)) * 3;
+            frame_buffer[fb_index] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | lut[src[index + 2]];
+            // --- fourth quarter of panel ---
+            index += eight_rows_offset;
+            frame_buffer[fb_index + 1] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]]) << 10 | lut[src[index + 2]];
+        }
+        if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+        {
+            counter = 0;
+            line++;
+        }
     }
 #elif defined HUB75_P3_1415_16S_64X64
-        const uint total_pixels = width * height;
+    const uint total_pixels = width * height;
 
-        const uint quarter = (total_pixels >> 2) * 3;
+    const uint quarter = (total_pixels >> 2) * 3;
 
-        uint quarter1 = 0 * quarter;
-        uint quarter2 = 1 * quarter;
-        uint quarter3 = 2 * quarter;
-        uint quarter4 = 3 * quarter;
+    uint quarter1 = 0 * quarter;
+    uint quarter2 = 1 * quarter;
+    uint quarter3 = 2 * quarter;
+    uint quarter4 = 3 * quarter;
 
-        uint p = 0; // per line pixel counter
+    uint p = 0; // per line pixel counter
 
-        // Number of logical rows processed
-        uint line = 0;
+    // Number of logical rows processed
+    uint line = 0;
 
-        // Framebuffer write pointer
-        volatile uint32_t *dst = frame_buffer;
+    // Framebuffer write pointer
+    volatile uint32_t *dst = frame_buffer;
 
-        // Each iteration processes 4 physical rows (2 scan-row pairs)
-        while (line < (height >> 2))
+    // Each iteration processes 4 physical rows (2 scan-row pairs)
+    while (line < (height >> 2))
+    {
+        // even src lines
+        dst[0] = lut[src[quarter2 + 0]] << 20 | lut[src[quarter2 + 1]] << 10 | lut[src[quarter2 + 2]];
+        quarter2 += 3;
+        dst[1] = lut[src[quarter4 + 0]] << 20 | lut[src[quarter4 + 1]] << 10 | lut[src[quarter4 + 2]];
+        quarter4 += 3;
+        // odd src lines
+        dst[2 * width + 0] = lut[src[quarter1 + 0]] << 20 | lut[src[quarter1 + 1]] << 10 | lut[src[quarter1 + 2]];
+        quarter1 += 3;
+        dst[2 * width + 1] = lut[src[quarter3 + 0]] << 20 | lut[src[quarter3 + 1]] << 10 | lut[src[quarter3 + 2]];
+        quarter3 += 3;
+
+        dst += 2;
+        p++;
+
+        // End of logical row
+        if (p == width)
         {
-            // even src lines
-            dst[0] = lut[src[quarter2 + 0]] << 20 | lut[src[quarter2 + 1]] << 10 | lut[src[quarter2 + 2]]; quarter2 += 3;
-            dst[1] = lut[src[quarter4 + 0]] << 20 | lut[src[quarter4 + 1]] << 10 | lut[src[quarter4 + 2]]; quarter4 += 3;
-            // odd src lines
-            dst[2 * width + 0] = lut[src[quarter1 + 0]] << 20 | lut[src[quarter1 + 1]] << 10 | lut[src[quarter1 + 2]]; quarter1 += 3;
-            dst[2 * width + 1] = lut[src[quarter3 + 0]] << 20 | lut[src[quarter3 + 1]] << 10 | lut[src[quarter3 + 2]]; quarter3 += 3;
-
-            dst += 2;
-            p++;
-
-            // End of logical row
-            if (p == width)
-            {
-                p = 0;
-                line++;
-                dst += 2 * width; // advance to next scan-row pair
-            }
+            p = 0;
+            line++;
+            dst += 2 * width; // advance to next scan-row pair
         }
+    }
 #endif
 }
 #endif

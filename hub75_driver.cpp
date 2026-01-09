@@ -15,6 +15,7 @@
 // Example images
 #include "vanessa_mai_64x64.h"
 #include "taylor_swift_64x64.h"
+#include "matreshka_32x16.h"
 
 // Example effects
 #include "antialiased_line.hpp"
@@ -103,7 +104,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PanelType::PANEL_GENERIC, STB_INVERTED);
+    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PanelType::PANEL_FM6126A, STB_INVERTED);
     start_hub75_driver();
 }
 
@@ -128,7 +129,7 @@ int main()
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
-    BouncingBalls bouncingBalls(25, RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    BouncingBalls bouncingBalls(10, RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
 
     // Create rotating antialiased line using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
     Rotator rotator(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
@@ -151,7 +152,7 @@ int main()
 
     // set brightness of panel
     float intensity = 1.0f;
-    // setIntensity(intensity);
+    setIntensity(intensity);
     float step = 0.01f;
 
     while (true)
@@ -172,7 +173,14 @@ int main()
         {
             // Taylor Swift - image data is in b8, g8, r8 format
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-            update_bgr(taylor_swift_64x64);
+            if (RGB_MATRIX_WIDTH == 64)
+            {
+                update_bgr(taylor_swift_64x64);
+            }
+            else
+            {
+                update_bgr(matreshka_32x16);
+            }
         }
         else if (demo_index == 3)
         {
@@ -196,7 +204,7 @@ int main()
         else if (demo_index == 6)
         {
             // Image data is in r8, g8, b8 format
-            pixelFill.fill(0, (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) -1);
+            pixelFill.fill(0, (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) - 1);
             update(&pixelFill);
         }
 

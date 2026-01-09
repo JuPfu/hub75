@@ -47,7 +47,7 @@ void BouncingBalls::mCreateShapes(int quantityOfBalls)
     static std::mt19937 gen(rd());
     static std::uniform_int_distribution<int> rand_x(0, bounds.w - 1);
     static std::uniform_int_distribution<int> rand_y(0, bounds.h - 1);
-    static std::uniform_int_distribution<int> rand_r(2, 6);
+    static std::uniform_int_distribution<int> rand_r(bounds.w >= 64 ? 2 : 1, bounds.w >= 64 ? 6 : 3);
     static std::uniform_real_distribution<float> rand_speed(-2.0f, 2.0f);
     static std::uniform_int_distribution<int> rand_color(0, 255);
 
