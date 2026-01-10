@@ -47,6 +47,11 @@
 #error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64 to match your panels type!"
 #endif
 
+// TEMPORAL_DITHERING is experimental - development is still in progress
+#undef TEMPORAL_DITHERING // set to '#define TEMPORAL_DITHERING' to use temporal dithering
+
+// --- modifications below this line imply changes in source code ---
+
 #ifndef BIT_DEPTH
 #define BIT_DEPTH 10 ///< Number of bit planes
 #endif
@@ -55,9 +60,6 @@
 #ifndef ACC_BITS
 #define ACC_BITS 12
 #endif
-
-// TEMPORAL_DITHERING is experimental - development is still in progress
-#undef TEMPORAL_DITHERING // set to '#define TEMPORAL_DITHERING' to use temporal dithering
 
 enum PanelType
 {

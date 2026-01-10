@@ -527,13 +527,19 @@ In your build, define the scan rate that matches your panel:
 // That is 16 equals 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
 
+// Example for a 32×16 panel (1/8 scan) - two rows lit simultaneously
+#define HUB75_MULTIPLEX_2_ROWS
+// Set the number of address lines - 2 rows lit simultaneously leaves 8 rows to be adressed via row select.
+// That is 8 equals 2 to the power of 3 - we need 3 row select pins  
+#define ROWSEL_N_PINS 3
+
 // Example for a 64×64 panels (1/16 scan) - four rows lit simultaneously
 #define HUB75_P3_1415_16S_64X64
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
 
-// Example for a 32×16 panel (1/8 scan) - four rows lit simultaneously
+// Example for a 32×16 panel (1/4 scan) - four rows lit simultaneously
 #define HUB75_P10_3535_16X32_4S
 // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
 // That is 4 equals 2 to the power of 2 -> we need 2 row select pins  
