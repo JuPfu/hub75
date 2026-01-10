@@ -43,6 +43,7 @@
     - [Multiplexing Modes (Rows Lit Simultaneously)](#multiplexing-modes-rows-lit-simultaneously)
     - [Example: 64×64 panel, 1:32 scan](#example-6464-panel-132-scan)
     - [How to Configure](#how-to-configure)
+    - [Pixel Mapping](#pixel-mapping)
 
 # HUB75 DMA-Based Driver
 
@@ -516,42 +517,181 @@ In your build, define the scan rate that matches your panel:
 
 ```cpp
 // Example for a 64×64 panel (1/32 scan) - two rows lit simultaneously
+#define MATRIX_PANEL_WIDTH 64
+#define MATRIX_PANEL_HEIGHT 64
+
 #define HUB75_MULTIPLEX_2_ROWS
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
 // That is 32 = 2 to the power of 5 - we need 5 row select pins  
 #define ROWSEL_N_PINS 5
 
+
 // Example for a 64×32 panel (1/16 scan) - two rows lit simultaneously
+#define MATRIX_PANEL_WIDTH 64
+#define MATRIX_PANEL_HEIGHT 32
+
 #define HUB75_MULTIPLEX_2_ROWS
 // Set the number of address lines - 2 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
 
+
 // Example for a 32×16 panel (1/8 scan) - two rows lit simultaneously
+#define MATRIX_PANEL_WIDTH 32
+#define MATRIX_PANEL_HEIGHT 16
 #define HUB75_MULTIPLEX_2_ROWS
 // Set the number of address lines - 2 rows lit simultaneously leaves 8 rows to be adressed via row select.
 // That is 8 equals 2 to the power of 3 - we need 3 row select pins  
 #define ROWSEL_N_PINS 3
 
+
 // Example for a 64×64 panels (1/16 scan) - four rows lit simultaneously
+#define MATRIX_PANEL_WIDTH 64
+#define MATRIX_PANEL_HEIGHT 64
+
 #define HUB75_P3_1415_16S_64X64
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
 
+
 // Example for a 32×16 panel (1/4 scan) - four rows lit simultaneously
+#define MATRIX_PANEL_WIDTH 32
+#define MATRIX_PANEL_HEIGHT 16
+
 #define HUB75_P10_3535_16X32_4S
 // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
 // That is 4 equals 2 to the power of 2 -> we need 2 row select pins  
 #define ROWSEL_N_PINS 2
+``` 
+
+### Pixel Mapping
+
+Each panel type has it's own pixel mapping. 
+
+***HUB75_MULTIPLEX_2_ROWS Mapping***
+
+The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
+
+Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
+```c
+   for (int i = 0, j = 0; i < width * height; i += 2, j++) {
+      frame_buffer[i] = pack_lut_rgb(src[j], lut);
+      frame_buffer[i + 1] = pack_lut_rgb(src[j + offset], lut);
+   }
 ```
 
-**⚠️ Do not forget to adapt the number of address lines to fit your matrix panel**
-
-
-Each panel type has it's own pixel mapping. The **HUB75_MULTIPLEX_2_ROWS** is the standard pixel mapping.
+***HUB75_P10_3535_16X32_4S Mapping***
 
 **ToDo** Describe pixel mapping in detail!
+
+```c
+   int line = 0;
+   int counter = 0;
+
+   constexpr int COLUMN_PAIRS = RGB_MATRIX_WIDTH >> 1;
+   constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+   constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+   constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+   constexpr int ROW_STRIDE = RGB_MATRIX_WIDTH;
+   constexpr int ROWS_PER_GROUP = RGB_MATRIX_HEIGHT / SCAN_GROUPS;
+   constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+   constexpr int HALF_PANEL_OFFSET = (RGB_MATRIX_HEIGHT >> 1) * ROW_STRIDE;
+
+   constexpr int total_pairs = (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) >> 1;
+
+   // Example: HUB75 panel, 32×16 pixels, 1/4 scan (2 address lines)
+   //
+   // Geometry:
+   //   COLUMN_PAIRS  = 32 / 2 = 16
+   //   HALF_PAIRS    = 16 / 2 = 8
+   //   PAIR_HALF_BIT = 8
+   //   PAIR_HALF_SHIFT = ctz(8) = 3
+   //
+   // Vertical scan:
+   //   SCAN_GROUPS     = 1 << ROWSEL_N_PINS = 4
+   //   ROWS_PER_GROUP  = 16 / 4 = 4
+   //   GROUP_ROW_OFFSET = 4 × 32 = 128
+   //   HALF_PANEL_OFFSET = (16 / 2) × 32 = 256
+   //
+   // Resulting source index:
+   //   index = (j & 8) == 0
+   //         ? j - (line << 3)
+   //         : 128 + j - ((line + 1) << 3)
+   //
+   // j advances in column pairs.
+   // One scan group consists of COLUMN_PAIRS iterations.
+   // Bit PAIR_HALF_BIT selects the first or second half of the column pairs within the current scan group.
+   //
+   // (j & PAIR_HALF_BIT) == 0 → first half of column pairs
+   //                          → quarters 1 (upper) + 3 (lower)
+   // (j & PAIR_HALF_BIT) != 0 → second half of column pairs
+   //                          → quarters 2 (upper) + 4 (lower)
+   // Note: The selector bit in j depends only on panel width (column pairing), not on HUB75 scan rate.
+
+   for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+   {
+      int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
+                                             : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
+
+      frame_buffer[fb_index] = pack_lut_rgb(src[index], lut);
+      frame_buffer[fb_index + 1] = pack_lut_rgb(src[index + HALF_PANEL_OFFSET], lut);
+
+      if (++counter >= COLUMN_PAIRS) {
+         counter = 0;
+         ++line;
+      }
+   }
+```
+
+***HUB75_P3_1415_16S_64X64 Mapping***
+
+**ToDo** Describe pixel mapping in detail!
+
+```c
+   constexpr uint total_pixels = RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT;
+   constexpr uint offset = 2 * RGB_MATRIX_WIDTH;
+
+   constexpr uint quarter = total_pixels >> 2;
+
+   uint quarter1 = 0 * quarter;
+   uint quarter2 = 1 * quarter;
+   uint quarter3 = 2 * quarter;
+   uint quarter4 = 3 * quarter;
+
+   uint p = 0; // per line pixel counter
+
+   // Number of logical rows processed
+   uint line = 0;
+
+   // Framebuffer write pointer
+   volatile uint32_t *dst = frame_buffer;
+
+   // Each iteration processes 4 physical rows (2 scan-row pairs)
+   while (line < (height >> 2))
+   {
+      // even src lines
+      dst[0] = pack_lut_rgb(src[quarter2++], lut);
+      dst[1] = pack_lut_rgb(src[quarter4++], lut);
+      // odd src lines
+      dst[offset + 0] = pack_lut_rgb(src[quarter1++], lut);
+      dst[offset + 1] = pack_lut_rgb(src[quarter3++], lut);
+
+      dst += 2;
+      p++;
+
+      // End of logical row
+      if (p == width) {
+            p = 0;
+            line++;
+            dst += offset; // advance to next scan-row pair
+      }
+   }
+```
+
+
 
 
 
