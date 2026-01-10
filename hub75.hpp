@@ -37,14 +37,14 @@
 // Scan rate 1 : 8 for a 64x32 matrix panel means 32 pixel height divided by 8 pixel results in 4 rows lit simultaneously.
 // Scan rate 1 : 4 for a 32x16 matrix panel means 16 pixel height divided by 4 pixel results in 4 rows lit simultaneously.
 // ...
-// Define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_2_ROWS to fit your matrix panel.
 
+// Define your panel type
 #define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
-// #define HUB75_MULTIPLEX_4_ROWS   // four rows lit simultaneously
-// #define HUB75_P3_1415_16S_64X64
+// #define HUB75_P10_3535_16X32_4S // four rows lit simultaneously
+// #define HUB75_P3_1415_16S_64X64 // four rows lit simultaneously
 
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_MULTIPLEX_4_ROWS) && !defined(HUB75_P3_1415_16S_64X64)
-#error "You must define either HUB75_MULTIPLEX_2_ROWS or HUB75_MULTIPLEX_4_ROWS to match your panel's scan rate"
+#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64)
+#error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64 to match your panels type!"
 #endif
 
 #ifndef BIT_DEPTH

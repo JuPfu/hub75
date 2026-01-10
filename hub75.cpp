@@ -242,7 +242,7 @@ static void oen_finished_handler()
         // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
     }
-#elif defined(HUB75_MULTIPLEX_4_ROWS)
+#elif defined(HUB75_P10_3535_16X32_4S)
     // line wise BCM (Binary Coded Modulation)
     // calls hub75_data_rgb888_set_shift more often than plane wise BCM
     hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
@@ -265,7 +265,7 @@ static void oen_finished_handler()
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_MULTIPLEX_4_ROWS) || defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
 #endif
 }
@@ -282,7 +282,7 @@ void start_hub75_driver()
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_MULTIPLEX_4_ROWS) || defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
 #endif
 }
@@ -775,7 +775,7 @@ static void setup_dma_transfers()
 {
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_input_channel_setup(pixel_chan, width << 1, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
-#elif defined(HUB75_MULTIPLEX_4_ROWS) || defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64)
     dma_input_channel_setup(pixel_chan, width << 2, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
 #endif
 
@@ -887,7 +887,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index] = temporal_dithering(j, src[j]);
             frame_buffer[fb_index + 1] = temporal_dithering(j + offset, src[j + offset]);
         }
-#elif defined HUB75_MULTIPLEX_4_ROWS
+#elif defined HUB75_P10_3535_16X32_4S
         int fb_index = 0;
         int line = 0;
         int counter = 0;
@@ -1014,7 +1014,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[i] = lut[(src[j] & 0x0000ff) >> 0] << 20 | lut[(src[j] & 0x00ff00) >> 8] << 10 | lut[(src[j] & 0xff0000) >> 16];
             frame_buffer[i + 1] = lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + offset] & 0xff0000) >> 16];
         }
-#elif defined HUB75_MULTIPLEX_4_ROWS
+#elif defined HUB75_P10_3535_16X32_4S
         int fb_index = 0;
         int line = 0;
         int counter = 0;
@@ -1154,7 +1154,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i] = temporal_dithering(i, src[j], src[j + 1], src[j + 2]);
         frame_buffer[i + 1] = temporal_dithering(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
-#elif defined HUB75_MULTIPLEX_4_ROWS
+#elif defined HUB75_P10_3535_16X32_4S
     int fb_index = 0;
     int line = 0;
     int counter = 0;
@@ -1258,7 +1258,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[j] = lut[src[k]] << 20 | lut[src[k + 1]] << 10 | lut[src[k + 2]];
         frame_buffer[j + 1] = lut[src[rgb_offset + k]] << 20 | lut[src[rgb_offset + k + 1]] << 10 | lut[src[rgb_offset + k + 2]];
     }
-#elif defined HUB75_MULTIPLEX_4_ROWS
+#elif defined HUB75_P10_3535_16X32_4S
     int fb_index = 0;
     int line = 0;
     int counter = 0;

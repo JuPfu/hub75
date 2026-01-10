@@ -501,35 +501,51 @@ To make things explicit, this driver uses **multiplexing defines**:
 
 | Multiplexing Mode         | Rows Lit at Once | Typical Datasheet Scan Rate | Example Panels               |
 |----------------------------|------------------|-----------------------------|------------------------------|
-| `#define HUB75_MULTIPLEX_2_ROWS` | 2 rows          | 1:32                        | 64×64 (1:32), 64×32 (1:16)   |
-| `#define HUB75_MULTIPLEX_4_ROWS` | 4 rows          | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
+| `#define HUB75_MULTIPLEX_2_ROWS` | 2 rows          | 1:32                   | 64×64 (1:32), 64×32 (1:16)   |
+| `#define HUB75_P3_1415_16S_64X64` | 4 rows          | 1:16 or 1:8           | 64×64 (1:16), 64×32 (1:8)    |
+| `#define HUB75_P10_3535_16X32_4S` | 4 rows          | 1:8                   | 32x16 (1:8)                  |
 
 ### Example: 64×64 panel, 1:32 scan
 
 - Datasheet says **1:32** (one out of 32 row groups active at a time).  
 - This means **2 rows lit simultaneously**.  
-- In code, use:
-
-  ```c
-  #define HUB75_MULTIPLEX_2_ROWS
-  ```
 
 ### How to Configure
 
 In your build, define the scan rate that matches your panel:
 
 ```cpp
-// Example for 64×64 panels (1/32 scan) - two rows lit simultaneously
+// Example for a 64×64 panel (1/32 scan) - two rows lit simultaneously
 #define HUB75_MULTIPLEX_2_ROWS
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
 // That is 32 = 2 to the power of 5 - we need 5 row select pins  
 #define ROWSEL_N_PINS 5
 
-// Example for 64×32 panels (1/8 scan) - four rows lit simultaneously
-#define HUB75_MULTIPLEX_4_ROWS
-// Set the number of address lines - 4 rows lit simultaneously leaves 8 rows to be adressed via row select.
-// That is 8 = 2 to the power of 3 - we need 3 row select pins  
-#define ROWSEL_N_PINS 3
+// Example for a 64×32 panel (1/16 scan) - two rows lit simultaneously
+#define HUB75_MULTIPLEX_2_ROWS
+// Set the number of address lines - 2 rows lit simultaneously leaves 16 rows to be adressed via row select.
+// That is 16 equals 2 to the power of 4 - we need 4 row select pins  
+#define ROWSEL_N_PINS 4
+
+// Example for a 64×64 panels (1/16 scan) - four rows lit simultaneously
+#define HUB75_P3_1415_16S_64X64
+// Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
+// That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
+#define ROWSEL_N_PINS 4
+
+// Example for a 32×16 panel (1/8 scan) - four rows lit simultaneously
+#define HUB75_P10_3535_16X32_4S
+// Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
+// That is 4 equals 2 to the power of 2 -> we need 2 row select pins  
+#define ROWSEL_N_PINS 2
 ```
 
 **⚠️ Do not forget to adapt the number of address lines to fit your matrix panel**
+
+
+Each panel type has it's own pixel mapping. The **HUB75_MULTIPLEX_2_ROWS** is the standard pixel mapping.
+
+**ToDo** Describe pixel mapping in detail!
+
+
+
