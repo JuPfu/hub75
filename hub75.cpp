@@ -888,49 +888,41 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index + 1] = temporal_dithering(j + offset, src[j + offset]);
         }
 #elif defined HUB75_P10_3535_16X32_4S
-        int fb_index = 0;
         int line = 0;
         int counter = 0;
-        const int wh = width >> 1;
-        const int four_rows_offset = 4 * width;
-        const int eight_rows_offset = 8 * width;
-        const int total_pixels = (width * height) >> 1;
 
-        for (auto j = 0; j < total_pixels; j++, fb_index += 2)
+        constexpr int COLUMN_PAIRS = RGB_MATRIX_WIDTH >> 1;
+        constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+        constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+        constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+        constexpr int ROW_STRIDE = RGB_MATRIX_WIDTH;
+        constexpr int ROWS_PER_GROUP = RGB_MATRIX_HEIGHT / SCAN_GROUPS;
+        constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+        constexpr int HALF_PANEL_OFFSET = (RGB_MATRIX_HEIGHT >> 1) * ROW_STRIDE;
+
+        constexpr int total_pairs = (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) >> 1;
+
+        for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
         {
-            const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+            int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
+                                                 : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
 
-            if (toggle)
-            {
-                int32_t index = j - (line << 3);
+            frame_buffer[fb_index] = temporal_dithering(index, src[index]);
+            frame_buffer[fb_index + 1] = temporal_dithering(index + HALF_PANEL_OFFSET, src[index + HALF_PANEL_OFFSET]);
 
-                // --- first quarter of panel ---
-                uint32_t c = src[index];
-                frame_buffer[fb_index] = temporal_dithering(index, src[index]);
-                // --- third quarter of panel ---
-                index += eight_rows_offset;
-                frame_buffer[fb_index + 1] = temporal_dithering(index, src[index]);
-            }
-            else
-            {
-                int32_t index = four_rows_offset + j - ((line + 1) << 3);
-
-                // --- second quarter of panel ---
-                frame_buffer[fb_index] = temporal_dithering(index, src[index]);
-                // --- fourth quarter of panel ---
-                index += eight_rows_offset;
-                frame_buffer[fb_index + 1] = temporal_dithering(index, src[index]);
-            }
-            if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+            if (++counter >= COLUMN_PAIRS)
             {
                 counter = 0;
-                line++;
+                ++line;
             }
         }
 #elif defined HUB75_P3_1415_16S_64X64
-        const uint total_pixels = width * height;
+        const uint total_pixels = RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT;
+        constexpr uint line_width = 2 * RGB_MATRIX_WIDTH;
 
-        const uint quarter = total_pixels >> 2;
+        constexpr uint quarter = total_pixels >> 2;
 
         uint quarter1 = 0 * quarter;
         uint quarter2 = 1 * quarter;
@@ -954,9 +946,9 @@ __attribute__((optimize("unroll-loops"))) void update(
             dst[1] = temporal_dithering(quarter4, src[quarter4]);
             quarter4++;
             // odd src lines
-            dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1]);
+            dst[line_width + 0] = temporal_dithering(quarter1, src[quarter1]);
             quarter1++;
-            dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3]);
+            dst[line_width + 1] = temporal_dithering(quarter3, src[quarter3]);
             quarter3++;
 
             dst += 2;
@@ -967,7 +959,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             {
                 p = 0;
                 line++;
-                dst += 2 * width; // advance to next scan-row pair
+                dst += line_width; // advance to next scan-row pair
             }
         }
 #endif
@@ -1011,54 +1003,45 @@ __attribute__((optimize("unroll-loops"))) void update(
 #if defined(HUB75_MULTIPLEX_2_ROWS)
         for (int i = 0, j = 0; i < width * height; i += 2, j++)
         {
-            frame_buffer[i] = lut[(src[j] & 0x0000ff) >> 0] << 20 | lut[(src[j] & 0x00ff00) >> 8] << 10 | lut[(src[j] & 0xff0000) >> 16];
-            frame_buffer[i + 1] = lut[(src[j + offset] & 0x0000ff) >> 0] << 20 | lut[(src[j + offset] & 0x00ff00) >> 8] << 10 | lut[(src[j + offset] & 0xff0000) >> 16];
+            frame_buffer[i] = pack_lut_rgb(src[j], lut);
+            frame_buffer[i + 1] = pack_lut_rgb(src[j + offset], lut);
         }
 #elif defined HUB75_P10_3535_16X32_4S
-        int fb_index = 0;
         int line = 0;
         int counter = 0;
-        const int wh = width >> 1;
-        const int four_rows_offset = 4 * width;
-        const int eight_rows_offset = 8 * width;
-        const int total_pixels = (width * height) >> 1;
 
-        for (auto j = 0; j < total_pixels; j++, fb_index += 2)
+        constexpr int COLUMN_PAIRS = RGB_MATRIX_WIDTH >> 1;
+        constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+        constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+        constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+        constexpr int ROW_STRIDE = RGB_MATRIX_WIDTH;
+        constexpr int ROWS_PER_GROUP = RGB_MATRIX_HEIGHT / SCAN_GROUPS;
+        constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+        constexpr int HALF_PANEL_OFFSET = (RGB_MATRIX_HEIGHT >> 1) * ROW_STRIDE;
+
+        constexpr int total_pairs = (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) >> 1;
+
+        for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
         {
-            const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+            int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
+                                                 : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
 
-            if (toggle)
-            {
-                int32_t index = j - (line << 3);
+            frame_buffer[fb_index] = pack_lut_rgb(src[index], lut);
+            frame_buffer[fb_index + 1] = pack_lut_rgb(src[index + HALF_PANEL_OFFSET], lut);
 
-                // --- first quarter of panel ---
-                uint32_t c = src[index];
-                frame_buffer[fb_index] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
-                // --- third quarter of panel ---
-                c = src[index + eight_rows_offset];
-                frame_buffer[fb_index + 1] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
-            }
-            else
-            {
-                int32_t index = four_rows_offset + j - ((line + 1) << 3);
-
-                // --- second quarter of panel ---
-                uint32_t c = src[index];
-                frame_buffer[fb_index] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
-                // --- fourth quarter of panel ---
-                c = src[index + eight_rows_offset];
-                frame_buffer[fb_index + 1] = (lut[(c & 0x0000ff)] << 20) | (lut[(c >> 8) & 0x0000ff] << 10) | (lut[(c >> 16) & 0x0000ff]);
-            }
-            if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+            if (++counter >= COLUMN_PAIRS)
             {
                 counter = 0;
-                line++;
+                ++line;
             }
         }
 #elif defined HUB75_P3_1415_16S_64X64
-        const uint total_pixels = width * height;
+        constexpr uint total_pixels = RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT;
+        constexpr uint line_offset = 2 * RGB_MATRIX_WIDTH;
 
-        const uint quarter = total_pixels >> 2;
+        constexpr uint quarter = total_pixels >> 2;
 
         uint quarter1 = 0 * quarter;
         uint quarter2 = 1 * quarter;
@@ -1080,8 +1063,8 @@ __attribute__((optimize("unroll-loops"))) void update(
             dst[0] = pack_lut_rgb(src[quarter2++], lut);
             dst[1] = pack_lut_rgb(src[quarter4++], lut);
             // odd src lines
-            dst[2 * width + 0] = pack_lut_rgb(src[quarter1++], lut);
-            dst[2 * width + 1] = pack_lut_rgb(src[quarter3++], lut);
+            dst[line_offset + 0] = pack_lut_rgb(src[quarter1++], lut);
+            dst[line_offset + 1] = pack_lut_rgb(src[quarter3++], lut);
 
             dst += 2;
             p++;
@@ -1091,7 +1074,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             {
                 p = 0;
                 line++;
-                dst += 2 * width; // advance to next scan-row pair
+                dst += line_offset; // advance to next scan-row pair
             }
         }
 #endif
@@ -1155,46 +1138,42 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i + 1] = temporal_dithering(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
 #elif defined HUB75_P10_3535_16X32_4S
-    int fb_index = 0;
     int line = 0;
     int counter = 0;
-    const int wh = width >> 1;
-    const int four_rows_offset = 4 * width * 3;
-    const int eight_rows_offset = 8 * width * 3;
-    const int total_pixels = (width * height) >> 1;
 
-    for (auto j = 0; j < total_pixels; j++, fb_index += 2)
+    constexpr int COLUMN_PAIRS = RGB_MATRIX_WIDTH >> 1;
+    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+    constexpr int ROW_STRIDE = RGB_MATRIX_WIDTH;
+    constexpr int ROWS_PER_GROUP = RGB_MATRIX_HEIGHT / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+    constexpr int HALF_PANEL_OFFSET = ((RGB_MATRIX_HEIGHT >> 1) * ROW_STRIDE) * 3;
+
+    constexpr int total_pairs = (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) >> 1;
+
+    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
     {
-        const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+        int32_t index = !(j & PAIR_HALF_BIT) ? (j - (line << PAIR_HALF_SHIFT)) * 3
+                                             : (GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT)) * 3;
 
-        if (toggle)
-        {
-            // --- first quarter of panel ---
-            int32_t index = (j - (line << 3)) * 3;
-            frame_buffer[fb_index] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
-            // --- third quarter of panel ---
-            index += eight_rows_offset;
-            frame_buffer[fb_index + 1] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
-        }
-        else
-        {
-            // --- second quarter of panel ---
-            int32_t index = (four_rows_offset + j - ((line + 1) << 3)) * 3;
-            frame_buffer[fb_index] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
-            // --- fourth quarter of panel ---
-            index += eight_rows_offset;
-            frame_buffer[fb_index + 1] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
-        }
-        if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+        frame_buffer[fb_index] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
+        index += HALF_PANEL_OFFSET;
+        frame_buffer[fb_index + 1] = temporal_dithering(index, src[index], src[index + 1], src[index + 2]);
+
+        if (++counter >= COLUMN_PAIRS)
         {
             counter = 0;
-            line++;
+            ++line;
         }
     }
 #elif defined HUB75_P3_1415_16S_64X64
-    const uint total_pixels = width * height;
+    constexpr uint total_pixels = RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT;
+    constexpr uint line_width = 2 * RGB_MATRIX_WIDTH;
 
-    const uint quarter = (total_pixels >> 2) * 3;
+    constexpr uint quarter = (total_pixels >> 2) * 3;
 
     uint quarter1 = 0 * quarter;
     uint quarter2 = 1 * quarter;
@@ -1218,9 +1197,9 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         dst[1] = temporal_dithering(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]);
         quarter4 += 3;
         // odd src lines
-        dst[2 * width + 0] = temporal_dithering(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
+        dst[line_width + 0] = temporal_dithering(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
         quarter1 += 3;
-        dst[2 * width + 1] = temporal_dithering(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
+        dst[line_width + 1] = temporal_dithering(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
         quarter3 += 3;
 
         dst += 2;
@@ -1231,7 +1210,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         {
             p = 0;
             line++;
-            dst += 2 * width; // advance to next scan-row pair
+            dst += line_width; // advance to next scan-row pair
         }
     }
 #endif
@@ -1259,46 +1238,42 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[j + 1] = lut[src[rgb_offset + k]] << 20 | lut[src[rgb_offset + k + 1]] << 10 | lut[src[rgb_offset + k + 2]];
     }
 #elif defined HUB75_P10_3535_16X32_4S
-    int fb_index = 0;
     int line = 0;
     int counter = 0;
-    const int wh = width >> 1;
-    const int four_rows_offset = 4 * width * 3;
-    const int eight_rows_offset = 8 * width * 3;
-    const int total_pixels = (width * height) >> 1;
 
-    for (auto j = 0; j < total_pixels; j++, fb_index += 2)
+    constexpr int COLUMN_PAIRS = RGB_MATRIX_WIDTH >> 1;
+    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+    constexpr int ROW_STRIDE = RGB_MATRIX_WIDTH;
+    constexpr int ROWS_PER_GROUP = RGB_MATRIX_HEIGHT / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+    constexpr int HALF_PANEL_OFFSET = ((RGB_MATRIX_HEIGHT >> 1) * ROW_STRIDE) * 3;
+
+    constexpr int total_pairs = (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) >> 1;
+
+    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
     {
-        const bool toggle = ((j & 8) == 0); // replaces (j % 16) < 8
+        int32_t index = !(j & PAIR_HALF_BIT) ? (j - (line << PAIR_HALF_SHIFT)) * 3
+                                             : (GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT)) * 3;
 
-        if (toggle)
-        {
-            // --- first quarter of panel ---
-            int32_t index = (j - (line << 3)) * 3;
-            frame_buffer[fb_index] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | (lut[src[index + 2]]);
-            // --- third quarter of panel ---
-            index += eight_rows_offset;
-            frame_buffer[fb_index + 1] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | (lut[src[index + 2]]);
-        }
-        else
-        {
-            // --- second quarter of panel ---
-            int32_t index = four_rows_offset + (j - ((line + 1) << 3)) * 3;
-            frame_buffer[fb_index] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | lut[src[index + 2]];
-            // --- fourth quarter of panel ---
-            index += eight_rows_offset;
-            frame_buffer[fb_index + 1] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]]) << 10 | lut[src[index + 2]];
-        }
-        if (++counter >= wh) // wh pairs per line → width frame_buffer entries
+        frame_buffer[fb_index] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | (lut[src[index + 2]]);
+        index += HALF_PANEL_OFFSET;
+        frame_buffer[fb_index + 1] = (lut[src[index + 0]] << 20) | (lut[src[index + 1]] << 10) | (lut[src[index + 2]]);
+
+        if (++counter >= COLUMN_PAIRS)
         {
             counter = 0;
-            line++;
+            ++line;
         }
     }
 #elif defined HUB75_P3_1415_16S_64X64
-    const uint total_pixels = width * height;
+    constexpr uint total_pixels = RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT;
+    constexpr uint line_offset = 2 * RGB_MATRIX_WIDTH;
 
-    const uint quarter = (total_pixels >> 2) * 3;
+    constexpr uint quarter = (total_pixels >> 2) * 3;
 
     uint quarter1 = 0 * quarter;
     uint quarter2 = 1 * quarter;
@@ -1317,14 +1292,14 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     while (line < (height >> 2))
     {
         // even src lines
-        dst[0] = lut[src[quarter2 + 0]] << 20 | lut[src[quarter2 + 1]] << 10 | lut[src[quarter2 + 2]];
+        dst[0] = pack_lut_bgr(src[quarter2 + 2], src[quarter2 + 1], src[quarter2 + 0], lut);
         quarter2 += 3;
-        dst[1] = lut[src[quarter4 + 0]] << 20 | lut[src[quarter4 + 1]] << 10 | lut[src[quarter4 + 2]];
+        dst[1] = pack_lut_bgr(src[quarter4 + 2], src[quarter4 + 1], src[quarter4 + 0], lut);
         quarter4 += 3;
         // odd src lines
-        dst[2 * width + 0] = lut[src[quarter1 + 0]] << 20 | lut[src[quarter1 + 1]] << 10 | lut[src[quarter1 + 2]];
+        dst[line_offset + 0] = pack_lut_bgr(src[quarter1 + 2], src[quarter1 + 1], src[quarter1 + 0], lut);
         quarter1 += 3;
-        dst[2 * width + 1] = lut[src[quarter3 + 0]] << 20 | lut[src[quarter3 + 1]] << 10 | lut[src[quarter3 + 2]];
+        dst[line_offset + 1] = pack_lut_bgr(src[quarter3 + 2], src[quarter3 + 1], src[quarter3 + 0], lut);
         quarter3 += 3;
 
         dst += 2;
@@ -1335,7 +1310,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         {
             p = 0;
             line++;
-            dst += 2 * width; // advance to next scan-row pair
+            dst += line_offset; // advance to next scan-row pair
         }
     }
 #endif
