@@ -2,6 +2,8 @@
 
 #include "libraries/pico_graphics/pico_graphics.hpp"
 
+// See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel
+
 // Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
 #define RGB_MATRIX_WIDTH 64
 #define RGB_MATRIX_HEIGHT 64
@@ -14,10 +16,10 @@
 #define DATA_N_PINS 6       // count of consecutive color pins usually 6 
 #endif
 #ifndef ROWSEL_BASE_PIN
-#define ROWSEL_BASE_PIN 6   // start gpio of address pins
+#define ROWSEL_BASE_PIN 6   // start gpio pin of address pins
 #endif
 #ifndef ROWSEL_N_PINS 
-#define ROWSEL_N_PINS 5     // count of consecutive address pins
+#define ROWSEL_N_PINS 5     // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11
@@ -29,7 +31,8 @@
 #define OEN_PIN 13
 #endif
 
-#define EXIT_FAILURE 1
+// At the moment only used for HUB75_P10_3535_16X32_4S panels
+#define SCAN_GROUPS (1 << ROWSEL_N_PINS)
 
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
@@ -51,6 +54,8 @@
 #undef TEMPORAL_DITHERING // set to '#define TEMPORAL_DITHERING' to use temporal dithering
 
 // --- modifications below this line imply changes in source code ---
+
+#define EXIT_FAILURE 1
 
 #ifndef BIT_DEPTH
 #define BIT_DEPTH 10 ///< Number of bit planes
