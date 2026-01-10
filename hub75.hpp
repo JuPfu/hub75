@@ -7,17 +7,17 @@
 #define RGB_MATRIX_HEIGHT 64
 
 // Wiring of the HUB75 matrix
-#ifndef DATA_BASE_PIN       // start gpio pin of consequtive color pins e.g., r1, g1, b1, r2, g2, b2
+#ifndef DATA_BASE_PIN       // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
 #define DATA_BASE_PIN 0
 #endif
 #ifndef DATA_N_PINS
-#define DATA_N_PINS 6       // count of consequtive color pins usually 6 
+#define DATA_N_PINS 6       // count of consecutive color pins usually 6 
 #endif
 #ifndef ROWSEL_BASE_PIN
 #define ROWSEL_BASE_PIN 6   // start gpio of address pins
 #endif
 #ifndef ROWSEL_N_PINS 
-#define ROWSEL_N_PINS 5     // count of consequtive address pins
+#define ROWSEL_N_PINS 5     // count of consecutive address pins
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11
