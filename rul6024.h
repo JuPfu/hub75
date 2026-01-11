@@ -46,7 +46,7 @@
 //                               0: Program control erasure (erasure at line break)
 //                               1: Register ROUT2<3> controls the pull-up
 //                      0b1  ???
-#define R_UPCTRL  0b0 << 8
+#define R_UPCTRL 0b0 << 8
 //
 // R_FALL_TIME  07:07            Channel output falling edge time selection
 //                               0：35ns
@@ -63,8 +63,8 @@
 #define R_LATCH 0b1 << 6
 //
 // R_UPCH       05:05            0: The pull-up and pull-down of the blanking function work at the same time
-//                               1: The pull-up and pull-down of the shadow elimination function are independent. 
-//                               When there is no data, only pull-up is performed, and there is no pull-down path; 
+//                               1: The pull-up and pull-down of the shadow elimination function are independent.
+//                               When there is no data, only pull-up is performed, and there is no pull-down path;
 //                               when there is data, pull-up and pull-down work at the same time.
 //                      0b1 ???
 #define R_UPCH 0b0 << 5
@@ -90,10 +90,9 @@
 //                               01：10ns
 //                               11: 20ns
 //                       0b00
-#define R_OE 0b01 
+#define R_OE 0b01
 
 #define WREG2 R_OE_CH | R_TDM | R_UPCTRL | R_FALL_TIME | R_LATCH | R_UPCH | R_EN_AM | ROUT2 | R_CLK_SDO | R_OE
-
 
 #define HIGH 1
 #define LOW 0
@@ -102,3 +101,8 @@
 #define CMD_DATA_LATCH 3
 #define CMD_WREG1 11
 #define CMD_WREG2 12
+
+void RUL6024_setup();
+void RUL6024_write_command(uint8_t command);
+void RUL6024_write_register(uint16_t value, uint8_t position);
+void RUL6024_init_register();

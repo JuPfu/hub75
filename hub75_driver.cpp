@@ -104,7 +104,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PanelType::PANEL_FM6126A, STB_INVERTED);
+    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PANEL_TYPE, STB_INVERTED);
     start_hub75_driver();
 }
 

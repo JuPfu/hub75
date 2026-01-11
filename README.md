@@ -565,6 +565,24 @@ In your build, define the scan rate that matches your panel:
 #define ROWSEL_N_PINS 2
 ``` 
 
+Sometimes the name of the panel gives you a lot of information how the configuration has to be done.
+Here an example for a **P3-64*64-32S-V2.0** panel.
+
+```c
+// Width and height are encoded in the panel name 
+#define MATRIX_PANEL_WIDTH 64
+#define MATRIX_PANEL_HEIGHT 64
+
+// The 32S in the panel name refers to (1/32 scan) - two rows lit simultaneously 
+// We can try the standard pixel mapping - maybe we are lucky and the pixel mapping fits
+#define HUB75_MULTIPLEX_2_ROWS
+// Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
+// That is 32 equals 2 to the power of 5 -> we need 5 row select pins (as might be printed on the panel backside - A, B, C, D, E)
+#define ROWSEL_N_PINS 5
+// Look at the back of the panel. If you detect a chip which is labeled RUL6024 then define the appropriate panel type
+#define PANEL_TYPE PANEL_RUL6024
+```
+
 ### Pixel Mapping
 
 Each panel type has it's own pixel mapping. 
