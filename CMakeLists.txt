@@ -23,7 +23,7 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico_w CACHE STRING "Board type")
+set(PICO_BOARD pico2_w CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -38,7 +38,7 @@ pico_sdk_init()
 add_executable(hub75_driver hub75_driver.cpp )
 
 pico_set_program_name(hub75_driver "hub75_driver")
-pico_set_program_version(hub75_driver "1.2")
+pico_set_program_version(hub75_driver "1.5")
 
 set(PICO_PIO_VERSION 1)
 pico_set_float_implementation(hub75_driver pico)
@@ -60,6 +60,7 @@ target_sources(hub75_driver PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/fire_effect.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rotator.cpp
         ${CMAKE_CURRENT_LIST_DIR}/pixel_fill.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/rul6024.cpp
         ${CMAKE_CURRENT_LIST_DIR}/hue_value_spectrum.hpp
         ${CMAKE_CURRENT_LIST_DIR}/hub75_driver.cpp
         )
