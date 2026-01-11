@@ -61,6 +61,7 @@ target_sources(hub75_driver PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/rotator.cpp
         ${CMAKE_CURRENT_LIST_DIR}/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/rul6024.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/fm6126a.cpp
         ${CMAKE_CURRENT_LIST_DIR}/hue_value_spectrum.hpp
         ${CMAKE_CURRENT_LIST_DIR}/hub75_driver.cpp
         )
