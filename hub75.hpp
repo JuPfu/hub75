@@ -45,9 +45,9 @@
 //
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
-#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
+// #define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S // four rows lit simultaneously
-// #define HUB75_P3_1415_16S_64X64 // four rows lit simultaneously
+#define HUB75_P3_1415_16S_64X64 // four rows lit simultaneously
 
 #if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64)
 #error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64 to match your panels type!"
@@ -60,14 +60,22 @@
 
 // set your panel type
 // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set PANEL_TYPE to PANEL_RUL6024
-#define PANEL_TYPE PANEL_GENERIC
+#define PANEL_TYPE PANEL_RUL6024
 
 #define INVERTED_STB false
 
 // TEMPORAL_DITHERING is experimental - development is still in progress
-#undef TEMPORAL_DITHERING // set to '#define TEMPORAL_DITHERING' to use temporal dithering
+#define TEMPORAL_DITHERING // set to '#define TEMPORAL_DITHERING' to use temporal dithering
 
-// --- modifications below this line imply changes in source code ---
+// --- modifications below this line might imply changes in source code ---
+
+#ifdef TEMPORAL_DITHERING
+#define LUT_MAPPING(IDX, COLOUR) temporal_dithering(IDX, COLOUR)
+#define LUT_MAPPING_RGB(IDX, R, G, B) temporal_dithering(IDX, R, G, B)
+#else
+#define LUT_MAPPING(IDX, COLOUR) pack_lut_rgb(COLOUR, lut)
+#define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B, lut)
+#endif
 
 #define EXIT_FAILURE 1
 

@@ -25,20 +25,6 @@
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
 
-// Panel type FM6126A receives some initial incantation sequence.
-// This should usually have no effect on generic matrix panels.
-// You might see a short lighting of some leds for generic panels.
-// To suppress this effect set PANEL_TYPE to PANEL_GENERIC.
-
-// PanelType - either PANEL_GENERIC or PANEL_FM6126A
-#define PANEL_TYPE PANEL_GENERIC
-
-// Some matrix panels have inverted STROBE signals.
-// If your data-sheet says so set STB_INVERTED to true.
-
-// stb_inverted - either true (inverted) or false (default)
-#define STB_INVERTED false
-
 static int demo_index = 0; ///< Example selector
 
 // Perform initialisation
@@ -104,7 +90,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PANEL_TYPE, STB_INVERTED);
+    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PANEL_TYPE, INVERTED_STB);
     start_hub75_driver();
 }
 
