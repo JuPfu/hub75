@@ -517,8 +517,6 @@ All configuration (C pre-processor defines) must be done in **hub75.hpp**.
 
 In your build, define the scan rate that matches your panel. 
 
-- **HUB75_P10_3535_16X32_4S**
-
 ```cpp
 // Example for a 64×64 panel (1/32 scan) - 2 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 64
@@ -598,6 +596,7 @@ Generic hub75 led matrix panels with 2 rows lit simultaneously. Five address lin
 The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
 
 Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Prior to this **offset** had been set to <em>(MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2)</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
+
 ```c
    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
    for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
@@ -608,6 +607,8 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
 ```
 
 ***HUB75_P10_3535_16X32_4S Mapping***
+
+Outdoor led matrix panel with 4 rows lit simultaneously. Two address lines.
 
 **ToDo** Describe pixel mapping in detail!
 
@@ -681,8 +682,6 @@ Driving ICs are MBI5253 / ICND2055 / ICDN2065 / ICND2153S / CFD325 / MBI5264 / C
 
 The shift-buffer is filled in alternating sequence with pixels from a line from second and fourth quarter of the panel 
 followed by an alternating sequence of the corresponding line from the first and third quarter.
-
-**ToDo** Describe pixel mapping in detail!
 
 ```c
    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
