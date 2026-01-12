@@ -586,7 +586,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-        const size_t pixels = width * height;
+        constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
         for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
         {
             frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);

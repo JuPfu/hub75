@@ -516,7 +516,7 @@ To make things explicit, this driver uses **multiplexing defines**:
 In your build, define the scan rate that matches your panel:
 
 ```cpp
-// Example for a 64×64 panel (1/32 scan) - two rows lit simultaneously
+// Example for a 64×64 panel (1/32 scan) - 2 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
@@ -555,7 +555,7 @@ In your build, define the scan rate that matches your panel:
 #define ROWSEL_N_PINS 4
 
 
-// Example for a 32×16 panel (1/4 scan) - four rows lit simultaneously
+// Example for a 32×16 panel (1/4 scan) - 4 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 32
 #define MATRIX_PANEL_HEIGHT 16
 
@@ -573,7 +573,7 @@ Here an example for a **P3-64*64-32S-V2.0** panel.
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
-// The 32S in the panel name refers to (1/32 scan) - two rows lit simultaneously 
+// The 32S in the panel name refers to (1/32 scan) - 2 rows lit simultaneously 
 // We can try the standard pixel mapping - maybe we are lucky and the pixel mapping fits
 #define HUB75_MULTIPLEX_2_ROWS
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
@@ -593,9 +593,11 @@ The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
 
 Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
 ```c
-   for (int i = 0, j = 0; i < width * height; i += 2, j++) {
-      frame_buffer[i] = pack_lut_rgb(src[j], lut);
-      frame_buffer[i + 1] = pack_lut_rgb(src[j + offset], lut);
+   constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+   for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
+   {
+      frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
+      frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
    }
 ```
 
