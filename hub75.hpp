@@ -45,9 +45,9 @@
 //
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
-// #define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
+#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S // four rows lit simultaneously
-#define HUB75_P3_1415_16S_64X64 // four rows lit simultaneously
+// #define HUB75_P3_1415_16S_64X64 // four rows lit simultaneously
 
 #if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64)
 #error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64 to match your panels type!"
@@ -60,7 +60,7 @@
 
 // set your panel type
 // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set PANEL_TYPE to PANEL_RUL6024
-#define PANEL_TYPE PANEL_RUL6024
+#define PANEL_TYPE PANEL_GENERIC
 
 #define INVERTED_STB false
 
