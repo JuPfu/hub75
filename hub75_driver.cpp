@@ -90,7 +90,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
     start_hub75_driver();
 }
 
@@ -115,17 +115,17 @@ int main()
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
-    BouncingBalls bouncingBalls(10, RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    BouncingBalls bouncingBalls(10, MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
     // Create rotating antialiased line using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
-    Rotator rotator(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    Rotator rotator(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
     // Create fire effect using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
-    FireEffect fireEffect = FireEffect(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    FireEffect fireEffect = FireEffect(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
-    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
-    PixelFill pixelFill = PixelFill(RGB_MATRIX_WIDTH, RGB_MATRIX_HEIGHT);
+    PixelFill pixelFill = PixelFill(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
@@ -159,7 +159,7 @@ int main()
         {
             // Taylor Swift - image data is in b8, g8, r8 format
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-            if (RGB_MATRIX_WIDTH == 64)
+            if (MATRIX_PANEL_WIDTH == 64)
             {
                 update_bgr(taylor_swift_64x64);
             }
@@ -190,7 +190,7 @@ int main()
         else if (demo_index == 6)
         {
             // Image data is in r8, g8, b8 format
-            pixelFill.fill(0, (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) - 1);
+            pixelFill.fill(0, (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) - 1);
             update(&pixelFill);
         }
 

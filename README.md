@@ -607,18 +607,18 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
    int line = 0;
    int counter = 0;
 
-   constexpr int COLUMN_PAIRS = RGB_MATRIX_WIDTH >> 1;
+   constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
 
    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
 
-   constexpr int ROW_STRIDE = RGB_MATRIX_WIDTH;
-   constexpr int ROWS_PER_GROUP = RGB_MATRIX_HEIGHT / SCAN_GROUPS;
+   constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
+   constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-   constexpr int HALF_PANEL_OFFSET = (RGB_MATRIX_HEIGHT >> 1) * ROW_STRIDE;
+   constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
 
-   constexpr int total_pairs = (RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT) >> 1;
+   constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
 
    // Example: HUB75 panel, 32×16 pixels, 1/4 scan (2 address lines)
    //
@@ -669,8 +669,8 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
 **ToDo** Describe pixel mapping in detail!
 
 ```c
-   constexpr uint total_pixels = RGB_MATRIX_WIDTH * RGB_MATRIX_HEIGHT;
-   constexpr uint offset = 2 * RGB_MATRIX_WIDTH;
+   constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+   constexpr uint offset = 2 * MATRIX_PANEL_WIDTH;
 
    constexpr uint quarter = total_pixels >> 2;
 

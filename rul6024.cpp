@@ -46,8 +46,8 @@ void RUL6024_write_register(uint16_t value, uint8_t position)
     gpio_put(STROBE_PIN, LOW);
     sleep_us(10);
 
-    uint8_t threshold = RGB_MATRIX_WIDTH - position;
-    for (auto i = 0u; i < RGB_MATRIX_WIDTH; i++)
+    uint8_t threshold = MATRIX_PANEL_WIDTH - position;
+    for (auto i = 0u; i < MATRIX_PANEL_WIDTH; i++)
     {
         auto j = i % 16;
         bool b = value & (1 << j);

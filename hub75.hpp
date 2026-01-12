@@ -4,9 +4,9 @@
 
 // See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel
 
-// Set RGB_MATRIX_WIDTH and RGB_MATRIX_HEIGHT to the width and height of your matrix panel!
-#define RGB_MATRIX_WIDTH 64
-#define RGB_MATRIX_HEIGHT 64
+// Set MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT to the width and height of your matrix panel!
+#define MATRIX_PANEL_WIDTH 64
+#define MATRIX_PANEL_HEIGHT 64
 
 // Wiring of the HUB75 matrix
 #ifndef DATA_BASE_PIN // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
