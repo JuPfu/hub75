@@ -227,7 +227,7 @@ static void oen_finished_handler()
         // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
     }
-#elif defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P3_1415_16S_64X64_S31)
     // plane wise BCM (Binary Coded Modulation)
     if (++row_address >= (height >> 2))
     {
@@ -262,7 +262,7 @@ static void oen_finished_handler()
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
 #endif
 }
@@ -279,7 +279,7 @@ void start_hub75_driver()
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
 #endif
 }
@@ -303,7 +303,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     offset = width * (height >> 1);
-#elif defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P3_1415_16S_64X64_S31)
     offset = width * (height >> 2);
 #endif
 
@@ -429,7 +429,7 @@ static void setup_dma_transfers()
 {
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_input_channel_setup(pixel_chan, width << 1, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
-#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64)
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_input_channel_setup(pixel_chan, width << 2, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
 #endif
 
@@ -623,7 +623,7 @@ __attribute__((optimize("unroll-loops"))) void update(
                 ++line;
             }
         }
-#elif defined HUB75_P3_1415_16S_64X64
+#elif defined HUB75_P3_1415_16S_64X64_S31
         constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
         constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
 
@@ -721,7 +721,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
             ++line;
         }
     }
-#elif defined HUB75_P3_1415_16S_64X64
+#elif defined HUB75_P3_1415_16S_64X64_S31
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     constexpr uint line_width = 2 * MATRIX_PANEL_WIDTH;
 

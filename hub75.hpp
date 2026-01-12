@@ -31,9 +31,6 @@
 #define OEN_PIN 13
 #endif
 
-// At the moment only used for HUB75_P10_3535_16X32_4S panels
-#define SCAN_GROUPS (1 << ROWSEL_N_PINS)
-
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
 // Scan rate 1 : 16 for a 64x32 matrix panel means 32 pixel height divided by 16 pixel results in 2 rows lit simultaneously.
@@ -45,12 +42,13 @@
 //
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
+//
 #define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S // four rows lit simultaneously
-// #define HUB75_P3_1415_16S_64X64 // four rows lit simultaneously
+// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
 
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64)
-#error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64 to match your panels type!"
+#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
+#error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64_S31 to match your panels type!"
 #endif
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
@@ -77,7 +75,8 @@
 #define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B, lut)
 #endif
 
-#define EXIT_FAILURE 1
+// At the moment only used for HUB75_P10_3535_16X32_4S panels
+#define SCAN_GROUPS (1 << ROWSEL_N_PINS)
 
 #ifndef BIT_DEPTH
 #define BIT_DEPTH 10 ///< Number of bit planes
@@ -87,6 +86,8 @@
 #ifndef ACC_BITS
 #define ACC_BITS 12
 #endif
+
+#define EXIT_FAILURE 1
 
 using namespace pimoroni;
 

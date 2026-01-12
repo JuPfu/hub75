@@ -58,7 +58,7 @@ This project is based on:
 - [Raspberry Pi's pico-examples/pio/hub75](https://github.com/raspberrypi/pico-examples)
 - [Pimoroni's HUB75 driver](https://github.com/pimoroni/pimoroni-pico/tree/main/drivers/hub75)
 
-To understand how RGB matrix panels work, refer to the article **[Everything You Didn't Want to Know About RGB Matrix Panels](https://learn.adafruit.com/adafruit-gfx-graphics-library/what-is-the-gfx-library)**.
+To understand how RGB matrix panels work, refer to the article **[Everything You Didn't Want to Know About RGB Matrix Panels](https://news.sparkfun.com/2650)**.
 For details on Binary Coded Modulation (BCM), see **[LED Dimming Using Binary Code Modulation](https://www.ti.com/lit/an/slva377a/slva377a.pdf)**.
 
 ---
@@ -503,7 +503,7 @@ To make things explicit, this driver uses **multiplexing defines**:
 | Multiplexing Mode                 | Rows Lit at Once | Typical Datasheet Scan Rate | Example Panels               |
 |-----------------------------------|------------------|-----------------------------|------------------------------|
 | `#define HUB75_MULTIPLEX_2_ROWS`  | 2 rows           | 1:32                        | 64×64 (1:32), 64×32 (1:16)   |
-| `#define HUB75_P3_1415_16S_64X64` | 4 rows           | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
+| `#define HUB75_P3_1415_16S_64X64_S31` | 4 rows           | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
 | `#define HUB75_P10_3535_16X32_4S` | 4 rows           | 1:4                         | 32x16 (1:4)                  |
 
 ### Example: 64×64 panel, 1:32 scan
@@ -513,7 +513,11 @@ To make things explicit, this driver uses **multiplexing defines**:
 
 ### How to Configure
 
-In your build, define the scan rate that matches your panel:
+All configuration (C pre-processor defines) must be done in **hub75.hpp**.
+
+In your build, define the scan rate that matches your panel. 
+
+- **HUB75_P10_3535_16X32_4S**
 
 ```cpp
 // Example for a 64×64 panel (1/32 scan) - 2 rows lit simultaneously
@@ -549,7 +553,7 @@ In your build, define the scan rate that matches your panel:
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
-#define HUB75_P3_1415_16S_64X64
+#define HUB75_P3_1415_16S_64X64_S31
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
@@ -589,9 +593,11 @@ Each panel type has it's own pixel mapping.
 
 ***HUB75_MULTIPLEX_2_ROWS Mapping***
 
+Generic hub75 led matrix panels with 2 rows lit simultaneously. Five address lines.
+
 The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
 
-Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
+Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Prior to this **offset** had been set to <em>(MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2)</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
 ```c
    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
    for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
@@ -667,7 +673,14 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
    }
 ```
 
-***HUB75_P3_1415_16S_64X64 Mapping***
+***HUB75_P3_1415_16S_64X64_S31 Mapping***
+
+Outdoor led matrix panel with 4 rows lit simultaneously. Four address lines.
+
+Driving ICs are MBI5253 / ICND2055 / ICDN2065 / ICND2153S / CFD325 / MBI5264 / CFD555 / ICND2165.
+
+The shift-buffer is filled in alternating sequence with pixels from a line from second and fourth quarter of the panel 
+followed by an alternating sequence of the corresponding line from the first and third quarter.
 
 **ToDo** Describe pixel mapping in detail!
 
