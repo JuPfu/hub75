@@ -500,11 +500,11 @@ This can be confusing, because the actual driver behavior is about **how many ro
 
 To make things explicit, this driver uses **multiplexing defines**:
 
-| Multiplexing Mode         | Rows Lit at Once | Typical Datasheet Scan Rate | Example Panels               |
-|----------------------------|------------------|-----------------------------|------------------------------|
-| `#define HUB75_MULTIPLEX_2_ROWS` | 2 rows          | 1:32                   | 64×64 (1:32), 64×32 (1:16)   |
-| `#define HUB75_P3_1415_16S_64X64` | 4 rows          | 1:16 or 1:8           | 64×64 (1:16), 64×32 (1:8)    |
-| `#define HUB75_P10_3535_16X32_4S` | 4 rows          | 1:8                   | 32x16 (1:8)                  |
+| Multiplexing Mode                 | Rows Lit at Once | Typical Datasheet Scan Rate | Example Panels               |
+|-----------------------------------|------------------|-----------------------------|------------------------------|
+| `#define HUB75_MULTIPLEX_2_ROWS`  | 2 rows           | 1:32                        | 64×64 (1:32), 64×32 (1:16)   |
+| `#define HUB75_P3_1415_16S_64X64` | 4 rows           | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
+| `#define HUB75_P10_3535_16X32_4S` | 4 rows           | 1:4                         | 32x16 (1:4)                  |
 
 ### Example: 64×64 panel, 1:32 scan
 
@@ -526,7 +526,7 @@ In your build, define the scan rate that matches your panel:
 #define ROWSEL_N_PINS 5
 
 
-// Example for a 64×32 panel (1/16 scan) - two rows lit simultaneously
+// Example for a 64×32 panel (1/16 scan) - 2 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 32
 
@@ -536,7 +536,7 @@ In your build, define the scan rate that matches your panel:
 #define ROWSEL_N_PINS 4
 
 
-// Example for a 32×16 panel (1/8 scan) - two rows lit simultaneously
+// Example for a 32×16 panel (1/8 scan) - 2 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 32
 #define MATRIX_PANEL_HEIGHT 16
 #define HUB75_MULTIPLEX_2_ROWS
@@ -545,7 +545,7 @@ In your build, define the scan rate that matches your panel:
 #define ROWSEL_N_PINS 3
 
 
-// Example for a 64×64 panels (1/16 scan) - four rows lit simultaneously
+// Example for a 64×64 panels (1/16 scan) - 4 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
@@ -654,12 +654,13 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
       int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
                                              : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
 
-      frame_buffer[fb_index] = pack_lut_rgb(src[index], lut);
-      frame_buffer[fb_index + 1] = pack_lut_rgb(src[index + HALF_PANEL_OFFSET], lut);
+      frame_buffer[fb_index] = LUT_MAPPING(index, src[index]);
+      frame_buffer[fb_index + 1] = LUT_MAPPING(index + HALF_PANEL_OFFSET, src[index + HALF_PANEL_OFFSET]);
 
-      if (++counter >= COLUMN_PAIRS) {
-         counter = 0;
-         ++line;
+      if (++counter >= COLUMN_PAIRS)
+      {
+            counter = 0;
+            ++line;
       }
    }
 ```
@@ -670,7 +671,7 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
 
 ```c
    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-   constexpr uint offset = 2 * MATRIX_PANEL_WIDTH;
+   constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
 
    constexpr uint quarter = total_pixels >> 2;
 
@@ -688,23 +689,23 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
    volatile uint32_t *dst = frame_buffer;
 
    // Each iteration processes 4 physical rows (2 scan-row pairs)
-   while (line < (height >> 2))
-   {
+   while (line < (height >> 2)) {
       // even src lines
-      dst[0] = pack_lut_rgb(src[quarter2++], lut);
-      dst[1] = pack_lut_rgb(src[quarter4++], lut);
+      dst[0] = LUT_MAPPING(quarter2, src[quarter2]); quarter2++;
+      dst[1] = LUT_MAPPING(quarter4, src[quarter4]); quarter4++;
       // odd src lines
-      dst[offset + 0] = pack_lut_rgb(src[quarter1++], lut);
-      dst[offset + 1] = pack_lut_rgb(src[quarter3++], lut);
+      dst[line_offset + 0] = LUT_MAPPING(quarter1, src[quarter1]); quarter1++;
+      dst[line_offset + 1] = LUT_MAPPING(quarter3, src[quarter3]); quarter3++;
 
       dst += 2;
       p++;
 
       // End of logical row
-      if (p == width) {
+      if (p == width)
+      {
             p = 0;
             line++;
-            dst += offset; // advance to next scan-row pair
+            dst += line_offset; // advance to next scan-row pair
       }
    }
 ```
