@@ -19,7 +19,7 @@
 #define ROWSEL_BASE_PIN 6 // start gpio pin of address pins
 #endif
 #ifndef ROWSEL_N_PINS
-#define ROWSEL_N_PINS 4 // count of consecutive address pins - adapt to the number of address pins of your panel
+#define ROWSEL_N_PINS 5 // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11
@@ -43,9 +43,9 @@
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
 //
-// #define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
+#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S // four rows lit simultaneously
-#define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
+// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
 
 #if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
 #error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64_S31 to match your panels type!"
