@@ -681,10 +681,10 @@ __attribute__((optimize("unroll-loops"))) void update(
  */
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
-    const size_t pixels = width * height;
-    const uint rgb_offset = offset * 3;
 #ifdef HUB75_MULTIPLEX_2_ROWS
-    for (size_t i = 0, j = 0; i < pixels; j += 3, i += 2)
+    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    const uint rgb_offset = offset * 3;
+    for (size_t i = 0, j = 0; i < total_pixels; j += 3, i += 2)
     {
         frame_buffer[i] = LUT_MAPPING_RGB(i, src[j], src[j + 1], src[j + 2]);
         frame_buffer[i + 1] = LUT_MAPPING_RGB(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
