@@ -436,6 +436,11 @@ static void setup_dma_transfers()
     dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
     dma_input_channel_setup(oen_chan, 1, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
+#if defined(SM_CLOCKDIV)
+    pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, width <= 32 ? SM_CLOCKDIV_FACTOR : 1.0f);
+    pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, width <= 32 ? SM_CLOCKDIV_FACTOR : 1.0f);
+#endif
+
     dma_channel_set_read_addr(dummy_pixel_chan, dummy_pixel_data, false);
 
     row_in_bit_plane = set_row_in_bit_plane(row_address, bit_plane);
