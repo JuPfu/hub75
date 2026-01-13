@@ -106,7 +106,7 @@ static volatile uint32_t row_in_bit_plane = 0;
 static const int ACC_SHIFT = (ACC_BITS - 10); // number of low bits preserved in accumulator
 
 // Per-channel accumulators (allocated at runtime)
-static std::vector<uint32_t> acc_r, acc_g, acc_b;
+static std::vector<uint16_t> acc_r, acc_g, acc_b;
 
 // Variables for brightness control
 // Q format shift: Q16 gives 1.0 == (1 << 16) == 65536
@@ -488,14 +488,14 @@ static inline int claim_dma_channel(const char *channel_name)
 uint32_t temporal_dithering(size_t j, uint32_t pixel)
 {
     // --- 1. Expand 8-bit RGB using LUT ---
-    uint32_t r16 = lut[(pixel >> 16) & 0xFF];
-    uint32_t g16 = lut[(pixel >> 8) & 0xFF];
-    uint32_t b16 = lut[(pixel >> 0) & 0xFF];
+    uint16_t r16 = lut[(pixel >> 16) & 0xFF];
+    uint16_t g16 = lut[(pixel >> 8) & 0xFF];
+    uint16_t b16 = lut[(pixel >> 0) & 0xFF];
 
     // --- 2. Add residue ---
-    uint32_t new_r = (uint32_t)r16 + acc_r[j];
-    uint32_t new_g = (uint32_t)g16 + acc_g[j];
-    uint32_t new_b = (uint32_t)b16 + acc_b[j];
+    uint16_t new_r = (uint32_t)r16 + acc_r[j];
+    uint16_t new_g = (uint32_t)g16 + acc_g[j];
+    uint16_t new_b = (uint32_t)b16 + acc_b[j];
 
     // --- 3. Clamp to 12-bit maximum ---
     if (new_r > 4095)
@@ -524,14 +524,14 @@ uint32_t temporal_dithering(size_t j, uint32_t pixel)
 uint32_t temporal_dithering(size_t j, uint8_t r, uint8_t g, uint8_t b)
 {
     // --- 1. Expand 8-bit RGB using LUT ---
-    uint32_t b16 = lut[b];
-    uint32_t g16 = lut[g];
-    uint32_t r16 = lut[r];
+    uint16_t b16 = lut[b];
+    uint16_t g16 = lut[g];
+    uint16_t r16 = lut[r];
 
     // --- 2. Add residue  ---
-    uint32_t new_r = r16 + acc_r[j];
-    uint32_t new_g = g16 + acc_g[j];
-    uint32_t new_b = b16 + acc_b[j];
+    uint16_t new_r = r16 + acc_r[j];
+    uint16_t new_g = g16 + acc_g[j];
+    uint16_t new_b = b16 + acc_b[j];
 
     // --- 3. Clamp to 16-bit maximum ---
     if (new_r > 4095)
