@@ -205,6 +205,6 @@ int main()
             intensity = 0.0f;
         }
 
-        sleep_ms(ms); // 60 updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
+        sleep_ms(ms); // hz updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }
 }
