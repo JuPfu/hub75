@@ -50,6 +50,7 @@
   - [Step 6 — State Machine Clock Divider (`SM_CLOCKDIV`)](#step-6--state-machine-clock-divider-sm_clockdiv)
   - [Step 8 — Temporal Dithering (Optional)](#step-8--temporal-dithering-optional)
     - [Pixel Mapping](#pixel-mapping)
+      - [How Pixel Mapping Works (General Idea)](#how-pixel-mapping-works-general-idea)
     - [Practical Notes](#practical-notes-1)
 - [Troubleshooting](#troubleshooting)
   - [1. Panel Stays Completely Dark](#1-panel-stays-completely-dark)
@@ -764,13 +765,34 @@ to
 
 Each panel type has it's own pixel mapping. 
 
+#### How Pixel Mapping Works (General Idea)
+
+HUB75 panels do not accept pixels in simple row-major order.
+
+Instead, pixel data is shifted into the panel in the exact order expected by the
+panel’s internal shift registers and multiplexing logic.
+
+Key properties:
+
+- Pixels are shifted **column-wise**, not row-wise
+- Multiple physical rows are driven **simultaneously**
+- The shift buffer therefore always contains pixels from **different vertical regions**
+- The exact ordering depends on:
+  - how many rows are multiplexed
+  - how the panel internally wires its row drivers
+
+Each mapping below describes how pixels from the linear source buffer (`src`)
+are reordered into the panel’s shift buffer (`frame_buffer`).
+
+
 ***HUB75_MULTIPLEX_2_ROWS Mapping***
 
-Generic hub75 led matrix panels with 2 rows lit simultaneously. Five address lines.
+Generic hub75 led matrix panels with 2 rows lit simultaneously.
 
 The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
 
-Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Prior to this **offset** had been set to <em>MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
+Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel because each clock cycle shifts two pixels belonging to two different physical rows
+(upper half and lower half of the panel). Prior to this **offset** had been set to <em>MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
 
 ```c
    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
