@@ -524,21 +524,21 @@ The hub75 driver deduces the number of multiplexed rows from the following rule.
 
 ### Rule
 
-> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
+> multiplexed_rows = MATRIX_PANEL_HEIGHT/ 2^ROWSEL_N_PINS
 
 ### Examples
 
 #### Panel with 64×64 height and width, 1/32 scan (-32S-), 5 Address lines (A, B, C, D, E) -> (2 rows lit)
 
-> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
+> multiplexed_rows = MATRIX_PANEL_HEIGHT / 2^ROWSEL_N_PINS
 
-> $multiplexed\_rows=64/2^{5}$ = 64/32 = 2
+> $multiplexed_rows = 64 / 2^5 = 64 / 32 = 2
 
 #### Panel with 32×64 height and width, 1/16 scan (-16S-), 4 Address lines (A, B, C, D) -> (2 rows lit)
 
-> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
+> multiplexed_rows = MATRIX_PANEL_HEIGHT / 2^ROWSEL_N_PINS
 
-> $multiplexed\_rows=32/2^{4}$ = 64/16 = 2
+> multiplexed_rows = 32 / 2^4 = 32 / 16 = 2
 
 So, the number of multiplexed lines in both examples is $2$, even though the scan parameters (-32S- and -16S-) differ. Internally, the driver uses the number of multiplexed rows to resolve this ambiguity.
 
@@ -550,9 +550,9 @@ In both examples you should choose **HUB75_MULTIPLEX_2_ROWS**
 
 For panels **HUB75_P10_3535_16X32_4S** the calculation looks like this (the number of rows can easily be counted on the panel 😊):
 
-> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
+> multiplexed_rows = MATRIX_PANEL_HEIGHT / 2^ROWSEL_N_PINS
 
-> $multiplexed\_rows=16/2^{2}$ = 16/4 = 4
+> multiplexed_rows = 16 / 2^2 = 16 / 4 = 4
 
 In summary, the number of address lines on this board is $2$ which corresponds to $4$ rows being multiplexed.
 
