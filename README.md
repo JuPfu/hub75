@@ -15,7 +15,7 @@
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
   - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
   - [Improved Colour Perception](#improved-colour-perception)
-    - [Increased Perceptual Colour Depth (Temporal Dithering)](#increased-perceptual-colour-depth-temporal-dithering)
+    - [Increased Perceptual Colour Depth (Temporal Dithering) - Experimental ⚠️](#increased-perceptual-colour-depth-temporal-dithering---experimental-️)
     - [✅ Advantages](#-advantages)
     - [⚠️ Trade-offs](#️-trade-offs)
   - [Brightness Control](#brightness-control)
@@ -34,16 +34,43 @@
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
   - [Allowed Deviations  ](#allowed-deviations--)
     - [Example: Custom Pin Mapping](#example-custom-pin-mapping)
-  - [How to Use a 64×32 HUB75 Matrix Panel](#how-to-use-a-6432-hub75-matrix-panel)
+- [Configuring Your HUB75 LED Matrix Panel](#configuring-your-hub75-led-matrix-panel)
+  - [Step 1 — Panel Dimensions](#step-1--panel-dimensions)
     - [Wiring](#wiring)
-    - [Initialization of Matrix Panel Dimension](#initialization-of-matrix-panel-dimension)
-    - [Frame Buffer Layout](#frame-buffer-layout)
-    - [Practical Notes](#practical-notes-1)
-  - [Scan Rate Support](#scan-rate-support)
-    - [Multiplexing Modes (Rows Lit Simultaneously)](#multiplexing-modes-rows-lit-simultaneously)
-    - [Example: 64×64 panel, 1:32 scan](#example-6464-panel-132-scan)
+  - [Step 2 — Scan Rate and Rows Lit Simultaneously](#step-2--scan-rate-and-rows-lit-simultaneously)
+    - [Rule](#rule)
+    - [Examples](#examples)
+      - [Panel with 64×64 height and width, 1/32 scan (-32S-), 5 Address lines (A, B, C, D, E) -\> (2 rows lit)](#panel-with-6464-height-and-width-132-scan--32s--5-address-lines-a-b-c-d-e---2-rows-lit)
+      - [Panel with 32×64 height and width, 1/16 scan (-16S-), 4 Address lines (A, B, C, D) -\> (2 rows lit)](#panel-with-3264-height-and-width-116-scan--16s--4-address-lines-a-b-c-d---2-rows-lit)
+  - [Step 3 — Panel Pixel Mapping Type](#step-3--panel-pixel-mapping-type)
     - [How to Configure](#how-to-configure)
+  - [Step 4 — Panel Driver Chip Type](#step-4--panel-driver-chip-type)
+    - [How to choose](#how-to-choose)
+  - [Step 5 — Strobe Polarity (`INVERTED_STB`)](#step-5--strobe-polarity-inverted_stb)
+  - [Step 6 — State Machine Clock Divider (`SM_CLOCKDIV`)](#step-6--state-machine-clock-divider-sm_clockdiv)
+  - [Step 8 — Temporal Dithering (Optional)](#step-8--temporal-dithering-optional)
     - [Pixel Mapping](#pixel-mapping)
+    - [Practical Notes](#practical-notes-1)
+- [Troubleshooting](#troubleshooting)
+  - [1. Panel Stays Completely Dark](#1-panel-stays-completely-dark)
+    - [Check the obvious first](#check-the-obvious-first)
+    - [Configuration checks](#configuration-checks)
+  - [2. Panel Lights Up, But Only Shows Noise or Garbage](#2-panel-lights-up-but-only-shows-noise-or-garbage)
+    - [What to check](#what-to-check)
+    - [Typical symptoms](#typical-symptoms)
+  - [3. Image Looks Correct, But Rows Are Missing or Repeated](#3-image-looks-correct-but-rows-are-missing-or-repeated)
+    - [Check](#check)
+    - [Rule reminder](#rule-reminder)
+  - [4. Image Is Correct but Flickers or Shows Ghosting](#4-image-is-correct-but-flickers-or-shows-ghosting)
+    - [Things to try](#things-to-try)
+    - [Also check](#also-check)
+  - [5. Panel Updates Sporadically or Only Every Few Frames](#5-panel-updates-sporadically-or-only-every-few-frames)
+  - [6. Colors Look Wrong or Are Too Dim / Too Bright](#6-colors-look-wrong-or-are-too-dim--too-bright)
+    - [Check](#check-1)
+    - [How to verify](#how-to-verify)
+  - [7. Problems While Using TEMPORAL\_DITHERING](#7-problems-while-using-temporal_dithering)
+    - [If you see:](#if-you-see)
+  - [8. When Nothing Makes Sense Anymore 😄](#8-when-nothing-makes-sense-anymore-)
 
 # HUB75 DMA-Based Driver
 
@@ -229,15 +256,14 @@ The HUB75 driver takes advantage of this: its PIO/DMA pipeline packs each pixel 
 
 ---
 
-### Increased Perceptual Colour Depth (Temporal Dithering)
-
+### Increased Perceptual Colour Depth (Temporal Dithering) - Experimental ⚠️
 To go beyond native 10-bit precision without changing the data format, the driver employs  **temporal dithering** (an accumulator-based technique):
 
-- Each pixel maintains a high-precision accumulator (e.g. 16 bits).  
+- Each pixel maintains a high-precision accumulator (e.g. 12 bits).  
 - On every refresh, the top 10 bits are sent to the panel, while the lower bits remain stored.  
 - Over successive frames, these residuals accumulate, averaging out to produce smoother gradients.  
 
-This results in a perceived colour depth equivalent to **12–14 bits per channel**.
+This results in a perceived colour depth equivalent to **12 bits per channel**.
 
 ### ✅ Advantages
 
@@ -365,7 +391,7 @@ For any questions or discussions, feel free to contribute or open an issue!
 
 # Prerequisites for the Hub75 Driver
 
-This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **64×32, 32×32**, or other HUB75-compatible panels.
+This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **128x64, 64×32, 32×32, 32x16**, or other HUB75-compatible panels by configuring c preprocessor defines in file hub75.hpp.
 
 The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks**.
 
@@ -445,71 +471,120 @@ Clock, Latch, and OE pins may be freely chosen.
 #define OEN_PIN          2
 ```
 
-## How to Use a 64×32 HUB75 Matrix Panel
+---
 
-The Hub75 driver is designed for 64×64 panels, but it also supports **64×32 panels** (half the height) and other panel dimensions e.g. **128x64**.  
-The electrical connections for 64x32 panels are nearly identical to 64x64 panels — the difference lies in how rows are addressed and how the frame buffer is filled.
+
+# Configuring Your HUB75 LED Matrix Panel
+
+All panel-specific configuration is done in **`hub75.hpp`**.
+The goal is to describe your panel’s **geometry**, **scan method**, and **electronics** so the driver can map pixels correctly and drive the panel reliably.
+
+This section walks you through the configuration **step by step**, starting from the most obvious parameters (panel size) to the more subtle ones (scan rate, driver chip quirks).
+
+---
+
+## Step 1 — Panel Dimensions
+
+Every configuration starts with the **physical size** of your panel:
+
+```cpp
+#define MATRIX_PANEL_WIDTH  64
+#define MATRIX_PANEL_HEIGHT 64
+```
+
+These values determine the memory usage of the frame buffer.
+
+---
 
 ### Wiring
 
-In file `hub75_driver.cpp` use the same pin definitions as for a 64×64 panel, **except** for the `ROWSEL_N_PINS` definition which must be changed to `4` (A0–A3). Address line **A4 is not connected**.
+The physical wiring is essentially identical for most HUB75 panels. In file **hub75.hpp** the `ROWSEL_N_PINS` definition must be adapted to the number of address lines of your board. 
 
    ```cpp
    // Default wiring of HUB75 matrix to RP2350
    #define DATA_BASE_PIN    0   // first color data pin
    #define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
    #define ROWSEL_BASE_PIN  6   // first row-select (address) pin
-   #define ROWSEL_N_PINS    4   // number of row-select pins (A0–A3)
+   #define ROWSEL_N_PINS    5   // ADAPT TO THE NUMBER OF ROW-SELECT ADDRESS PINS ON YOUR PANEL
    #define CLK_PIN          11  // clock
    #define STROBE_PIN       12  // latch (LAT)
    #define OEN_PIN          13  // output enable (OE)
    ```
 
-### Initialization of Matrix Panel Dimension
+The value in **ROWSEL_N_PINS** defines the number of address lines defined as output pins. These output pins receive the address information of the current row that is to be updated. Internally, this value is passed to the PIO state machine to control how many address bits are output per row. It might help to have a look at the configuration examples below if the documentation is to vague or unclear with respect to this topic.
 
-At the top of file `hub75_driver.cpp` set the `MATRIX_PANEL_HEIGHT` to the height of the panel (32 in this example).
+## Step 2 — Scan Rate and Rows Lit Simultaneously
 
-   ```cpp
-   #define MATRIX_PANEL_WIDTH 64
-   #define MATRIX_PANEL_HEIGHT 32
-   #define OFFSET MATRIX_PANEL_WIDTH *(MATRIX_PANEL_HEIGHT >> 1)
-   ```
+HUB75 panels are multiplexed: **not all rows are lit at once**. The matrix panel name usually contains a segment which reads something like *-32S-*, *-16S-*, *-8S-*, etc. as in **P3-64x64-32S-V2.0**.
 
-### Frame Buffer Layout
+Internally, the driver works with the concept of **multiplexed rows**:
+this is the number of physical rows that are driven simultaneously for one row address.
 
-- A 64×32 panel uses half the memory of a 64×64 panel.
-- Each refresh cycle addresses 16 row pairs (instead of 32).
-- The driver automatically adjusts its addressing logic based on the height you specify.
+The hub75 driver deduces the number of multiplexed rows from the following rule.
 
-### Practical Notes
+### Rule
 
-Not all of the demo effects will show correctly for a 64x32 matrix panel. The first two demo effects use image data for a 64x64 layout. You will see some output, but it will look weird.
+> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
 
-The `bouncing balls` effect will not show the complete text as the position is hard coded. The `fire_effect` and the `rotator`might look as they should be.
+### Examples
 
-Have fun with adapting the source code or with implementing your own effects.
+#### Panel with 64×64 height and width, 1/32 scan (-32S-), 5 Address lines (A, B, C, D, E) -> (2 rows lit)
 
-Do not hesitate to contact me - I will gladly answer your questions!
+> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
 
-## Scan Rate Support
+> $multiplexed\_rows=64/2^{5}$ = 64/32 = 2
 
-### Multiplexing Modes (Rows Lit Simultaneously)
+#### Panel with 32×64 height and width, 1/16 scan (-16S-), 4 Address lines (A, B, C, D) -> (2 rows lit)
 
-Many HUB75 panel datasheets describe the **scan rate** using terms like *1:16* or *1:32*.  
-This can be confusing, because the actual driver behavior is about **how many rows are lit simultaneously**.
+> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
 
-To make things explicit, this driver uses **multiplexing defines**:
+> $multiplexed\_rows=32/2^{4}$ = 64/16 = 2
 
-| Multiplexing Mode                 | Rows Lit at Once | Typical Datasheet Scan Rate | Example Panels               |
-|-----------------------------------|------------------|-----------------------------|------------------------------|
-| `#define HUB75_MULTIPLEX_2_ROWS`  | 2 rows           | 1:32                        | 64×64 (1:32), 64×32 (1:16)   |
-| `#define HUB75_P3_1415_16S_64X64_S31` | 4 rows           | 1:16 or 1:8                 | 64×64 (1:16), 64×32 (1:8)    |
-| `#define HUB75_P10_3535_16X32_4S` | 4 rows           | 1:4                         | 32x16 (1:4)                  |
+So, the number of multiplexed lines in both examples is $2$, even though the scan parameters (-32S- and -16S-) differ. Internally, the driver uses the number of multiplexed rows to resolve this ambiguity.
 
-### Example: 64×64 panel, 1:32 scan
+In both examples you should choose **HUB75_MULTIPLEX_2_ROWS** 
 
-- Datasheet says **1:32** (one out of 32 row groups active at a time).  
-- This means **2 rows lit simultaneously**.  
+```c
+#define HUB75_MULTIPLEX_2_ROWS
+```
+
+For panels **HUB75_P10_3535_16X32_4S** the calculation looks like this (the number of rows can easily be counted on the panel 😊):
+
+> $multiplexed\_rows=MATRIX\_PANEL\_HEIGHT/2^{ROWSEL\_N\_PINS}$
+
+> $multiplexed\_rows=16/2^{2}$ = 16/4 = 4
+
+In summary, the number of address lines on this board is $2$ which corresponds to $4$ rows being multiplexed.
+
+> ⚠️ The multiplexing define (e.g. `HUB75_MULTIPLEX_2_ROWS`) does **two things**:
+> 
+> 1. it defines how many rows are multiplexed **and** 
+> 
+> 2. selects the corresponding pixel mapping
+> 
+> The same applies to `HUB75_P10_3535_16X32_4S` and `HUB75_P3_1415_16S_64X64_S31`.
+
+---
+
+## Step 3 — Panel Pixel Mapping Type
+
+Different panels wire pixels differently internally.
+This driver provides **predefined mapping modes** for known layouts.
+
+Select **exactly one**:
+
+```cpp
+#define HUB75_MULTIPLEX_2_ROWS
+// #define HUB75_P10_3535_16X32_4S
+// #define HUB75_P3_1415_16S_64X64_S31
+```
+
+If unsure:
+
+* start with `HUB75_MULTIPLEX_2_ROWS`
+* if the image looks scrambled, try another mapping
+
+---
 
 ### How to Configure
 
@@ -567,7 +642,9 @@ In your build, define the scan rate that matches your panel.
 #define ROWSEL_N_PINS 2
 ``` 
 
-Sometimes the name of the panel gives you a lot of information how the configuration has to be done.
+Note that the panel name usually does not encode the internal pixel wiring or the driver IC type.
+These must be determined visually or experimentally.
+But sometimes the name of the panel gives you a lot of information how the configuration has to be done.
 Here an example for a **P3-64*64-32S-V2.0** panel.
 
 ```c
@@ -585,6 +662,104 @@ Here an example for a **P3-64*64-32S-V2.0** panel.
 #define PANEL_TYPE PANEL_RUL6024
 ```
 
+---
+
+## Step 4 — Panel Driver Chip Type
+
+Some panels contain special driver ICs that require an **initialization sequence**.
+
+```cpp
+#define PANEL_GENERIC  0
+#define PANEL_FM6126A  1
+#define PANEL_RUL6024  2
+
+#define PANEL_TYPE PANEL_GENERIC
+```
+
+### How to choose
+
+* Look at the **back of the panel**
+* If you see a chip labeled **FM6126A** or **RUL6024**, select it
+* Otherwise, use `PANEL_GENERIC`
+
+---
+
+## Step 5 — Strobe Polarity (`INVERTED_STB`)
+
+Most panels use a **non-inverted latch signal**, but some boards invert it.
+
+```cpp
+#define INVERTED_STB false
+```
+
+If:
+
+* the panel flickers,
+* or only updates sporadically,
+
+try:
+
+```cpp
+#define INVERTED_STB true
+```
+
+---
+
+## Step 6 — State Machine Clock Divider (`SM_CLOCKDIV`)
+
+By default, the driver runs the PIO state machine at full speed.
+
+Some panels benefit from a slower clock to reduce:
+
+* ghosting
+* flicker
+* brightness artifacts
+
+```cpp
+#define SM_CLOCKDIV 0 // 0 = disabled
+#if SM_CLOCKDIV != 0
+// To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
+// For panels with height less or equal to 16 rows try a factor of 8.0f
+// For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
+#define SM_CLOCKDIV 1.0f
+#endif
+```
+
+---
+
+## Step 8 — Temporal Dithering (Optional)
+
+> ⚠️ TEMPORAL_DITHERING is experimental - development is still in progress!
+
+To activate TEMPORAL_DITHERING switch from 
+
+```cpp
+#undef TEMPORAL_DITHERING
+```
+
+to
+
+```cpp
+#define TEMPORAL_DITHERING
+```
+
+
+**Use it if:**
+
+* you want smoother gradients
+* you accept slightly higher CPU usage
+
+**Do not use it if:**
+
+* you need maximum refresh stability
+* you are debugging mapping issues
+
+> This feature is experimental!
+
+---
+
+
+
 ### Pixel Mapping
 
 Each panel type has it's own pixel mapping. 
@@ -595,12 +770,12 @@ Generic hub75 led matrix panels with 2 rows lit simultaneously. Five address lin
 
 The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
 
-Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Prior to this **offset** had been set to <em>(MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2)</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
+Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel. Prior to this **offset** had been set to <em>MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
 
 ```c
    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-   for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
-   {
+   constexpr size_t offset = pixels / 2;
+   for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j) {
       frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
       frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
    }
@@ -608,7 +783,7 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
 
 ***HUB75_P10_3535_16X32_4S Mapping***
 
-Outdoor led matrix panel with 4 rows lit simultaneously. Two address lines.
+Outdoor led matrix panel with 16 rows and 32 pixels per row. 4 rows lit simultaneously. So only two address lines needed to address a quarter of rows (0, 1, 2, 3). This is also mirrored in the available address lines (A, B) on the matrix panel board.
 
 **ToDo** Describe pixel mapping in detail!
 
@@ -658,8 +833,7 @@ Outdoor led matrix panel with 4 rows lit simultaneously. Two address lines.
    //                          → quarters 2 (upper) + 4 (lower)
    // Note: The selector bit in j depends only on panel width (column pairing), not on HUB75 scan rate.
 
-   for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
-   {
+   for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2) {
       int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
                                              : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
 
@@ -676,7 +850,7 @@ Outdoor led matrix panel with 4 rows lit simultaneously. Two address lines.
 
 ***HUB75_P3_1415_16S_64X64_S31 Mapping***
 
-Outdoor led matrix panel with 4 rows lit simultaneously. Four address lines.
+Outdoor led matrix panel with 64 rows and each row has 64 pixels. 16S means 64 / 16 = 4 rows lit simultaneously. Four address lines (A, B, C, D) are available on the led matrix panel board, which confirms this calculation.
 
 Driving ICs are MBI5253 / ICND2055 / ICDN2065 / ICND2153S / CFD325 / MBI5264 / CFD555 / ICND2165.
 
@@ -711,18 +885,217 @@ followed by an alternating sequence of the corresponding line from the first and
       dst[line_offset + 0] = LUT_MAPPING(quarter1, src[quarter1]); quarter1++;
       dst[line_offset + 1] = LUT_MAPPING(quarter3, src[quarter3]); quarter3++;
 
-      dst += 2;
+      dst += 2; // move to next output pixels
       p++;
 
       // End of logical row
-      if (p == width)
-      {
+      if (p == width) {
             p = 0;
             line++;
             dst += line_offset; // advance to next scan-row pair
       }
    }
 ```
+
+### Practical Notes
+
+Not all of the demo effects will show correctly for matrix panels with a format different to 64x64 pixels. The first two demo effects use image data for a 64x64 layout. You will see some output, but it will look weird.
+
+The `bouncing balls` effect will not show the complete text as the position is hard coded. The `fire_effect` and the `rotator`might look as they should be.
+
+Have fun with adapting the source code or with implementing your own effects.
+
+Do not hesitate to contact me - I will gladly answer your questions!
+
+---
+
+# Troubleshooting
+
+If your panel does not behave as expected, do **not** change multiple configuration options at once.
+Most issues can be isolated by checking **one dimension at a time**.
+
+The sections below are ordered from **most common** to **least common** problems.
+
+---
+
+## 1. Panel Stays Completely Dark
+
+### Check the obvious first
+
+* Is the panel powered with the **correct voltage** (usually 5 V)?
+* Is the power supply strong enough (HUB75 panels can draw several amps)?
+* Is `OEN_PIN` wired correctly and not permanently disabling output?
+
+### Configuration checks
+
+* Verify `MATRIX_PANEL_WIDTH` and `MATRIX_PANEL_HEIGHT`
+* Verify `ROWSEL_N_PINS` matches the number of address pins on the panel (A, B, C, …)
+
+If `ROWSEL_N_PINS` is too large or too small, **no rows will be selected correctly**.
+
+---
+
+## 2. Panel Lights Up, But Only Shows Noise or Garbage
+
+This usually indicates a **pixel mapping mismatch**.
+
+### What to check
+
+* Try a different mapping define:
+
+  ```cpp
+  #define HUB75_MULTIPLEX_2_ROWS
+  // #define HUB75_P10_3535_16X32_4S
+  // #define HUB75_P3_1415_16S_64X64_S31
+  ```
+
+### Typical symptoms
+
+| Symptom                       | Likely cause                     |
+| ----------------------------- | -------------------------------- |
+| Completely scrambled image    | Wrong mapping define             |
+| Image mirrored or interleaved | Wrong internal wiring assumption |
+| Repeating blocks or patterns  | Mapping partially correct        |
+
+> 💡 If the image is *stable but wrong*, the scan rate is likely correct and only the mapping needs adjustment.
+
+---
+
+## 3. Image Looks Correct, But Rows Are Missing or Repeated
+
+This usually points to a **row addressing issue**.
+
+### Check
+
+* `ROWSEL_N_PINS`
+* Panel height (`MATRIX_PANEL_HEIGHT`)
+
+### Rule reminder
+
+```
+multiplexed_rows = MATRIX_PANEL_HEIGHT / 2^ROWSEL_N_PINS
+```
+
+If this value does not match the panel’s actual multiplexing, rows will be:
+
+* skipped
+* duplicated
+* shifted
+
+---
+
+## 4. Image Is Correct but Flickers or Shows Ghosting
+
+This is typically a **timing issue**.
+
+### Things to try
+
+1. Enable and tune `SM_CLOCKDIV`:
+
+   ```cpp
+   #define SM_CLOCKDIV 1.0f
+   ```
+
+2. Increase the divider if necessary:
+
+   * ≤ 16 rows → try `8.0f`
+   * ≤ 32 rows → try `2.0f` or `4.0f`
+
+### Also check
+
+* Power supply quality
+* Cable length and signal integrity
+* Ground connection between MCU and panel
+
+---
+
+## 5. Panel Updates Sporadically or Only Every Few Frames
+
+This often indicates **strobe polarity mismatch**.
+
+Try
+
+```cpp
+#define INVERTED_STB true
+```
+
+If the panel suddenly becomes stable, the latch signal is inverted on your board.
+
+---
+
+## 6. Colors Look Wrong or Are Too Dim / Too Bright
+
+### Check
+
+* Panel driver chip type:
+
+  ```cpp
+  #define PANEL_TYPE PANEL_GENERIC
+  // #define PANEL_FM6126A
+  // #define PANEL_RUL6024
+  ```
+
+If the panel contains an FM6126A or RUL6024 chip and is not initialized correctly:
+
+* brightness may be wrong
+* colors may look distorted
+* output may be unstable
+
+### How to verify
+
+* Inspect the **back of the panel**
+* Look for chip markings (FM6126A, RUL6024)
+
+---
+
+## 7. Problems While Using TEMPORAL_DITHERING
+
+Temporal dithering increases perceived color depth but also increases complexity.
+
+### If you see:
+
+* flicker
+* unstable brightness
+* strange artifacts
+
+Disable it first:
+
+```cpp
+#undef TEMPORAL_DITHERING
+```
+
+> ⚠️ Always debug **mapping and scan issues first**, then enable temporal dithering later.
+
+---
+
+## 8. When Nothing Makes Sense Anymore 😄
+
+Follow this **minimal recovery procedure**:
+
+1. Use the simplest known-good configuration:
+
+   ```cpp
+   #define HUB75_MULTIPLEX_2_ROWS
+   #define PANEL_TYPE PANEL_GENERIC
+   #undef TEMPORAL_DITHERING
+   #define SM_CLOCKDIV 0
+   ```
+
+2. Verify:
+
+   * correct width and height
+   * correct `ROWSEL_N_PINS`
+
+3. Use a **simple test pattern**:
+
+   * solid colors
+   * vertical and horizontal stripes
+
+4. Change **one parameter at a time**
+
+---
+
+
 
 
 
