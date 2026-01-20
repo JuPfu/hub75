@@ -437,8 +437,8 @@ static void setup_dma_transfers()
     dma_input_channel_setup(oen_chan, 1, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
 #if SM_CLOCKDIV != 0
-    pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
-    pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
+    pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIVFACTOR, 1.0f));
+    pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIVFACTOR, 1.0f));
 #endif
 
     dma_channel_set_read_addr(dummy_pixel_chan, dummy_pixel_data, false);

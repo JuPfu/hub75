@@ -70,7 +70,7 @@
 // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
 // For panels with height less or equal to 16 rows try a factor of 8.0f
 // For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-#define SM_CLOCKDIV 1.0f
+#define SM_CLOCKDIVFACTOR 2.0f
 #endif
 
 // --- modifications below this line might imply changes in source code ---
