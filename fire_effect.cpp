@@ -34,14 +34,7 @@ void FireEffect::burn()
         set_pen(c, c, c);
       }
 
-      if (landscape)
-      {
-        pixel(Point(x, y));
-      }
-      else
-      {
-        pixel(Point(y, x));
-      }
+      pixel(Point(x, y));
 
       // update this pixel by averaging the below pixels
       float average = (get(x, y) + get(x, y + 2) + get(x, y + 1) + get(x - 1, y + 1) + get(x + 1, y + 1)) / 5.0f;
