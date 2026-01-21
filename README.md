@@ -631,6 +631,15 @@ In your build, define the scan rate that matches your panel.
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
+// 
+#define SM_CLOCKDIV 1
+#if SM_CLOCKDIV != 0
+// To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
+// For panels with height less or equal to 16 rows try a factor of 8.0f
+// For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
+// Even for panels with height less or equal to 64 rows a factor of 2.0f can prevent flicker!
+#define SM_CLOCKDIVFACTOR 2.0f
+#endif
 
 
 // Example for a 32×16 panel (1/4 scan) - 4 rows lit simultaneously
@@ -641,6 +650,15 @@ In your build, define the scan rate that matches your panel.
 // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
 // That is 4 equals 2 to the power of 2 -> we need 2 row select pins  
 #define ROWSEL_N_PINS 2
+
+#define SM_CLOCKDIV 1
+#if SM_CLOCKDIV != 1
+// To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
+// For panels with height less or equal to 16 rows try a factor of 8.0f
+// For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
+// Even for panels with height less or equal to 64 rows a factor of 2.0f can prevent flicker!
+#define SM_CLOCKDIVFACTOR 20.0f
+#endif
 ``` 
 
 Note that the panel name usually does not encode the internal pixel wiring or the driver IC type.
