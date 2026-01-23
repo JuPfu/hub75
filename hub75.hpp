@@ -5,8 +5,12 @@
 // See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel
 
 // Set MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT to the width and height of your matrix panel!
+#ifndef MATRIX_PANEL_WIDTH
 #define MATRIX_PANEL_WIDTH 64
+#endif
+#ifndef MATRIX_PANEL_HEIGHT
 #define MATRIX_PANEL_HEIGHT 64
+#endif
 
 // Wiring of the HUB75 matrix
 #ifndef DATA_BASE_PIN // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
@@ -43,12 +47,14 @@
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
 //
-#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
-// #define HUB75_P10_3535_16X32_4S // four rows lit simultaneously
+// #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
+// #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
 // #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
-
+//
+// Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
+// Only define default if none of the mapping modes are already defined
 #if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
-#error "You must define HUB75_MULTIPLEX_2_ROWS or HUB75_P10_3535_16X32_4S or HUB75_P3_1415_16S_64X64_S31 to match your panels type!"
+#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
 #endif
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
@@ -65,12 +71,13 @@
 // TEMPORAL_DITHERING is experimental - development is still in progress
 #undef TEMPORAL_DITHERING // set to '#define TEMPORAL_DITHERING' to use temporal dithering
 
-#define SM_CLOCKDIV 0
+#define SM_CLOCKDIV 1
 #if SM_CLOCKDIV != 0
 // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
 // For panels with height less or equal to 16 rows try a factor of 8.0f
 // For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-#define SM_CLOCKDIVFACTOR 2.0f
+// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+#define SM_CLOCKDIVFACTOR 1.0f
 #endif
 
 // --- modifications below this line might imply changes in source code ---
