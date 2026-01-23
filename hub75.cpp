@@ -598,6 +598,11 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
         }
 #elif defined HUB75_P10_3535_16X32_4S
+        // Two cases we need to support in this project:
+        // - 32x16 / 32x32 "single-chain width" (MATRIX_PANEL_WIDTH == 32): use the library's original mapping math.
+        // - 64x16 (two 32x16 panels chained horizontally): original mapping breaks and needs per-panel mapping.
+
+#if MATRIX_PANEL_WIDTH == 32
         int line = 0;
         int counter = 0;
 
@@ -628,6 +633,74 @@ __attribute__((optimize("unroll-loops"))) void update(
                 ++line;
             }
         }
+#else
+        // Per-panel chained mapping (assumes chained horizontally as N x 32x16).
+        constexpr int PANEL_W = 32;
+        constexpr int PANEL_H = 16;
+        static_assert(MATRIX_PANEL_HEIGHT == PANEL_H, "Chained P10 horizontal mapping currently supports 16px height");
+        static_assert((MATRIX_PANEL_WIDTH % PANEL_W) == 0, "P10 chained mapping requires width multiple of 32");
+
+        constexpr int PANELS_X = MATRIX_PANEL_WIDTH / PANEL_W;
+
+        constexpr int COLUMN_PAIRS_32 = PANEL_W >> 1;                    // 16
+        constexpr int HALF_PAIRS_32 = COLUMN_PAIRS_32 >> 1;              // 8
+        constexpr int PAIR_HALF_BIT_32 = HALF_PAIRS_32;                  // 8
+        constexpr int PAIR_HALF_SHIFT_32 = __builtin_ctz(HALF_PAIRS_32); // 3
+
+        constexpr int ROW_STRIDE_32 = PANEL_W;
+        constexpr int ROWS_PER_GROUP_32 = PANEL_H / SCAN_GROUPS;
+        constexpr int GROUP_ROW_OFFSET_32 = ROWS_PER_GROUP_32 * ROW_STRIDE_32;
+        constexpr int HALF_PANEL_OFFSET_32 = (PANEL_H >> 1) * ROW_STRIDE_32;
+
+        constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+        constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
+
+        // Optional 8-column-group permutation compensation for MATRIX_PANEL_WIDTH==64.
+        auto remap_x_if_needed = [](int x_phys) -> int
+        {
+#if MATRIX_PANEL_WIDTH == 64
+            const int g = x_phys >> 3;                     // 0..7 (8-column groups)
+            const int in = x_phys & 0x7;                   // 0..7 within group
+            const int g_rl1 = ((g << 1) & 0x7) | (g >> 2); // rotl3(g, 1)
+            return (g_rl1 << 3) | in;
+#else
+            return x_phys;
+#endif
+        };
+
+        (void)PANELS_X; // silence unused warning on some toolchains
+
+        for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+        {
+            const int scan_line = j / COLUMN_PAIRS;
+            const int pair_in_line = j - (scan_line * COLUMN_PAIRS);
+
+            const int panel = pair_in_line / (PANEL_W >> 1); // 0..PANELS_X-1
+            const int pair_local = pair_in_line - (panel * (PANEL_W >> 1));
+
+            const int j32 = scan_line * (PANEL_W >> 1) + pair_local;
+            const int line32 = scan_line;
+
+            int32_t index32 = !(j32 & PAIR_HALF_BIT_32) ? (j32 - (line32 << PAIR_HALF_SHIFT_32))
+                                                        : (GROUP_ROW_OFFSET_32 + j32 - ((line32 + 1) << PAIR_HALF_SHIFT_32));
+
+            const int x32 = index32 % PANEL_W;
+            const int y32 = index32 / PANEL_W;
+            const int x_phys = (panel * PANEL_W) + x32;
+            const int x_logical = remap_x_if_needed(x_phys);
+            const int src_index = (y32 * MATRIX_PANEL_WIDTH) + x_logical;
+
+            const int index32_lo = index32 + HALF_PANEL_OFFSET_32;
+            const int x32_lo = index32_lo % PANEL_W;
+            const int y32_lo = index32_lo / PANEL_W;
+            const int x_phys_lo = (panel * PANEL_W) + x32_lo;
+            const int x_logical_lo = remap_x_if_needed(x_phys_lo);
+            const int src_index_lo = (y32_lo * MATRIX_PANEL_WIDTH) + x_logical_lo;
+
+            frame_buffer[fb_index] = LUT_MAPPING(src_index, src[src_index]);
+            frame_buffer[fb_index + 1] = LUT_MAPPING(src_index_lo, src[src_index_lo]);
+        }
+#endif
 #elif defined HUB75_P3_1415_16S_64X64_S31
         constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
         constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
@@ -695,6 +768,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i + 1] = LUT_MAPPING_RGB(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
 #elif defined HUB75_P10_3535_16X32_4S
+#if MATRIX_PANEL_WIDTH == 32
     int line = 0;
     int counter = 0;
 
@@ -726,6 +800,71 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
             ++line;
         }
     }
+#else
+    // Per-panel chained mapping (assumes chained horizontally as N x 32x16), BGR byte source.
+    constexpr int PANEL_W = 32;
+    constexpr int PANEL_H = 16;
+    static_assert(MATRIX_PANEL_HEIGHT == PANEL_H, "Chained P10 horizontal mapping currently supports 16px height");
+    static_assert((MATRIX_PANEL_WIDTH % PANEL_W) == 0, "P10 chained mapping requires width multiple of 32");
+
+    constexpr int COLUMN_PAIRS_32 = PANEL_W >> 1;
+    constexpr int HALF_PAIRS_32 = COLUMN_PAIRS_32 >> 1;
+    constexpr int PAIR_HALF_BIT_32 = HALF_PAIRS_32;
+    constexpr int PAIR_HALF_SHIFT_32 = __builtin_ctz(HALF_PAIRS_32);
+
+    constexpr int ROWS_PER_GROUP_32 = PANEL_H / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET_32 = ROWS_PER_GROUP_32 * PANEL_W;
+    constexpr int HALF_PANEL_OFFSET_32 = (PANEL_H >> 1) * PANEL_W;
+
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+    constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
+
+    auto remap_x_if_needed = [](int x_phys) -> int
+    {
+#if MATRIX_PANEL_WIDTH == 64
+        const int g = x_phys >> 3;
+        const int in = x_phys & 0x7;
+        const int g_rl1 = ((g << 1) & 0x7) | (g >> 2);
+        return (g_rl1 << 3) | in;
+#else
+        return x_phys;
+#endif
+    };
+
+    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+    {
+        const int scan_line = j / COLUMN_PAIRS;
+        const int pair_in_line = j - (scan_line * COLUMN_PAIRS);
+
+        const int panel = pair_in_line / (PANEL_W >> 1);
+        const int pair_local = pair_in_line - (panel * (PANEL_W >> 1));
+
+        const int j32 = scan_line * (PANEL_W >> 1) + pair_local;
+        const int line32 = scan_line;
+
+        int32_t index32 = !(j32 & PAIR_HALF_BIT_32)
+                              ? (j32 - (line32 << PAIR_HALF_SHIFT_32))
+                              : (GROUP_ROW_OFFSET_32 + j32 - ((line32 + 1) << PAIR_HALF_SHIFT_32));
+
+        const int x32 = index32 % PANEL_W;
+        const int y32 = index32 / PANEL_W;
+        const int x_phys = (panel * PANEL_W) + x32;
+        const int x_logical = remap_x_if_needed(x_phys);
+        const int src_px = (y32 * MATRIX_PANEL_WIDTH) + x_logical;
+        const int src_b = src_px * 3;
+
+        const int index32_lo = index32 + HALF_PANEL_OFFSET_32;
+        const int x32_lo = index32_lo % PANEL_W;
+        const int y32_lo = index32_lo / PANEL_W;
+        const int x_phys_lo = (panel * PANEL_W) + x32_lo;
+        const int x_logical_lo = remap_x_if_needed(x_phys_lo);
+        const int src_px_lo = (y32_lo * MATRIX_PANEL_WIDTH) + x_logical_lo;
+        const int src_b_lo = src_px_lo * 3;
+
+        frame_buffer[fb_index] = LUT_MAPPING_RGB(src_b, src[src_b], src[src_b + 1], src[src_b + 2]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB(src_b_lo, src[src_b_lo], src[src_b_lo + 1], src[src_b_lo + 2]);
+    }
+#endif
 #elif defined HUB75_P3_1415_16S_64X64_S31
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     constexpr uint line_width = 2 * MATRIX_PANEL_WIDTH;
