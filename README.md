@@ -637,8 +637,8 @@ In your build, define the scan rate that matches your panel.
 // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
 // For panels with height less or equal to 16 rows try a factor of 8.0f
 // For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-// Even for panels with height less or equal to 64 rows a factor of 2.0f can prevent flicker!
-#define SM_CLOCKDIVFACTOR 2.0f
+// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+#define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 
 
@@ -652,12 +652,12 @@ In your build, define the scan rate that matches your panel.
 #define ROWSEL_N_PINS 2
 
 #define SM_CLOCKDIV 1
-#if SM_CLOCKDIV != 1
+#if SM_CLOCKDIV != 0
 // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
 // For panels with height less or equal to 16 rows try a factor of 8.0f
 // For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-// Even for panels with height less or equal to 64 rows a factor of 2.0f can prevent flicker!
-#define SM_CLOCKDIVFACTOR 20.0f
+// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+#define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 ``` 
 
@@ -740,7 +740,8 @@ Some panels benefit from a slower clock to reduce:
 // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
 // For panels with height less or equal to 16 rows try a factor of 8.0f
 // For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-#define SM_CLOCKDIV 1.0f
+// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+#define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 ```
 
@@ -1033,7 +1034,7 @@ This is typically a **timing issue**.
 1. Enable and tune `SM_CLOCKDIV`:
 
    ```cpp
-   #define SM_CLOCKDIV 1.0f
+   #define SM_CLOCKDIV_FACTOR 1.0f
    ```
 
 2. Increase the divider if necessary:
