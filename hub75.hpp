@@ -77,7 +77,7 @@
 // For panels with height less or equal to 16 rows try a factor of 8.0f
 // For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
 // Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
-#define SM_CLOCKDIVFACTOR 1.0f
+#define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 
 // --- modifications below this line might imply changes in source code ---
