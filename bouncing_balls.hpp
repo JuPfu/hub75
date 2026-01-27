@@ -25,6 +25,8 @@ private:
     Pen mBG;
     Pen mWHITE;
 
+    struct Rect rect;
+
     void mCreateShapes(int quantityOfBalls);
 
 public:
@@ -41,7 +43,9 @@ public:
             mTextLocation = Point(10, 10);
         }
 
-        mBG = create_pen(0, 0, 0);
+        rect = {0, 0, (int32_t)width, (int32_t)height};
+
+        mBG = create_pen(0xEB, 0x89, 0x31);
         mWHITE = create_pen(250, 250, 250);
         set_font(&font14_outline);
     }

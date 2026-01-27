@@ -35,7 +35,7 @@ public:
         r = l / 2.0f;
     }
 
-    void draw_line()
+    void draw()
     {
         set_pen(0);
         clear();

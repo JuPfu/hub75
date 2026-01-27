@@ -3,10 +3,12 @@
 #include "bouncing_balls.hpp"
 #include <random>
 
-void BouncingBalls::bounce() {
+void BouncingBalls::bounce()
+{
     set_pen(mBG);
-    clear(); 
-    
+
+    rectangle(rect);
+
     int bound_w = bounds.w;
     int bound_h = bounds.h;
 
@@ -15,20 +17,24 @@ void BouncingBalls::bounce() {
         shape.x += shape.dx;
         shape.y += shape.dy;
 
-        if (shape.x - shape.r < 0) {
+        if (shape.x - shape.r < 0)
+        {
             shape.dx = -shape.dx;
             shape.x = shape.r;
         }
-        else if (shape.x + shape.r >= bound_w) {
+        else if (shape.x + shape.r >= bound_w)
+        {
             shape.dx = -shape.dx;
             shape.x = bound_w - shape.r;
         }
 
-        if (shape.y - shape.r < 0) {
+        if (shape.y - shape.r < 0)
+        {
             shape.dy = -shape.dy;
             shape.y = shape.r;
         }
-        else if (shape.y + shape.r >= bound_h) {
+        else if (shape.y + shape.r >= bound_h)
+        {
             shape.dy = -shape.dy;
             shape.y = bound_h - shape.r;
         }
@@ -59,7 +65,6 @@ void BouncingBalls::mCreateShapes(int quantityOfBalls)
             static_cast<uint8_t>(rand_r(gen)),
             rand_speed(gen),
             rand_speed(gen),
-            create_pen(rand_color(gen), rand_color(gen), rand_color(gen))
-        });
+            create_pen(rand_color(gen), rand_color(gen), rand_color(gen))});
     }
 }

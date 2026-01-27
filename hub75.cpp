@@ -877,9 +877,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     uint quarter4 = 3 * quarter;
 
     uint p = 0; // per line pixel counter
-
-    // Number of logical rows processed
-    uint line = 0;
+    uint line = 0; // Number of logical rows processed
 
     // Framebuffer write pointer
     volatile uint32_t *dst = frame_buffer;
@@ -887,22 +885,15 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
-        // even src lines
-        dst[0] = LUT_MAPPING_RGB(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]);
-        quarter2 += 3;
-        dst[1] = LUT_MAPPING_RGB(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]);
-        quarter4 += 3;
-        // odd src lines
-        dst[line_width + 0] = LUT_MAPPING_RGB(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
-        quarter1 += 3;
-        dst[line_width + 1] = LUT_MAPPING_RGB(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
-        quarter3 += 3;
+        dst[0] = LUT_MAPPING_RGB(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]); quarter2 += 3;
+        dst[1] = LUT_MAPPING_RGB(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]); quarter4 += 3;
+        dst[line_width + 0] = LUT_MAPPING_RGB(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]); quarter1 += 3;
+        dst[line_width + 1] = LUT_MAPPING_RGB(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]); quarter3 += 3;
 
         dst += 2;
-        p++;
 
         // End of logical row
-        if (p == width)
+        if (++p == width)
         {
             p = 0;
             line++;
