@@ -21,6 +21,7 @@
 #include "antialiased_line.hpp"
 #include "bouncing_balls.hpp"
 #include "rotator.cpp"
+#include "analog_clock.cpp"
 #include "fire_effect.hpp"
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
@@ -78,7 +79,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 6)
+    if (++demo_index > 7)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -114,13 +115,16 @@ int main()
 
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
-    // Create bouncing balls using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
+    // Create bouncing balls using pico_graphics functionality
     BouncingBalls bouncingBalls(10, MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
-    // Create rotating antialiased line using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
+    // Create rotating antialiased line using pico_graphics functionality
     Rotator rotator(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
-    // Create fire effect using pico_graphics functionality - image data is delivered in uint32_t array with 24-bit (rgb888) color data format
+    // Create analog clock using pico_graphics functionality
+    AnalogClock analogClock(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+
+    // Create fire effect using pico_graphics functionality
     FireEffect fireEffect = FireEffect(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
     HueValueSpectrum hueValueSpectrum = HueValueSpectrum(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
@@ -170,24 +174,27 @@ int main()
         }
         else if (demo_index == 3)
         {
-            // Image data is in r8, g8, b8 format
-            rotator.draw_line();
+            rotator.draw();
             update(&rotator);
         }
         else if (demo_index == 4)
+        {
+            analogClock.draw();
+            update(&analogClock);
+        }
+        else if (demo_index == 5)
         {
             // Image data is in r8, g8, b8 format
             hueValueSpectrum.drawShades();
             update(&hueValueSpectrum);
         }
-
-        else if (demo_index == 5)
+        else if (demo_index == 6)
         {
             // Vanessa Mai - image data is in b8, g8, r8 format
             // By Lanzunlimited, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=87037267
             update_bgr(vanessa_mai_64x64);
         }
-        else if (demo_index == 6)
+        else if (demo_index == 7)
         {
             // Image data is in r8, g8, b8 format
             pixelFill.fill(0, (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) - 1);

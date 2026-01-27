@@ -59,6 +59,7 @@ target_sources(hub75_driver PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/antialiased_line.cpp
         ${CMAKE_CURRENT_LIST_DIR}/fire_effect.cpp
         ${CMAKE_CURRENT_LIST_DIR}/rotator.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/analog_clock.cpp
         ${CMAKE_CURRENT_LIST_DIR}/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/rul6024.cpp
         ${CMAKE_CURRENT_LIST_DIR}/fm6126a.cpp
@@ -70,6 +71,7 @@ target_sources(hub75_driver PRIVATE
 target_link_libraries(hub75_driver
         pico_stdlib
         pico_multicore
+        pico_aon_timer
         hardware_pio
         hardware_dma
         hardware_timer
