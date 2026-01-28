@@ -16,6 +16,8 @@ private:
     uint h = 64;
 
     float r = 1.0f;
+    uint l = 1;
+
     float da = M_PI / 30.0f;
 
     float centerX = 0.0f;
@@ -30,9 +32,14 @@ private:
 
     int previous_second = second;
 
-    uint32_t col1 = 0x31A2F2;
-    uint32_t col2 = 0x11819d;
-    uint32_t col3 = 0xE06F8B;
+    constexpr static uint32_t hour_hand = 0x31A2F2;          // #31A2F2
+    constexpr static int32_t minute_hand = 0x11819d;         // #11819d
+    constexpr static uint32_t second_hand = 0xE06F8B;        // #E06F8B
+    constexpr static uint32_t second_shadow_hand = 0xBE2633; // #BE2633
+
+    constexpr static uint32_t shadow_hand = 0xffffff;  // #ffffff
+    constexpr static uint32_t main_ticks = 0xffffff;   // #ffffff
+    constexpr static uint32_t clock_digits = 0xF7E26B; // #F7E26B
 
 public:
     explicit AnalogClock(uint width = 64, uint height = 64) : AntialiasedLine(width, height), w(width), h(height)
@@ -40,7 +47,7 @@ public:
         centerX = (float)(w / 2);
         centerY = (float)(h / 2);
 
-        uint l = std::min(w, h);
+        l = std::min(w, h);
 
         r = l * (0.95f / 2.0f);
 
@@ -82,29 +89,28 @@ public:
             set_pen(0);
             clear();
 
-            set_pen(0x1B2632);
-            set_pen(0xF7E26B);
-            
-            text("12", Point(w / 2 - 7, 1), false, 0.5f, 0.0, false);
-            text("3", Point(w - 8, h / 2 - 7), false, 0.5f, 0.0, false);
-            text("6", Point(w / 2 - 2, h - 14), false, 0.5f, 0.0, false);
-            text("9", Point(1, h / 2 - 7), false, 0.5f, 0.0, false);
+            set_pen(clock_digits);
+
+            text("12", Point(l / 2 - 7, 1), false, 0.5f, 0.0, false);
+            text("3", Point(l - 8, l / 2 - 7), false, 0.5f, 0.0, false);
+            text("6", Point(l / 2 - 2, l - 14), false, 0.5f, 0.0, false);
+            text("9", Point(1, l / 2 - 7), false, 0.5f, 0.0, false);
 
             for (auto i = 0; i < 12; i++)
             {
                 if (i % 3 != 0)
                 {
-                    drawLine(c[i * 5] + centerX, s[i * 5] + centerY, c[i * 5] * 0.8f + centerX, s[i * 5] * 0.8f + centerY, 0xffffff);
+                    drawLine(c[i * 5] + centerX, s[i * 5] + centerY, c[i * 5] * 0.8f + centerX, s[i * 5] * 0.8f + centerY, main_ticks);
                 }
             }
 
-            int corrected_hour = hour * 5 + minute / 12;
-            drawLine(c[corrected_hour] * 0.1f + centerX + 1, s[corrected_hour] * 0.2f + centerY + 1, -c[corrected_hour] * 0.6f + centerX, -s[corrected_hour] * 0.6f + centerY, 0xffffff);
-            drawLine(c[corrected_hour] * 0.1f + centerX, s[corrected_hour] * 0.2f + centerY, -c[corrected_hour] * 0.6f + centerX, -s[corrected_hour] * 0.6f + centerY, col1);
-            drawLine(c[minute] * 0.15f + centerX + 1, s[minute] * 0.2f + centerY + 1, -c[minute] * 0.85f + centerX, -s[minute] * 0.85f + centerY, 0xffffff);
-            drawLine(c[minute] * 0.15f + centerX, s[minute] * 0.2f + centerY, -c[minute] * 0.85f + centerX, -s[minute] * 0.85f + centerY, col1);
-            drawLine(c[second] * 0.1f + centerX + 1, s[second] * 0.1f + centerY + 1, -c[second] * 0.85f + centerX, -s[second] * 0.85f + centerY, 0xBE2633);
-            drawLine(c[second] * 0.1f + centerX, s[second] * 0.1f + centerY, -c[second] * 0.85f + centerX, -s[second] * 0.85f + centerY, col3);
+            int corrected_hour = hour * 5 + minute / 12; // additionally move hour hand a little bit every 12 minutes between hour marks
+            drawLine(c[corrected_hour] * 0.1f + centerX + 1, s[corrected_hour] * 0.2f + centerY + 1, -c[corrected_hour] * 0.6f + centerX, -s[corrected_hour] * 0.6f + centerY, shadow_hand);
+            drawLine(c[corrected_hour] * 0.1f + centerX, s[corrected_hour] * 0.2f + centerY, -c[corrected_hour] * 0.6f + centerX, -s[corrected_hour] * 0.6f + centerY, hour_hand);
+            drawLine(c[minute] * 0.15f + centerX + 1, s[minute] * 0.2f + centerY + 1, -c[minute] * 0.85f + centerX, -s[minute] * 0.85f + centerY, shadow_hand);
+            drawLine(c[minute] * 0.15f + centerX, s[minute] * 0.2f + centerY, -c[minute] * 0.85f + centerX, -s[minute] * 0.85f + centerY, minute_hand);
+            drawLine(c[second] * 0.1f + centerX + 1, s[second] * 0.1f + centerY + 1, -c[second] * 0.85f + centerX, -s[second] * 0.85f + centerY, second_shadow_hand);
+            drawLine(c[second] * 0.1f + centerX, s[second] * 0.1f + centerY, -c[second] * 0.85f + centerX, -s[second] * 0.85f + centerY, second_hand);
         }
     }
 };
