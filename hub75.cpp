@@ -403,7 +403,7 @@ static void dma_input_channel_setup(uint channel,
     channel_config_set_transfer_data_size(&conf, dma_size);
     channel_config_set_read_increment(&conf, read_incr);
     channel_config_set_write_increment(&conf, false);
-    uint dreq = pio_get_dreq(pio_config.data_pio, pio_config.sm_data, true);
+    uint dreq = pio_get_dreq(pio, sm, true);
     channel_config_set_dreq(&conf, dreq);
 
     channel_config_set_chain_to(&conf, chain_to);
