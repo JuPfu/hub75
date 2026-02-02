@@ -98,7 +98,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 250MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    // set_sys_clock_khz(250000, true);
+    set_sys_clock_khz(250000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
