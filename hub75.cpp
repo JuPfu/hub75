@@ -66,9 +66,9 @@ static void setup_dma_transfers();
 static void setup_dma_irq();
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
-static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+static uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 // Control data for the output enable signal - keep volatile!
-static volatile uint32_t oen_finished_data = 0;
+static uint32_t oen_finished_data = 0;
 
 // Width and height of the HUB75 LED matrix
 static uint width;
@@ -98,9 +98,9 @@ typedef struct
 static PioConfig pio_config;
 
 // Variables for row addressing and bit plane selection
-static volatile uint32_t row_address = 0;
-static volatile uint32_t bit_plane = 0;
-static volatile uint32_t row_in_bit_plane = 0;
+static uint32_t row_address = 0;
+static uint32_t bit_plane = 0;
+static uint32_t row_in_bit_plane = 0;
 
 // Derived constants
 static const int ACC_SHIFT = (ACC_BITS - 10); // number of low bits preserved in accumulator
