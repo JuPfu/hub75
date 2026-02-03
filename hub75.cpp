@@ -55,7 +55,7 @@ static const uint16_t lut[256] = {
 #endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-volatile __attribute__((aligned(4))) uint32_t *frame_buffer; ///< Interwoven image data for examples;
+__attribute__((aligned(4))) uint32_t *frame_buffer; ///< Interwoven image data for examples;
 
 // Utility function to claim a DMA channel and panic() if there are none left
 static int claim_dma_channel(const char *channel_name);
@@ -645,7 +645,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         uint line = 0;
 
         // Framebuffer write pointer
-        volatile uint32_t *dst = frame_buffer;
+        uint32_t *dst = frame_buffer;
 
         // Each iteration processes 4 physical rows (2 scan-row pairs)
         while (line < (height >> 2))
@@ -743,7 +743,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     uint line = 0;
 
     // Framebuffer write pointer
-    volatile uint32_t *dst = frame_buffer;
+    uint32_t *dst = frame_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
