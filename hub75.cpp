@@ -125,7 +125,7 @@ inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row
 {
     // scaled_basis[bit_plane] already includes brightness scaling.
     // left shift by 5 to form the OEn-length encoding.
-    return row_address | (scaled_basis[bit_plane] << 8);
+    return row_address | (scaled_basis[bit_plane] << 5);
 }
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
