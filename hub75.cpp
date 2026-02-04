@@ -67,7 +67,7 @@ static void setup_dma_irq();
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
 static uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-// Control data for the output enable signal - keep volatile!
+// Control data for the output enable signal
 static uint32_t oen_finished_data = 0;
 
 // Width and height of the HUB75 LED matrix
@@ -405,6 +405,8 @@ static void dma_input_channel_setup(uint channel,
     channel_config_set_write_increment(&conf, false);
     uint dreq = pio_get_dreq(pio, sm, true);
     channel_config_set_dreq(&conf, dreq);
+
+    channel_config_set_high_priority(&conf, true);
 
     channel_config_set_chain_to(&conf, chain_to);
 
