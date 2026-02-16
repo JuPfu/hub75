@@ -13,9 +13,11 @@
 #include "hub75.hpp"
 
 // Example images
-#include "vanessa_mai_64x64.h"
+#if MATRIX_PANEL_HEIGHT == 64
 #include "taylor_swift_64x64.h"
+#else
 #include "matreshka_32x16.h"
+#endif
 
 // Example effects
 #include "antialiased_line.hpp"
@@ -79,7 +81,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 7)
+    if (++demo_index > 6)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -163,14 +165,11 @@ int main()
         {
             // Taylor Swift - image data is in b8, g8, r8 format
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-            if (MATRIX_PANEL_WIDTH == 64)
-            {
-                update_bgr(taylor_swift_64x64);
-            }
-            else
-            {
-                update_bgr(matreshka_32x16);
-            }
+#if MATRIX_PANEL_HEIGHT == 64
+            update_bgr(taylor_swift_64x64);
+#else
+            update_bgr(matreshka_32x16);
+#endif
         }
         else if (demo_index == 3)
         {
@@ -189,12 +188,6 @@ int main()
             update(&hueValueSpectrum);
         }
         else if (demo_index == 6)
-        {
-            // Vanessa Mai - image data is in b8, g8, r8 format
-            // By Lanzunlimited, CC BY-SA 4.0, https://commons.wikimedia.org/w/index.php?curid=87037267
-            update_bgr(vanessa_mai_64x64);
-        }
-        else if (demo_index == 7)
         {
             // Image data is in r8, g8, b8 format
             pixelFill.fill(0, (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) - 1);
