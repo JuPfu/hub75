@@ -28,47 +28,46 @@ set(PICO_BOARD pico2_w CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(hub75_driver C CXX ASM)
+project(hub75 C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
+add_executable(hub75 hub75_demo.cpp )
 
-add_executable(hub75_driver hub75_driver.cpp )
-
-pico_set_program_name(hub75_driver "hub75_driver")
-pico_set_program_version(hub75_driver "1.6")
+pico_set_program_name(hub75 "hub75_demo")
+pico_set_program_version(hub75 "1.6")
 
 set(PICO_PIO_VERSION 1)
-pico_set_float_implementation(hub75_driver pico)
+pico_set_float_implementation(hub75 pico)
 
 # Generate PIO header
-pico_generate_pio_header(hub75_driver ${CMAKE_CURRENT_LIST_DIR}/hub75.pio)
+pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(hub75_driver 0)
-pico_enable_stdio_usb(hub75_driver 1)
+pico_enable_stdio_uart(hub75 0)
+pico_enable_stdio_usb(hub75 1)
 
 add_subdirectory(common)
 add_subdirectory(libraries)
 
-target_sources(hub75_driver PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/hub75.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/bouncing_balls.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/antialiased_line.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/fire_effect.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/rotator.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/analog_clock.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/pixel_fill.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/rul6024.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/fm6126a.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/hue_value_spectrum.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/hub75_driver.cpp
+target_sources(hub75 PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/rotator.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/analog_clock.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/hue_value_spectrum.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/hub75_demo.cpp
         )
 
 # Add the standard library to the build
-target_link_libraries(hub75_driver
+target_link_libraries(hub75
         pico_stdlib
         pico_multicore
         pico_aon_timer
@@ -79,14 +78,16 @@ target_link_libraries(hub75_driver
         pico_graphics)
 
 if(PICO_CYW43_SUPPORTED)
-    target_link_libraries(hub75_driver
+    target_link_libraries(hub75
                           pico_cyw43_arch_none)
 endif()
 
 # Add the standard include files to the build
-target_include_directories(hub75_driver PRIVATE
+target_include_directories(hub75 PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src
+        ${CMAKE_CURRENT_LIST_DIR}/examples
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-pico_add_extra_outputs(hub75_driver)
+pico_add_extra_outputs(hub75)
 
