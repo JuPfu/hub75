@@ -1,5 +1,6 @@
 #include <cstdlib>
 #include <vector>
+#include <memory>
 
 #include "pico/stdlib.h"
 
@@ -55,7 +56,7 @@ static const uint16_t lut[256] = {
 #endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-__attribute__((aligned(4))) uint32_t *frame_buffer; ///< Interwoven image data for examples;
+std::unique_ptr<uint32_t[]> frame_buffer; ///< Interwoven image data for examples;
 
 // Utility function to claim a DMA channel and panic() if there are none left
 static int claim_dma_channel(const char *channel_name);
@@ -85,7 +86,7 @@ int oen_chan;
 int oen_finished_chan;
 
 // PIO configuration structure for state machine numbers and corresponding program offsets
-typedef struct
+static struct
 {
     uint sm_data;
     PIO data_pio;
@@ -93,9 +94,7 @@ typedef struct
     uint sm_row;
     PIO row_pio;
     uint row_prog_offs;
-} PioConfig;
-
-static PioConfig pio_config;
+} pio_config;
 
 // Variables for row addressing and bit plane selection
 static uint32_t row_address = 0;
@@ -299,7 +298,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     width = w;
     height = h;
 
-    frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
+    frame_buffer = std::make_unique<uint32_t[]>(width * height); // Allocate memory for frame buffer and zero-initialize
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     offset = width * (height >> 1);
@@ -339,21 +338,21 @@ static void configure_pio(bool inverted_stb)
 {
     if (!pio_claim_free_sm_and_add_program(&hub75_data_rgb888_program, &pio_config.data_pio, &pio_config.sm_data, &pio_config.data_prog_offs))
     {
-        fprintf(stderr, "Failed to claim PIO state machine for hub75_data_rgb888_program\n");
+        panic("Failed to claim PIO state machine for hub75_data_rgb888_program\n");
     }
 
     if (inverted_stb)
     {
         if (!pio_claim_free_sm_and_add_program(&hub75_row_inverted_program, &pio_config.row_pio, &pio_config.sm_row, &pio_config.row_prog_offs))
         {
-            fprintf(stderr, "Failed to claim PIO state machine for hub75_row_inverted_program\n");
+            panic("Failed to claim PIO state machine for hub75_row_inverted_program\n");
         }
     }
     else
     {
         if (!pio_claim_free_sm_and_add_program(&hub75_row_program, &pio_config.row_pio, &pio_config.sm_row, &pio_config.row_prog_offs))
         {
-            fprintf(stderr, "Failed to claim PIO state machine for hub75_row_program\n");
+            panic("Failed to claim PIO state machine for hub75_row_program\n");
         }
     }
 
