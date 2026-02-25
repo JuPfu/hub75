@@ -17,7 +17,7 @@
 // Deduced from https://jared.geek.nz/2013/02/linear-led-pwm/
 // The CIE 1931 lightness formula is what actually describes how we perceive light.
 
-#ifdef TEMPORAL_DITHERING
+#if TEMPORAL_DITHERING != false
 static const uint16_t lut[256] = {
     0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 18, 20, 21, 23, 25, 27,
     28, 30, 32, 34, 36, 37, 39, 41, 43, 45, 47, 49, 52, 54, 56, 59,
@@ -306,7 +306,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     offset = width * (height >> 2);
 #endif
 
-#ifdef TEMPORAL_DITHERING
+#if TEMPORAL_DITHERING != false
     init_accumulators(width * height);
 #endif
 
@@ -437,10 +437,8 @@ static void setup_dma_transfers()
     dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
     dma_input_channel_setup(oen_chan, 1, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
-#if SM_CLOCKDIV != 0
     pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
     pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
-#endif
 
     dma_channel_set_read_addr(dummy_pixel_chan, dummy_pixel_data, false);
 
@@ -489,7 +487,7 @@ static inline int claim_dma_channel(const char *channel_name)
     return dma_channel;
 }
 
-#ifdef TEMPORAL_DITHERING
+#if TEMPORAL_DITHERING != false
 // Main temporal dithering: 8→12→10 bit
 uint32_t temporal_dithering(size_t j, uint32_t pixel)
 {
