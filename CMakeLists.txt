@@ -25,6 +25,9 @@ endif()
 # ====================================================================================
 set(PICO_BOARD pico2_w CACHE STRING "Board type")
 
+# set(PICO_PLATFORM rp2350)
+# set(PICO_BOARD none)
+
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
@@ -33,14 +36,36 @@ project(hub75 C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# Add executable. Default name is the project name, version 0.1
+# Add executable. Default name is the project name
 add_executable(hub75 hub75_demo.cpp )
 
 pico_set_program_name(hub75 "hub75_demo")
-pico_set_program_version(hub75 "1.6")
+pico_set_program_version(hub75 "2.0")
 
 set(PICO_PIO_VERSION 1)
 pico_set_float_implementation(hub75 pico)
+
+set(PANEL_GENERIC 0)
+set(PANEL_FM6126A 1)
+set(PANEL_RUL6024 2)
+
+target_compile_definitions(hub75 PRIVATE
+    PICO_RP2350A=0 
+    USE_PICO_GRAPHICS=true
+    MATRIX_PANEL_WIDTH=64
+    MATRIX_PANEL_HEIGHT=64
+    DATA_BASE_PIN=30
+    DATA_N_PINS=6
+    ROWSEL_BASE_PIN=36
+    ROWSEL_N_PINS=5
+    CLK_PIN=41
+    STROBE_PIN=42
+    OEN_PIN=43
+    PANEL_TYPE=PANEL_GENERIC
+    INVERTED_STB=false
+    TEMPORAL_DITHERING=false
+    SM_CLOCKDIV_FACTOR=1.0f
+)
 
 # Generate PIO header
 pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
