@@ -209,27 +209,10 @@ static void init_accumulators(std::size_t pixel_count)
  * modifies the PIO state machine instruction, and restarts DMA transfers
  * for pixel data to ensure continuous frame updates.
  */
-static inline bool pio_sm_is_enabled(PIO pio, uint sm) {
-    return (pio->ctrl & (1u << sm)) != 0;
-}
-
 static void oen_finished_handler()
 {
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(oen_finished_chan);
-
-    // printf("RX level: %d\n",
-    //        pio_sm_get_rx_fifo_level(pio_config.row_pio,
-    //                                 pio_config.sm_row));
-    // printf("data SM enabled: %d\n",
-    //        pio_sm_is_enabled(pio_config.data_pio,
-    //                          pio_config.sm_data));
-
-    // printf("row SM enabled: %d\n",
-    //        pio_sm_is_enabled(pio_config.row_pio,
-    //                          pio_config.sm_row));
-
-    // printf("oen_finished_handler entry %u\n", row_address);
 
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -321,17 +304,11 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
         RUL6024_setup();
     }
 
-    printf("create_hub75_driver core %d\n", get_core_num());
     configure_pio(inverted_stb);
-    printf("create_hub75_driver nach configure_pio\n");
     configure_dma_channels();
-    printf("create_hub75_driver nach configure_dma_channels\n");
     setup_dma_transfers();
-    printf("create_hub75_driver nach setup_dma_transfers\n");
     setup_dma_irq();
-    printf("create_hub75_driver nach setup_dma_irq\n");
     recompute_scaled_basis();
-    printf("create_hub75_driver nach recompute_scaled_basis\n");
 }
 
 /**
@@ -347,6 +324,12 @@ void core1_entry()
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
 #endif
+
+    // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
+    while (true)
+    {
+        tight_loop_contents();
+    }
 }
 
 /**
@@ -371,23 +354,40 @@ void start_hub75_driver()
  */
 static void configure_pio(bool inverted_stb)
 {
-    if (!pio_claim_free_sm_and_add_program(&hub75_data_rgb888_program, &pio_config.data_pio, &pio_config.sm_data, &pio_config.data_prog_offs))
+    // On RP2350B, GPIO 30-47 are only accessible via PIO2
+    // Force both state machines onto PIO2
+    if (!pio_claim_free_sm_and_add_program_for_gpio_range(
+            &hub75_data_rgb888_program, 
+            &pio_config.data_pio, 
+            &pio_config.sm_data, 
+            &pio_config.data_prog_offs,
+            DATA_BASE_PIN, DATA_N_PINS + 1, true))  // +1 for CLK
     {
-        panic("Failed to claim PIO state machine for hub75_data_rgb888_program\n");
+        panic("Failed to claim PIO SM for hub75_data_rgb888_program\n");
     }
 
     if (inverted_stb)
     {
-        if (!pio_claim_free_sm_and_add_program(&hub75_row_inverted_program, &pio_config.row_pio, &pio_config.sm_row, &pio_config.row_prog_offs))
+        if (!pio_claim_free_sm_and_add_program_for_gpio_range(
+                &hub75_row_inverted_program,
+                &pio_config.row_pio,
+                &pio_config.sm_row,
+                &pio_config.row_prog_offs,
+                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true))  // +2 for STROBE+OEN
         {
-            panic("Failed to claim PIO state machine for hub75_row_inverted_program\n");
+            panic("Failed to claim PIO SM for hub75_row_inverted_program\n");
         }
     }
     else
     {
-        if (!pio_claim_free_sm_and_add_program(&hub75_row_program, &pio_config.row_pio, &pio_config.sm_row, &pio_config.row_prog_offs))
+        if (!pio_claim_free_sm_and_add_program_for_gpio_range(
+                &hub75_row_program,
+                &pio_config.row_pio,
+                &pio_config.sm_row,
+                &pio_config.row_prog_offs,
+                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true))  // +2 for STROBE+OEN
         {
-            panic("Failed to claim PIO state machine for hub75_row_program\n");
+            panic("Failed to claim PIO SM for hub75_row_program\n");
         }
     }
 
@@ -408,11 +408,6 @@ static void configure_dma_channels()
     dummy_pixel_chan = claim_dma_channel("dummy pixel channel");
     oen_chan = claim_dma_channel("output enable channel");
     oen_finished_chan = claim_dma_channel("output enable has finished channel");
-
-    printf("pixel_chan %d\n", pixel_chan);
-    printf("dummy_pixel_chan %d\n", dummy_pixel_chan);
-    printf("oen_chan %d\n", oen_chan);
-    printf("oen_finished_chan %d\n", oen_finished_chan);
 }
 
 /**
@@ -454,7 +449,7 @@ static void dma_input_channel_setup(uint channel,
         &conf,          // DMA configuration
         &pio->txf[sm],  // Write address: PIO TX FIFO
         NULL,           // Read address: set later
-        transfer_count, // Number of transfers per transaction
+        dma_encode_transfer_count(transfer_count), // Number of transfers per transaction
         false           // Do not start transfer immediately
     );
 }
@@ -490,7 +485,7 @@ static void setup_dma_transfers()
     channel_config_set_read_increment(&oen_finished_config, false);
     channel_config_set_write_increment(&oen_finished_config, false);
     channel_config_set_dreq(&oen_finished_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
-    dma_channel_configure(oen_finished_chan, &oen_finished_config, &oen_finished_data, &pio_config.row_pio->rxf[pio_config.sm_row], 1, false);
+    dma_channel_configure(oen_finished_chan, &oen_finished_config, &oen_finished_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
 }
 
 /**
@@ -502,9 +497,9 @@ static void setup_dma_transfers()
  */
 static void setup_dma_irq()
 {
-    irq_set_exclusive_handler(DMA_IRQ_0, oen_finished_handler);
-    dma_channel_set_irq0_enabled(oen_finished_chan, true);
-    irq_set_enabled(DMA_IRQ_0, true);
+    irq_set_exclusive_handler(DMA_IRQ_1, oen_finished_handler);
+    dma_channel_set_irq1_enabled(oen_finished_chan, true);
+    irq_set_enabled(DMA_IRQ_1, true);
 }
 
 /**
@@ -637,9 +632,6 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
             frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
         }
-        // printf("Update core %d\n", get_core_num());
-        // printf("update DMA ints: %08lx\n", dma_hw->ints0);
-        // printf("Update NVIC enabled: %d\n", irq_is_enabled(DMA_IRQ_1));
 #elif defined HUB75_P10_3535_16X32_4S
         int line = 0;
         int counter = 0;
@@ -738,7 +730,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i] = LUT_MAPPING_RGB(i, src[j], src[j + 1], src[j + 2]);
         frame_buffer[i + 1] = LUT_MAPPING_RGB(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
-    
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
