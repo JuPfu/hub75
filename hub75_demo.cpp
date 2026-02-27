@@ -143,8 +143,8 @@ int main()
     float ms = 1000.0f / hz;
 
     // set brightness of panel
-    float intensity = 1.0f;
-    setIntensity(intensity);
+    // float intensity = 1.0f;
+    // setIntensity(intensity);
     float step = 0.01f;
 
     while (true)
@@ -195,15 +195,15 @@ int main()
         }
 
         // matrix panel brightness will vary
-        float value = sin(intensity);
+        // float value = sin(intensity);
         // setIntensity(MAX(0.15, (value * value * value * value)));
 
         // Update intensity for next loop
-        intensity += step;
-        if (intensity >= M_PI)
-        {
-            intensity = 0.0f;
-        }
+        // intensity += step;
+        // if (intensity >= M_PI)
+        // {
+        //     intensity = 0.0f;
+        // }
 
         sleep_ms(ms); // hz updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }

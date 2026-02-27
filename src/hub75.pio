@@ -28,6 +28,25 @@ pulse_loop:
     in x, 32           side 0b00 ; Output data sent to DMA channel after OEn has finished
 .wrap
 
+% c-sdk {
+static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
+    pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
+    for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
+        pio_gpio_init(pio, i);
+    pio_gpio_init(pio, latch_base_pin); // aka STROBE pin
+    pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
+
+    pio_sm_config c = hub75_row_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
+    sm_config_set_sideset_pins(&c, latch_base_pin); // STROBE pin and OEn pin
+    sm_config_set_in_shift(&c, true, true, 32);
+    sm_config_set_out_shift(&c, true, true, 32);
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
 .program hub75_row_inverted
 
 ; side-set pin 0 is LATCH
@@ -52,7 +71,7 @@ pulse_loop:
 .wrap
 
 % c-sdk {
-static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
+static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
     pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
@@ -60,7 +79,7 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
     pio_gpio_init(pio, latch_base_pin); // aka STROBE pin
     pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
 
-    pio_sm_config c = hub75_row_program_get_default_config(offset);
+    pio_sm_config c = hub75_row_inverted_program_get_default_config(offset);
     sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
     sm_config_set_sideset_pins(&c, latch_base_pin); // STROBE pin and OEn pin
     sm_config_set_in_shift(&c, true, true, 32);

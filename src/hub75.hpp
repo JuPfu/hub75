@@ -1,6 +1,12 @@
 #include "pico.h"
 
+#ifndef USE_PICO_GRAPHICS
+#define USE_PICO_GRAPHICS true
+#endif
+
+#if USE_PICO_GRAPHICS == true
 #include "libraries/pico_graphics/pico_graphics.hpp"
+#endif
 
 // See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel
 
@@ -14,25 +20,25 @@
 
 // Wiring of the HUB75 matrix
 #ifndef DATA_BASE_PIN // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
-#define DATA_BASE_PIN 0
+#define DATA_BASE_PIN 30
 #endif
 #ifndef DATA_N_PINS
 #define DATA_N_PINS 6 // count of consecutive color pins usually 6
 #endif
 #ifndef ROWSEL_BASE_PIN
-#define ROWSEL_BASE_PIN 6 // start gpio pin of address pins
+#define ROWSEL_BASE_PIN 36 // start gpio pin of address pins
 #endif
 #ifndef ROWSEL_N_PINS
 #define ROWSEL_N_PINS 5 // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
 #ifndef CLK_PIN
-#define CLK_PIN 11
+#define CLK_PIN 41
 #endif
 #ifndef STROBE_PIN
-#define STROBE_PIN 12
+#define STROBE_PIN 42
 #endif
 #ifndef OEN_PIN
-#define OEN_PIN 13
+#define OEN_PIN 43
 #endif
 
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
@@ -114,7 +120,9 @@ using namespace pimoroni;
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();
 void update_bgr(const uint8_t *src);
+#if USE_PICO_GRAPHICS == true
 void update(PicoGraphics const *graphics);
+#endif
 
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);

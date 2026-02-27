@@ -200,6 +200,11 @@ static void init_accumulators(std::size_t pixel_count)
     acc_b.assign(pixel_count, 0);
 }
 
+// static void pixel_finished_handler()
+// {
+//     dma_channel_acknowledge_irq0 (pixel_chan);
+//     printf("pixel_finished_handler entry %u\n", row_address);
+// }
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -211,7 +216,9 @@ static void init_accumulators(std::size_t pixel_count)
 static void oen_finished_handler()
 {
     // Clear the interrupt request for the finished DMA channel
-    dma_hw->ints0 = 1u << oen_finished_chan;
+    dma_channel_acknowledge_irq0(oen_finished_chan);
+
+    printf("oen_finished_handler entry %u\n", row_address);
 
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -222,6 +229,7 @@ static void oen_finished_handler()
         if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
+            printf("oen_finished_handler next frame\n");
         }
         // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
@@ -319,12 +327,17 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
         RUL6024_setup();
     }
 
+    printf("create_hub75_driver\n");
     configure_pio(inverted_stb);
+    printf("create_hub75_driver nach configure_pio\n");
     configure_dma_channels();
+    printf("create_hub75_driver nach configure_dma_channels\n");
     setup_dma_transfers();
+    printf("create_hub75_driver nach setup_dma_transfers\n");
     setup_dma_irq();
-
+    printf("create_hub75_driver nach setup_dma_irq\n");
     recompute_scaled_basis();
+    printf("create_hub75_driver nach recompute_scaled_basis\n");
 }
 
 /**
@@ -373,6 +386,11 @@ static void configure_dma_channels()
     dummy_pixel_chan = claim_dma_channel("dummy pixel channel");
     oen_chan = claim_dma_channel("output enable channel");
     oen_finished_chan = claim_dma_channel("output enable has finished channel");
+
+    printf("pixel_chan %d\n", pixel_chan);
+    printf("dummy_pixel_chan %d\n", dummy_pixel_chan);
+    printf("oen_chan %d\n", oen_chan);
+    printf("oen_finished_chan %d\n", oen_finished_chan);
 }
 
 /**
@@ -462,6 +480,10 @@ static void setup_dma_transfers()
  */
 static void setup_dma_irq()
 {
+    // irq_set_exclusive_handler(DMA_IRQ_0, pixel_finished_handler);
+    // dma_channel_set_irq0_enabled(pixel_chan, true);
+    // irq_set_enabled(DMA_IRQ_0, true);
+
     irq_set_exclusive_handler(DMA_IRQ_0, oen_finished_handler);
     dma_channel_set_irq0_enabled(oen_finished_chan, true);
     irq_set_enabled(DMA_IRQ_0, true);
@@ -478,7 +500,7 @@ static void setup_dma_irq()
  */
 static inline int claim_dma_channel(const char *channel_name)
 {
-    int dma_channel = dma_claim_unused_channel(true);
+    int dma_channel = dma_claim_unused_channel(false);
     if (dma_channel < 0)
     {
         fprintf(stderr, "Failed to claim DMA channel for %s\n", channel_name);
@@ -575,6 +597,7 @@ static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b, const u
 }
 #endif
 
+#if USE_PICO_GRAPHICS == true
 /**
  * @brief Update frame_buffer from PicoGraphics source (RGB888 / packed 32-bit),
  *        using accumulator temporal dithering while preserving the LUT mapping.
@@ -596,6 +619,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
             frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
         }
+        printf("update\n");
 #elif defined HUB75_P10_3535_16X32_4S
         int line = 0;
         int counter = 0;
@@ -674,6 +698,7 @@ __attribute__((optimize("unroll-loops"))) void update(
 #endif
     }
 }
+#endif
 
 /**
  * @brief Updates the frame buffer with pixel data from the source array.
@@ -693,6 +718,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i] = LUT_MAPPING_RGB(i, src[j], src[j + 1], src[j + 2]);
         frame_buffer[i + 1] = LUT_MAPPING_RGB(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
+    printf("update_bgr\n");
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
