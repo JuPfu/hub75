@@ -1,5 +1,4 @@
 #include "pico/stdlib.h"
-#include "pico/multicore.h"
 
 // Pico W devices use a GPIO on the WIFI chip for the LED,
 // so when building for Pico W, CYW43_WL_GPIO_LED_PIN will be defined
@@ -8,7 +7,6 @@
 #endif
 
 #include "hardware/clocks.h"
-#include "hardware/gpio.h"
 
 #include "hub75.hpp"
 
@@ -42,6 +40,8 @@ int pico_led_init(void)
 #elif defined(CYW43_WL_GPIO_LED_PIN)
     // For Pico W devices we need to initialise the driver etc
     return cyw43_arch_init();
+#else
+    return PICO_OK;
 #endif
 }
 
@@ -88,15 +88,6 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
     return true;
 }
 
-/**
- * @brief Secondary core entry point - creates and starts driver for HUB75 rgb matrix.
- */
-void core1_entry()
-{
-    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
-    start_hub75_driver();
-}
-
 void initialize()
 {
     // Set system clock to 250MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
@@ -106,9 +97,7 @@ void initialize()
 
     led_init(); // Initialize LED - blinking at program start
 
-    multicore_reset_core1(); // Reset core 1
-
-    multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
+    start_hub75_driver(); // create and start hub75 driver - the driver is running on core1
 }
 
 int main()
@@ -143,8 +132,8 @@ int main()
     float ms = 1000.0f / hz;
 
     // set brightness of panel
-    // float intensity = 1.0f;
-    // setIntensity(intensity);
+    float intensity = 1.2f;
+    setIntensity(intensity);
     float step = 0.01f;
 
     while (true)
@@ -195,15 +184,15 @@ int main()
         }
 
         // matrix panel brightness will vary
-        // float value = sin(intensity);
+        float value = sin(intensity);
         // setIntensity(MAX(0.15, (value * value * value * value)));
 
         // Update intensity for next loop
-        // intensity += step;
-        // if (intensity >= M_PI)
-        // {
-        //     intensity = 0.0f;
-        // }
+        intensity += step;
+        if (intensity >= M_PI)
+        {
+            intensity = 0.0f;
+        }
 
         sleep_ms(ms); // hz updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
     }

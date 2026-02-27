@@ -20,25 +20,25 @@
 
 // Wiring of the HUB75 matrix
 #ifndef DATA_BASE_PIN // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
-#define DATA_BASE_PIN 30
+#define DATA_BASE_PIN 0
 #endif
 #ifndef DATA_N_PINS
 #define DATA_N_PINS 6 // count of consecutive color pins usually 6
 #endif
 #ifndef ROWSEL_BASE_PIN
-#define ROWSEL_BASE_PIN 36 // start gpio pin of address pins
+#define ROWSEL_BASE_PIN 6 // start gpio pin of address pins
 #endif
 #ifndef ROWSEL_N_PINS
 #define ROWSEL_N_PINS 5 // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
 #ifndef CLK_PIN
-#define CLK_PIN 41
+#define CLK_PIN 11
 #endif
 #ifndef STROBE_PIN
-#define STROBE_PIN 42
+#define STROBE_PIN 12
 #endif
 #ifndef OEN_PIN
-#define OEN_PIN 43
+#define OEN_PIN 13
 #endif
 
 // Scan rate 1 : 32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.

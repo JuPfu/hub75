@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
@@ -200,11 +201,6 @@ static void init_accumulators(std::size_t pixel_count)
     acc_b.assign(pixel_count, 0);
 }
 
-// static void pixel_finished_handler()
-// {
-//     dma_channel_acknowledge_irq0 (pixel_chan);
-//     printf("pixel_finished_handler entry %u\n", row_address);
-// }
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -213,12 +209,27 @@ static void init_accumulators(std::size_t pixel_count)
  * modifies the PIO state machine instruction, and restarts DMA transfers
  * for pixel data to ensure continuous frame updates.
  */
+static inline bool pio_sm_is_enabled(PIO pio, uint sm) {
+    return (pio->ctrl & (1u << sm)) != 0;
+}
+
 static void oen_finished_handler()
 {
     // Clear the interrupt request for the finished DMA channel
-    dma_channel_acknowledge_irq0(oen_finished_chan);
+    dma_channel_acknowledge_irq1(oen_finished_chan);
 
-    printf("oen_finished_handler entry %u\n", row_address);
+    // printf("RX level: %d\n",
+    //        pio_sm_get_rx_fifo_level(pio_config.row_pio,
+    //                                 pio_config.sm_row));
+    // printf("data SM enabled: %d\n",
+    //        pio_sm_is_enabled(pio_config.data_pio,
+    //                          pio_config.sm_data));
+
+    // printf("row SM enabled: %d\n",
+    //        pio_sm_is_enabled(pio_config.row_pio,
+    //                          pio_config.sm_row));
+
+    // printf("oen_finished_handler entry %u\n", row_address);
 
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -229,7 +240,6 @@ static void oen_finished_handler()
         if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
-            printf("oen_finished_handler next frame\n");
         }
         // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
@@ -267,23 +277,7 @@ static void oen_finished_handler()
 
     // Restart DMA channels for the next row's data transfer
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
-#if defined(HUB75_MULTIPLEX_2_ROWS)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
-#endif
-}
-
-/**
- * @brief Starts the DMA transfers for the HUB75 display driver.
- *
- * This function initializes the DMA transfers by setting up the write address
- * for the Output Enable finished DMA channel and the read address for pixel data.
- * It ensures that the display begins processing frames.
- */
-void start_hub75_driver()
-{
-    dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
+    
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
@@ -327,7 +321,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
         RUL6024_setup();
     }
 
-    printf("create_hub75_driver\n");
+    printf("create_hub75_driver core %d\n", get_core_num());
     configure_pio(inverted_stb);
     printf("create_hub75_driver nach configure_pio\n");
     configure_dma_channels();
@@ -338,6 +332,34 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     printf("create_hub75_driver nach setup_dma_irq\n");
     recompute_scaled_basis();
     printf("create_hub75_driver nach recompute_scaled_basis\n");
+}
+
+/**
+ * @brief Secondary core entry point - creates and starts driver for HUB75 rgb matrix.
+ */
+void core1_entry()
+{
+    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
+
+    dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
+#if defined(HUB75_MULTIPLEX_2_ROWS)
+    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
+    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
+#endif
+}
+
+/**
+ * @brief Starts the DMA transfers for the HUB75 display driver.
+ *
+ * This function initializes the DMA transfers by setting up the write address
+ * for the Output Enable finished DMA channel and the read address for pixel data.
+ * It ensures that the display begins processing frames.
+ */
+void start_hub75_driver()
+{
+    multicore_reset_core1();             // Reset core 1
+    multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 }
 
 /**
@@ -480,10 +502,6 @@ static void setup_dma_transfers()
  */
 static void setup_dma_irq()
 {
-    // irq_set_exclusive_handler(DMA_IRQ_0, pixel_finished_handler);
-    // dma_channel_set_irq0_enabled(pixel_chan, true);
-    // irq_set_enabled(DMA_IRQ_0, true);
-
     irq_set_exclusive_handler(DMA_IRQ_0, oen_finished_handler);
     dma_channel_set_irq0_enabled(oen_finished_chan, true);
     irq_set_enabled(DMA_IRQ_0, true);
@@ -500,7 +518,7 @@ static void setup_dma_irq()
  */
 static inline int claim_dma_channel(const char *channel_name)
 {
-    int dma_channel = dma_claim_unused_channel(false);
+    int dma_channel = dma_claim_unused_channel(true);
     if (dma_channel < 0)
     {
         fprintf(stderr, "Failed to claim DMA channel for %s\n", channel_name);
@@ -619,7 +637,9 @@ __attribute__((optimize("unroll-loops"))) void update(
             frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
             frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
         }
-        printf("update\n");
+        // printf("Update core %d\n", get_core_num());
+        // printf("update DMA ints: %08lx\n", dma_hw->ints0);
+        // printf("Update NVIC enabled: %d\n", irq_is_enabled(DMA_IRQ_1));
 #elif defined HUB75_P10_3535_16X32_4S
         int line = 0;
         int counter = 0;
@@ -718,7 +738,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         frame_buffer[i] = LUT_MAPPING_RGB(i, src[j], src[j + 1], src[j + 2]);
         frame_buffer[i + 1] = LUT_MAPPING_RGB(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
-    printf("update_bgr\n");
+    
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
