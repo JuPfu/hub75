@@ -260,7 +260,7 @@ static void oen_finished_handler()
 
     // Restart DMA channels for the next row's data transfer
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
-    
+
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
@@ -357,11 +357,11 @@ static void configure_pio(bool inverted_stb)
     // On RP2350B, GPIO 30-47 are only accessible via PIO2
     // Force both state machines onto PIO2
     if (!pio_claim_free_sm_and_add_program_for_gpio_range(
-            &hub75_data_rgb888_program, 
-            &pio_config.data_pio, 
-            &pio_config.sm_data, 
+            &hub75_data_rgb888_program,
+            &pio_config.data_pio,
+            &pio_config.sm_data,
             &pio_config.data_prog_offs,
-            DATA_BASE_PIN, DATA_N_PINS + 1, true))  // +1 for CLK
+            DATA_BASE_PIN, DATA_N_PINS + 1, true)) // +1 for CLK
     {
         panic("Failed to claim PIO SM for hub75_data_rgb888_program\n");
     }
@@ -373,7 +373,7 @@ static void configure_pio(bool inverted_stb)
                 &pio_config.row_pio,
                 &pio_config.sm_row,
                 &pio_config.row_prog_offs,
-                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true))  // +2 for STROBE+OEN
+                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true)) // +2 for STROBE+OEN
         {
             panic("Failed to claim PIO SM for hub75_row_inverted_program\n");
         }
@@ -385,7 +385,7 @@ static void configure_pio(bool inverted_stb)
                 &pio_config.row_pio,
                 &pio_config.sm_row,
                 &pio_config.row_prog_offs,
-                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true))  // +2 for STROBE+OEN
+                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true)) // +2 for STROBE+OEN
         {
             panic("Failed to claim PIO SM for hub75_row_program\n");
         }
@@ -445,12 +445,12 @@ static void dma_input_channel_setup(uint channel,
     channel_config_set_chain_to(&conf, chain_to);
 
     dma_channel_configure(
-        channel,        // Channel to be configured
-        &conf,          // DMA configuration
-        &pio->txf[sm],  // Write address: PIO TX FIFO
-        NULL,           // Read address: set later
+        channel,                                   // Channel to be configured
+        &conf,                                     // DMA configuration
+        &pio->txf[sm],                             // Write address: PIO TX FIFO
+        NULL,                                      // Read address: set later
         dma_encode_transfer_count(transfer_count), // Number of transfers per transaction
-        false           // Do not start transfer immediately
+        false                                      // Do not start transfer immediately
     );
 }
 

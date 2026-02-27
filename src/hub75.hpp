@@ -115,7 +115,9 @@
 
 #define EXIT_FAILURE 1
 
+#if USE_PICO_GRAPHICS == true
 using namespace pimoroni;
+#endif
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();
