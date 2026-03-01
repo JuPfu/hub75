@@ -59,9 +59,6 @@ static const uint16_t lut[256] = {
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 std::unique_ptr<uint32_t[]> frame_buffer; ///< Interwoven image data for examples;
 
-// Utility function to claim a DMA channel and panic() if there are none left
-static int claim_dma_channel(const char *channel_name);
-
 static void configure_dma_channels();
 static void configure_pio(bool);
 static void setup_dma_transfers();
@@ -400,14 +397,13 @@ static void configure_pio(bool inverted_stb)
  *
  * This function assigns DMA channels to handle pixel data transfer,
  * dummy pixel data, output enable signal, and output enable completion.
- * If a DMA channel cannot be claimed, the function prints an error message and exits.
  */
 static void configure_dma_channels()
 {
-    pixel_chan = claim_dma_channel("pixel channel");
-    dummy_pixel_chan = claim_dma_channel("dummy pixel channel");
-    oen_chan = claim_dma_channel("output enable channel");
-    oen_finished_chan = claim_dma_channel("output enable has finished channel");
+    pixel_chan = dma_claim_unused_channel(true);
+    dummy_pixel_chan = dma_claim_unused_channel(true);
+    oen_chan = dma_claim_unused_channel(true);
+    oen_finished_chan = dma_claim_unused_channel(true);
 }
 
 /**
@@ -500,26 +496,6 @@ static void setup_dma_irq()
     irq_set_exclusive_handler(DMA_IRQ_1, oen_finished_handler);
     dma_channel_set_irq1_enabled(oen_finished_chan, true);
     irq_set_enabled(DMA_IRQ_1, true);
-}
-
-/**
- * @brief Claims an available DMA channel.
- *
- * Attempts to claim an unused DMA channel. If no channels are available,
- * prints an error message and exits the program.
- *
- * @param channel_name A descriptive name for the channel, used in error messages.
- * @return The claimed DMA channel number.
- */
-static inline int claim_dma_channel(const char *channel_name)
-{
-    int dma_channel = dma_claim_unused_channel(true);
-    if (dma_channel < 0)
-    {
-        fprintf(stderr, "Failed to claim DMA channel for %s\n", channel_name);
-        exit(EXIT_FAILURE); // Stop execution
-    }
-    return dma_channel;
 }
 
 #if TEMPORAL_DITHERING != false
