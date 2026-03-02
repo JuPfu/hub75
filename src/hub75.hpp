@@ -121,6 +121,7 @@ using namespace pimoroni;
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();
+void start_hub75_driver_on_core1_exclusively();
 void update_bgr(const uint8_t *src);
 #if USE_PICO_GRAPHICS == true
 void update(PicoGraphics const *graphics);

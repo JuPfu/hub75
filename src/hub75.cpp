@@ -255,14 +255,8 @@ static void oen_finished_handler()
 
     dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
 
-    // Restart DMA channels for the next row's data transfer
-    dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
-
-#if defined(HUB75_MULTIPLEX_2_ROWS)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
-#endif
+    // @todo: Is that really required?
+    start_hub75_driver()
 }
 
 /**
@@ -309,18 +303,28 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
 }
 
 /**
- * @brief Secondary core entry point - creates and starts driver for HUB75 rgb matrix.
+ * @brief Starts the DMA transfers for the HUB75 display driver.
+ *
+ * This function initializes the DMA transfers by setting up the write address
+ * for the Output Enable finished DMA channel and the read address for pixel data.
+ * It ensures that the display begins processing frames.
  */
-void core1_entry()
+void start_hub75_driver()
 {
-    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
-
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
 #endif
+}
+
+/**
+ * @brief Secondary core entry point - creates and starts driver for HUB75 rgb matrix.
+ */
+void core1_entry()
+{
+    start_hub75_driver();
 
     // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
     while (true)
@@ -330,13 +334,15 @@ void core1_entry()
 }
 
 /**
- * @brief Starts the DMA transfers for the HUB75 display driver.
+ * @brief Starts the DMA transfers for the HUB75 display driver on core1.
  *
  * This function initializes the DMA transfers by setting up the write address
  * for the Output Enable finished DMA channel and the read address for pixel data.
  * It ensures that the display begins processing frames.
+ * But in opposite to start_hub75_driver(), this function starts the driver on
+ * core 1 exclusively. No other process can run on core1 in parallel.
  */
-void start_hub75_driver()
+void start_hub75_driver_on_core1_exclusively()
 {
     multicore_reset_core1();             // Reset core 1
     multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there

@@ -97,7 +97,9 @@ void initialize()
 
     led_init(); // Initialize LED - blinking at program start
 
-    start_hub75_driver(); // create and start hub75 driver - the driver is running on core1
+    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
+
+    start_hub75_driver_on_core1_exclusively(); // create and start hub75 driver - the driver is running on core1
 }
 
 int main()
