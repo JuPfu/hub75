@@ -256,7 +256,7 @@ static void oen_finished_handler()
     dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
 
     // @todo: Is that really required?
-    start_hub75_driver()
+    start_hub75_driver();
 }
 
 /**
