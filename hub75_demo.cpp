@@ -10,6 +10,10 @@
 
 #include "hub75.hpp"
 
+#if HUB75_MULTICORE == true
+#include "pico/multicore.h"
+#endif
+
 // Example images
 #if MATRIX_PANEL_HEIGHT == 64
 #include "taylor_swift_64x64.h"
@@ -88,6 +92,25 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
     return true;
 }
 
+/**
+ * @brief Secondary core entry point.
+ *
+ * Initializes and starts the HUB75 driver on core 1.
+ */
+void core1_entry()
+{
+    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    start_hub75_driver();
+
+    // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
+    //
+    // Add your additional tasks for core1 here
+    while (true)
+    {
+        tight_loop_contents();
+    }
+}
+
 void initialize()
 {
     // Set system clock to 250MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
@@ -97,9 +120,15 @@ void initialize()
 
     led_init(); // Initialize LED - blinking at program start
 
+#if HUB75_MULTICORE == true
+    // Run hub75 driver on core1
+    multicore_reset_core1(); // Reset core 1
+    multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
+#else
+    // Run hub75 on core0 - the Hub75 driver is doing its job here
     create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
-
-    start_hub75_driver_on_core1_exclusively(); // create and start hub75 driver - the driver is running on core1
+    start_hub75_driver();
+#endif
 }
 
 int main()

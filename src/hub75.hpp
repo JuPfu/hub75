@@ -91,6 +91,13 @@
 #define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 
+// Used in hub75_demo.cpp 
+// Start hub75 driver on core1 if HUB75_MULTICORE is set to true
+// Start hub75 driver on core0 if HUB75_MULTICORE is set to false
+// The hub75 driver has not much CPU load. Most of it task are handled by DMA and PIO.
+// Only the interupt handler oen_finished_handler is CPU bound.
+#define HUB75_MULTICORE true
+
 // --- modifications below this line might imply changes in source code ---
 
 #if TEMPORAL_DITHERING != false
@@ -121,7 +128,6 @@ using namespace pimoroni;
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();
-void start_hub75_driver_on_core1_exclusively();
 void update_bgr(const uint8_t *src);
 #if USE_PICO_GRAPHICS == true
 void update(PicoGraphics const *graphics);

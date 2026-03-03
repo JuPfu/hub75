@@ -57,7 +57,7 @@ static const uint16_t lut[256] = {
 #endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-std::unique_ptr<uint32_t[]> frame_buffer; ///< Interwoven image data for examples;
+volatile uint32_t *frame_buffer; ///< Interwoven image data for examples;
 
 static void configure_dma_channels();
 static void configure_pio(bool);
@@ -65,9 +65,9 @@ static void setup_dma_transfers();
 static void setup_dma_irq();
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
-static uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 // Control data for the output enable signal
-static uint32_t oen_finished_data = 0;
+static volatile uint32_t oen_finished_data = 0;
 
 // Width and height of the HUB75 LED matrix
 static uint width;
@@ -255,8 +255,14 @@ static void oen_finished_handler()
 
     dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
 
-    // @todo: Is that really required?
-    start_hub75_driver();
+    // Restart DMA channels for the next row's data transfer
+    dma_channel_set_write_addr(oen_finished_chan, (volatile void *)&oen_finished_data, true);
+
+#if defined(HUB75_MULTIPLEX_2_ROWS)
+    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
+#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
+    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
+#endif
 }
 
 /**
@@ -274,7 +280,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     width = w;
     height = h;
 
-    frame_buffer = std::make_unique<uint32_t[]>(width * height); // Allocate memory for frame buffer and zero-initialize
+    frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     offset = width * (height >> 1);
@@ -311,41 +317,10 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
  */
 void start_hub75_driver()
 {
+    row_address = 0;
+    // Start DMA channels
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
-#if defined(HUB75_MULTIPLEX_2_ROWS)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
-#elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
-#endif
-}
-
-/**
- * @brief Secondary core entry point - creates and starts driver for HUB75 rgb matrix.
- */
-void core1_entry()
-{
-    start_hub75_driver();
-
-    // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
-    while (true)
-    {
-        tight_loop_contents();
-    }
-}
-
-/**
- * @brief Starts the DMA transfers for the HUB75 display driver on core1.
- *
- * This function initializes the DMA transfers by setting up the write address
- * for the Output Enable finished DMA channel and the read address for pixel data.
- * It ensures that the display begins processing frames.
- * But in opposite to start_hub75_driver(), this function starts the driver on
- * core 1 exclusively. No other process can run on core1 in parallel.
- */
-void start_hub75_driver_on_core1_exclusively()
-{
-    multicore_reset_core1();             // Reset core 1
-    multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
+    dma_channel_set_read_addr(pixel_chan, frame_buffer, true);
 }
 
 /**
