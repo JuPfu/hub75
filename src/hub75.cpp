@@ -211,8 +211,6 @@ static void oen_finished_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(oen_finished_chan);
 
-    printf("oen_finished_data %u\n", oen_finished_data);
-
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     // plane wise BCM (Binary Coded Modulation)
