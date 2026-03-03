@@ -3,7 +3,6 @@
 #include <memory>
 
 #include "pico/stdlib.h"
-#include "pico/multicore.h"
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
