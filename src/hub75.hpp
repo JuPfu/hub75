@@ -96,7 +96,9 @@
 // Start hub75 driver on core0 if HUB75_MULTICORE is set to false
 // The hub75 driver has not much CPU load. Most of it task are handled by DMA and PIO.
 // Only the interupt handler oen_finished_handler is CPU bound.
+#ifndef HUB75_MULTICORE
 #define HUB75_MULTICORE true
+#endif
 
 // --- modifications below this line might imply changes in source code ---
 
