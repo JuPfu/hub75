@@ -28,7 +28,6 @@ wait_loop:
     out x, 27          side 0b10 ; Get OEn pulse width
 pulse_loop:
     jmp x-- pulse_loop side 0b00 ; Assert OEn for x+1 cycles
-    mov x, y           side 0b00 
     in x, 32           side 0b00 ; Output data sent to DMA channel after OEn has finished
 .wrap
 
