@@ -22,14 +22,18 @@
 
 .wrap_target
     out pins, 5 [7]    side 0b10 ; Deassert OEn, output row select
-    out x, 27   [7]    side 0b11 ; Pulse LATCH, get OEn pulse width
+    mov x, y    [3]    side 0b11 ; Pulse LATCH
+wait_loop:
+    jmp x-- wait_loop  side 0b10 ; Wait for row to latch
+    out x, 27          side 0b10 ; Get OEn pulse width
 pulse_loop:
-    jmp x-- pulse_loop side 0b00; Assert OEn for x+1 cycles
+    jmp x-- pulse_loop side 0b00 ; Assert OEn for x+1 cycles
+    mov x, y           side 0b00 
     in x, 32           side 0b00 ; Output data sent to DMA channel after OEn has finished
 .wrap
 
 % c-sdk {
-static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
+static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
     pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
@@ -43,6 +47,8 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_out_shift(&c, true, true, 32);
     pio_sm_init(pio, sm, offset, &c);
+    pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
+    pio_sm_put(pio, sm, wait_cycles);
     pio_sm_set_enabled(pio, sm, true);
 }
 %}

@@ -6,6 +6,7 @@
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "hardware/clocks.h"
 #include "pico/sync.h"
 
 #include "hub75.hpp"
@@ -210,6 +211,8 @@ static void oen_finished_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(oen_finished_chan);
 
+    printf("oen_finished_data %u\n", oen_finished_data);
+
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     // plane wise BCM (Binary Coded Modulation)
@@ -368,8 +371,11 @@ static void configure_pio(bool inverted_stb)
         }
     }
 
+    // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
+    uint wait_cycles =  clock_get_hz(clk_sys) / 4000000;
+
     hub75_data_rgb888_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
-    hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
+    hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
 }
 
 /**
