@@ -57,7 +57,11 @@ static const uint16_t lut[256] = {
 #endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-volatile uint32_t *frame_buffer; ///< Interwoven image data for examples;
+volatile uint32_t *frame_buffer;  /// Pointer to < Interwoven image data for examples;
+volatile uint32_t *frame_buffer1; ///< Interwoven image data for examples;
+volatile uint32_t *frame_buffer2; ///< Interwoven image data for examples;
+volatile uint32_t *dma_buffer;    ///< Interwoven image data for examples;
+static volatile bool swap_pending = false;
 
 static void configure_dma_channels();
 static void configure_pio(bool);
@@ -220,6 +224,12 @@ static void oen_finished_handler()
         if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
+
+            if (swap_pending)
+            {
+                dma_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+                swap_pending = false;
+            }
         }
         // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
@@ -232,6 +242,12 @@ static void oen_finished_handler()
         if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
+
+            if (swap_pending)
+            {
+                dma_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+                swap_pending = false;
+            }
         }
         // Patch the PIO program to make it shift to the next bit plane
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
@@ -246,6 +262,12 @@ static void oen_finished_handler()
         if (++row_address >= (height >> 2))
         {
             row_address = 0;
+
+            if (swap_pending)
+            {
+                dma_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+                swap_pending = false;
+            }
         }
     };
 #endif
@@ -259,9 +281,9 @@ static void oen_finished_handler()
     dma_channel_set_write_addr(oen_finished_chan, (volatile void *)&oen_finished_data, true);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 1)], true);
+    dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
-    dma_channel_set_read_addr(pixel_chan, &frame_buffer[row_address * (width << 2)], true);
+    dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 2)], true);
 #endif
 }
 
@@ -280,7 +302,8 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     width = w;
     height = h;
 
-    frame_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
+    frame_buffer1 = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
+    frame_buffer2 = new uint32_t[width * height](); // Allocate memory for frame buffer and zero-initialize
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     offset = width * (height >> 1);
@@ -317,10 +340,14 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
  */
 void start_hub75_driver()
 {
+    frame_buffer = frame_buffer1;
+    dma_buffer = frame_buffer1;
+    swap_pending = false;
+
     row_address = 0;
     // Start DMA channels
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
-    dma_channel_set_read_addr(pixel_chan, frame_buffer, true);
+    dma_channel_set_read_addr(pixel_chan, dma_buffer, true);
 }
 
 /**
@@ -370,7 +397,7 @@ static void configure_pio(bool inverted_stb)
     }
 
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    uint wait_cycles =  clock_get_hz(clk_sys) / 4000000;
+    uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
 
     hub75_data_rgb888_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
     hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
@@ -581,94 +608,102 @@ __attribute__((optimize("unroll-loops"))) void update(
     PicoGraphics const *graphics // Graphics object to be updated - RGB888 format, 24-bits in uint32_t array
 )
 {
-    if (graphics->pen_type == PicoGraphics::PEN_RGB888)
-    {
-        __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
+    if (graphics->pen_type != PicoGraphics::PEN_RGB888)
+        return;
+
+    while (swap_pending)
+        tight_loop_contents(); // guard until ISR has consumed the previous frame
+
+    __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-        constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-        for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
-        {
-            frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
-            frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
-        }
-#elif defined HUB75_P10_3535_16X32_4S
-        int line = 0;
-        int counter = 0;
-
-        constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
-        constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
-
-        constexpr int PAIR_HALF_BIT = HALF_PAIRS;
-        constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
-
-        constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
-        constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
-        constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-        constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
-
-        constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
-
-        for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
-        {
-            int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
-                                                 : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
-
-            frame_buffer[fb_index] = LUT_MAPPING(index, src[index]);
-            frame_buffer[fb_index + 1] = LUT_MAPPING(index + HALF_PANEL_OFFSET, src[index + HALF_PANEL_OFFSET]);
-
-            if (++counter >= COLUMN_PAIRS)
-            {
-                counter = 0;
-                ++line;
-            }
-        }
-#elif defined HUB75_P3_1415_16S_64X64_S31
-        constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-        constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
-
-        constexpr uint quarter = total_pixels >> 2;
-
-        uint quarter1 = 0 * quarter;
-        uint quarter2 = 1 * quarter;
-        uint quarter3 = 2 * quarter;
-        uint quarter4 = 3 * quarter;
-
-        uint p = 0; // per line pixel counter
-
-        // Number of logical rows processed
-        uint line = 0;
-
-        // Framebuffer write pointer
-        uint32_t *dst = frame_buffer;
-
-        // Each iteration processes 4 physical rows (2 scan-row pairs)
-        while (line < (height >> 2))
-        {
-            // even src lines
-            dst[0] = LUT_MAPPING(quarter2, src[quarter2]);
-            quarter2++;
-            dst[1] = LUT_MAPPING(quarter4, src[quarter4]);
-            quarter4++;
-            // odd src lines
-            dst[line_offset + 0] = LUT_MAPPING(quarter1, src[quarter1]);
-            quarter1++;
-            dst[line_offset + 1] = LUT_MAPPING(quarter3, src[quarter3]);
-            quarter3++;
-
-            dst += 2;
-            p++;
-
-            // End of logical row
-            if (p == width)
-            {
-                p = 0;
-                line++;
-                dst += line_offset; // advance to next scan-row pair
-            }
-        }
-#endif
+    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
+    {
+        frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
     }
+#elif defined HUB75_P10_3535_16X32_4S
+    int line = 0;
+    int counter = 0;
+
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
+    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+    constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
+
+    constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
+
+    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+    {
+        int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
+                                             : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
+
+        frame_buffer[fb_index] = LUT_MAPPING(index, src[index]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING(index + HALF_PANEL_OFFSET, src[index + HALF_PANEL_OFFSET]);
+
+        if (++counter >= COLUMN_PAIRS)
+        {
+            counter = 0;
+            ++line;
+        }
+    }
+#elif defined HUB75_P3_1415_16S_64X64_S31
+    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
+
+    constexpr uint quarter = total_pixels >> 2;
+
+    uint quarter1 = 0 * quarter;
+    uint quarter2 = 1 * quarter;
+    uint quarter3 = 2 * quarter;
+    uint quarter4 = 3 * quarter;
+
+    uint p = 0; // per line pixel counter
+
+    // Number of logical rows processed
+    uint line = 0;
+
+    // Framebuffer write pointer
+    uint32_t *dst = frame_buffer;
+
+    // Each iteration processes 4 physical rows (2 scan-row pairs)
+    while (line < (height >> 2))
+    {
+        // even src lines
+        dst[0] = LUT_MAPPING(quarter2, src[quarter2]);
+        quarter2++;
+        dst[1] = LUT_MAPPING(quarter4, src[quarter4]);
+        quarter4++;
+        // odd src lines
+        dst[line_offset + 0] = LUT_MAPPING(quarter1, src[quarter1]);
+        quarter1++;
+        dst[line_offset + 1] = LUT_MAPPING(quarter3, src[quarter3]);
+        quarter3++;
+
+        dst += 2;
+        p++;
+
+        // End of logical row
+        if (p == width)
+        {
+            p = 0;
+            line++;
+            dst += line_offset; // advance to next scan-row pair
+        }
+    }
+#endif
+
+    uint32_t irq = save_and_disable_interrupts();
+    swap_pending = true;
+    frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+    restore_interrupts(irq);
 }
 #endif
 
@@ -682,6 +717,9 @@ __attribute__((optimize("unroll-loops"))) void update(
  */
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
+    while (swap_pending)
+        tight_loop_contents(); // guard until ISR has consumed the previous frame
+
 #ifdef HUB75_MULTIPLEX_2_ROWS
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     const uint rgb_offset = offset * 3;
@@ -767,4 +805,8 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
+    uint32_t irq = save_and_disable_interrupts();
+    swap_pending = true;
+    frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+    restore_interrupts(irq);
 }
