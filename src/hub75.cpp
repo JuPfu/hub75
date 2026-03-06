@@ -682,9 +682,6 @@ __attribute__((optimize("unroll-loops"))) void update(
     if (graphics->pen_type != PicoGraphics::PEN_RGB888)
         return;
 
-    while (swap_pending)
-        tight_loop_contents(); // guard until ISR has consumed the previous frame
-
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -788,9 +785,6 @@ __attribute__((optimize("unroll-loops"))) void update(
  */
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
-    while (swap_pending)
-        tight_loop_contents(); // guard until ISR has consumed the previous frame
-
 #ifdef HUB75_MULTIPLEX_2_ROWS
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     const uint rgb_offset = offset * 3;

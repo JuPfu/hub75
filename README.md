@@ -222,12 +222,22 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
 
-| System Clock | Refresh Rate |
-|--------------|---------------|
-| 100 MHz      | 179 Hz        |
-| 150 MHz      | 268 Hz        |
-| 200 MHz      | 358 Hz        |
-| 250 MHz      | 448 Hz        |
+| System Clock | Refresh Rate     | Refresh Rate with Pimoroni Anti Ghosting |
+|--------------|------------------|-------------------------
+| 100 MHz      | ~179 Hz          | ~174 Hz                |
+| 150 MHz      | ~268 Hz          | ~260 Hz                |
+| 200 MHz      | ~358 Hz          | ~347 Hz                |
+| 250 MHz      | ~448 Hz          | ~434 Hz                |
+
+With a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
+
+| System Clock | Refresh Rate     | Refresh Rate with Pimoroni Anti Ghosting |
+|--------------|------------------|-------------------------
+| 100 MHz      | ~300 Hz          | ~291 Hz                |
+| 150 MHz      | ~447 Hz          | ~433 Hz                |
+| 200 MHz      | ~590 Hz          | ~572 Hz                |
+| 250 MHz      | ~732 Hz          | ~709 Hz                |
+
 
 These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
 
