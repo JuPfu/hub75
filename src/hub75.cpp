@@ -19,6 +19,7 @@
 // Deduced from https://jared.geek.nz/2013/02/linear-led-pwm/
 // The CIE 1931 lightness formula is what actually describes how we perceive light.
 
+#if BIT_DEPTH == 10
 #if TEMPORAL_DITHERING != false
 static const uint16_t lut[256] = {
     0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 18, 20, 21, 23, 25, 27,
@@ -55,6 +56,45 @@ static const uint16_t lut[256] = {
     609, 616, 624, 631, 639, 646, 654, 662, 669, 677, 685, 693, 701, 709, 717, 726,
     734, 742, 751, 759, 768, 776, 785, 794, 802, 811, 820, 829, 838, 847, 857, 866,
     875, 885, 894, 903, 913, 923, 932, 942, 952, 962, 972, 982, 992, 1002, 1013, 1023};
+#endif
+#elif BIT_DEPTH == 8
+#if TEMPORAL_DITHERING != false
+static const uint16_t lut[256] = {
+    0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 5, 5, 6, 6, 7,
+    7, 8, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 15,
+    15, 16, 17, 17, 18, 19, 19, 20, 21, 22, 22, 23, 24, 25, 26, 27,
+    28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 42, 43, 44,
+    45, 47, 48, 50, 51, 52, 54, 55, 57, 58, 60, 61, 63, 65, 66, 68,
+    70, 71, 73, 75, 77, 79, 81, 83, 84, 86, 88, 90, 93, 95, 97, 99,
+    101, 103, 106, 108, 110, 113, 115, 118, 120, 123, 125, 128, 130, 133, 136, 138,
+    141, 144, 147, 149, 152, 155, 158, 161, 164, 167, 171, 174, 177, 180, 183, 187,
+    190, 194, 197, 200, 204, 208, 211, 215, 218, 222, 226, 230, 234, 237, 241, 245,
+    249, 254, 258, 262, 266, 270, 275, 279, 283, 288, 292, 297, 301, 306, 311, 315,
+    320, 325, 330, 335, 340, 345, 350, 355, 360, 365, 370, 376, 381, 386, 392, 397,
+    403, 408, 414, 420, 425, 431, 437, 443, 449, 455, 461, 467, 473, 480, 486, 492,
+    499, 505, 512, 518, 525, 532, 538, 545, 552, 559, 566, 573, 580, 587, 594, 601,
+    609, 616, 624, 631, 639, 646, 654, 662, 669, 677, 685, 693, 701, 709, 717, 726,
+    734, 742, 751, 759, 768, 776, 785, 794, 802, 811, 820, 829, 838, 847, 857, 866,
+    875, 885, 894, 903, 913, 923, 932, 942, 952, 962, 972, 982, 992, 1002, 1013, 1023};
+#else
+static const uint16_t lut[256] = {
+    0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 4,
+    4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7,
+    7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 10, 10, 10, 10, 11, 11,
+    11, 12, 12, 12, 13, 13, 13, 14, 14, 15, 15, 15, 16, 16, 17, 17,
+    17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 23, 24, 24, 25,
+    25, 26, 26, 27, 28, 28, 29, 29, 30, 31, 31, 32, 32, 33, 34, 34,
+    35, 36, 37, 37, 38, 39, 39, 40, 41, 42, 43, 43, 44, 45, 46, 47,
+    47, 48, 49, 50, 51, 52, 53, 54, 54, 55, 56, 57, 58, 59, 60, 61,
+    62, 63, 64, 65, 66, 67, 68, 70, 71, 72, 73, 74, 75, 76, 77, 79,
+    80, 81, 82, 83, 85, 86, 87, 88, 90, 91, 92, 94, 95, 96, 98, 99,
+    100, 102, 103, 105, 106, 108, 109, 110, 112, 113, 115, 116, 118, 120, 121, 123,
+    124, 126, 128, 129, 131, 132, 134, 136, 138, 139, 141, 143, 145, 146, 148, 150,
+    152, 154, 155, 157, 159, 161, 163, 165, 167, 169, 171, 173, 175, 177, 179, 181,
+    183, 185, 187, 189, 191, 193, 196, 198, 200, 202, 204, 207, 209, 211, 214, 216,
+    218, 220, 223, 225, 228, 230, 232, 235, 237, 240, 242, 245, 247, 250, 252, 255};
+#endif
 #endif
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
@@ -105,7 +145,8 @@ static uint32_t bit_plane = 0;
 static uint32_t row_in_bit_plane = 0;
 
 // Derived constants
-static const int ACC_SHIFT = (ACC_BITS - 10); // number of low bits preserved in accumulator
+static constexpr int ACC_SHIFT = (ACC_BITS - BIT_DEPTH);    // number of low bits preserved in accumulator
+static constexpr uint16_t CLAMP_MAX = (1u << ACC_BITS) - 1; // 4095 for 10-bit, 1023 for 8-bit
 
 // Per-channel accumulators (allocated at runtime)
 static std::vector<uint16_t> acc_r, acc_g, acc_b;
@@ -233,7 +274,11 @@ static void oen_finished_handler()
             }
         }
         // Patch the PIO program to make it shift to the next bit plane
+#if BIT_DEPTH == 8
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+#else
+        hub75_data_rgb101010_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+#endif
     }
 #elif defined(HUB75_P3_1415_16S_64X64_S31)
     // plane wise BCM (Binary Coded Modulation)
@@ -251,12 +296,20 @@ static void oen_finished_handler()
             }
         }
         // Patch the PIO program to make it shift to the next bit plane
+#if BIT_DEPTH == 8
         hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+#else
+        hub75_data_rgb101010_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+#endif
     }
 #elif defined(HUB75_P10_3535_16X32_4S)
     // line wise BCM (Binary Coded Modulation)
     // calls hub75_data_rgb888_set_shift more often than plane wise BCM
+#if BIT_DEPTH == 8
     hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+#else
+    hub75_data_rgb101010_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+#endif
     if (++bit_plane >= BIT_DEPTH)
     {
         bit_plane = 0;
@@ -363,13 +416,21 @@ static void configure_pio(bool inverted_stb)
     // On RP2350B, GPIO 30-47 are only accessible via PIO2
     // Force both state machines onto PIO2
     if (!pio_claim_free_sm_and_add_program_for_gpio_range(
+#if BIT_DEPTH == 8
             &hub75_data_rgb888_program,
+#else
+            &hub75_data_rgb101010_program,
+#endif
             &pio_config.data_pio,
             &pio_config.sm_data,
             &pio_config.data_prog_offs,
             DATA_BASE_PIN, DATA_N_PINS + 1, true)) // +1 for CLK
     {
+#if BIT_DEPTH == 8
         panic("Failed to claim PIO SM for hub75_data_rgb888_program\n");
+#else
+        panic("Failed to claim PIO SM for hub75_data_rgb101010_program\n");
+#endif
     }
 
     if (inverted_stb)
@@ -400,8 +461,16 @@ static void configure_pio(bool inverted_stb)
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
 
+#if BIT_DEPTH == 8
     hub75_data_rgb888_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
-    hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+#else
+    hub75_data_rgb101010_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
+#endif
+
+    if (inverted_stb)
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+    else
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
 }
 
 /**
@@ -525,12 +594,13 @@ uint32_t temporal_dithering(size_t j, uint32_t pixel)
     uint16_t new_b = (uint32_t)b16 + acc_b[j];
 
     // --- 3. Clamp to 12-bit maximum ---
-    if (new_r > 4095)
-        new_r = 4095;
-    if (new_g > 4095)
-        new_g = 4095;
-    if (new_b > 4095)
-        new_b = 4095;
+
+    if (new_r > CLAMP_MAX)
+        new_r = CLAMP_MAX;
+    if (new_g > CLAMP_MAX)
+        new_g = CLAMP_MAX;
+    if (new_b > CLAMP_MAX)
+        new_b = CLAMP_MAX;
 
     // --- 4. Quantize to 10-bit output and compute fractional error ---
     // Scale 12-bit → 10-bit (divide by 64)
@@ -544,7 +614,7 @@ uint32_t temporal_dithering(size_t j, uint32_t pixel)
     acc_b[j] = new_b & 0x3;
 
     // --- 5. Recombine into packed 0xRRGGBB10-bit-style integer ---
-    return (out_b << 20) | (out_g << 10) | out_r;
+    return (out_b << (2 * BIT_DEPTH)) | (out_g << BIT_DEPTH) | out_r;
 }
 
 // Main temporal dithering: 8→12→10 bit
@@ -561,12 +631,12 @@ uint32_t temporal_dithering(size_t j, uint8_t r, uint8_t g, uint8_t b)
     uint16_t new_b = b16 + acc_b[j];
 
     // --- 3. Clamp to 16-bit maximum ---
-    if (new_r > 4095)
-        new_r = 4095;
-    if (new_g > 4095)
-        new_g = 4095;
-    if (new_b > 4095)
-        new_b = 4095;
+    if (new_r > CLAMP_MAX)
+        new_r = CLAMP_MAX;
+    if (new_g > CLAMP_MAX)
+        new_g = CLAMP_MAX;
+    if (new_b > CLAMP_MAX)
+        new_b = CLAMP_MAX;
 
     // --- 4. Quantize to 10-bit output and compute fractional error ---
     // Scale 16-bit → 10-bit (divide by 64)
@@ -580,21 +650,21 @@ uint32_t temporal_dithering(size_t j, uint8_t r, uint8_t g, uint8_t b)
     acc_b[j] = new_b & 0x3;
 
     // --- 5. Recombine into packed 0xRRGGBB10-bit-style integer ---
-    return (out_r << 20) | (out_g << 10) | out_b;
+    return (out_r << (2 * BIT_DEPTH)) | (out_g << BIT_DEPTH) | out_b;
 }
 #else
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
 static inline uint32_t pack_lut_rgb(uint32_t color, const uint16_t *lut)
 {
-    return (lut[(color & 0x0000ff)] << 20) |
-           (lut[(color >> 8) & 0x0000ff] << 10) |
+    return (lut[(color & 0x0000ff)] << (2 * BIT_DEPTH)) |
+           (lut[(color >> 8) & 0x0000ff] << BIT_DEPTH) |
            (lut[(color >> 16) & 0x0000ff]);
 }
 
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
 static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b, const uint16_t *lut)
 {
-    return lut[r] << 20 | lut[g] << 10 | lut[b];
+    return lut[r] << (2 * BIT_DEPTH) | lut[g] << BIT_DEPTH | lut[b];
 }
 #endif
 
