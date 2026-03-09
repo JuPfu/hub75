@@ -273,11 +273,7 @@ static void oen_finished_handler()
             }
         }
         // Patch the PIO program to make it shift to the next bit plane
-#if BIT_DEPTH == 8
-        hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
-#else
-        hub75_data_rgb101010_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
-#endif
+        hub75_data_rgb_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
     }
 #elif defined(HUB75_P3_1415_16S_64X64_S31)
     // plane wise BCM (Binary Coded Modulation)
@@ -295,20 +291,13 @@ static void oen_finished_handler()
             }
         }
         // Patch the PIO program to make it shift to the next bit plane
-#if BIT_DEPTH == 8
-        hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
-#else
-        hub75_data_rgb101010_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
-#endif
+        hub75_data_rgb_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
     }
 #elif defined(HUB75_P10_3535_16X32_4S)
     // line wise BCM (Binary Coded Modulation)
     // calls hub75_data_rgb888_set_shift more often than plane wise BCM
-#if BIT_DEPTH == 8
-    hub75_data_rgb888_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
-#else
-    hub75_data_rgb101010_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
-#endif
+    hub75_data_rgb_set_shift(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, bit_plane);
+
     if (++bit_plane >= BIT_DEPTH)
     {
         bit_plane = 0;
@@ -415,21 +404,13 @@ static void configure_pio(bool inverted_stb)
     // On RP2350B, GPIO 30-47 are only accessible via PIO2
     // Force both state machines onto PIO2
     if (!pio_claim_free_sm_and_add_program_for_gpio_range(
-#if BIT_DEPTH == 8
-            &hub75_data_rgb888_program,
-#else
-            &hub75_data_rgb101010_program,
-#endif
+            &hub75_data_rgb_program,
             &pio_config.data_pio,
             &pio_config.sm_data,
             &pio_config.data_prog_offs,
             DATA_BASE_PIN, DATA_N_PINS + 1, true)) // +1 for CLK
     {
-#if BIT_DEPTH == 8
-        panic("Failed to claim PIO SM for hub75_data_rgb888_program\n");
-#else
-        panic("Failed to claim PIO SM for hub75_data_rgb101010_program\n");
-#endif
+        panic("Failed to claim PIO SM for hub75_data_rgb_program\n");
     }
 
     if (inverted_stb)
@@ -460,11 +441,7 @@ static void configure_pio(bool inverted_stb)
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
 
-#if BIT_DEPTH == 8
-    hub75_data_rgb888_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
-#else
-    hub75_data_rgb101010_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
-#endif
+    hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
     if (inverted_stb)
         hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
