@@ -184,11 +184,13 @@ static inline void hub75_data_rgb_program_init(PIO pio, uint sm, uint offset, ui
     pio_sm_init(pio, sm, offset, &c);
 
     // set BIT_DEPTH
-    uint16_t instr = pio_encode_out(pio_null, BIT_DEPTH); 
-    pio->instr_mem[offset + hub75_data_rgb_offset_out_red0] = instr;
-    pio->instr_mem[offset + hub75_data_rgb_offset_out_green0] = instr;
-    pio->instr_mem[offset + hub75_data_rgb_offset_out_red1] = instr;
-    pio->instr_mem[offset + hub75_data_rgb_offset_out_green1] = instr;
+    uint instr = pio_encode_out(pio_null, BIT_DEPTH); 
+    uint side_0 = pio_encode_sideset (1, 0);
+    uint side_1 = pio_encode_sideset (1, 1);
+    pio->instr_mem[offset + hub75_data_rgb_offset_out_red0] = instr | side_0;
+    pio->instr_mem[offset + hub75_data_rgb_offset_out_green0] = instr | side_0;
+    pio->instr_mem[offset + hub75_data_rgb_offset_out_red1] = instr | side_1;
+    pio->instr_mem[offset + hub75_data_rgb_offset_out_green1] = instr | side_1;
 
     pio_sm_exec(pio, sm, offset + hub75_data_rgb_offset_entry_point);
     pio_sm_set_enabled(pio, sm, true);
