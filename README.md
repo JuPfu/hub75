@@ -34,6 +34,11 @@
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
   - [Allowed Deviations  ](#allowed-deviations--)
     - [Example: Custom Pin Mapping](#example-custom-pin-mapping)
+- [Configuration via CMakeLists.txt](#configuration-via-cmakeliststxt)
+  - [Overview](#overview-1)
+  - [All Available Defines and Their Default Values](#all-available-defines-and-their-default-values)
+  - [Full CMakeLists.txt Example](#full-cmakeliststxt-example)
+  - [Notes on Default Values](#notes-on-default-values)
 - [Configuring Your HUB75 LED Matrix Panel](#configuring-your-hub75-led-matrix-panel)
   - [Step 1 — Panel Dimensions](#step-1--panel-dimensions)
     - [Wiring](#wiring)
@@ -484,11 +489,193 @@ Clock, Latch, and OE pins may be freely chosen.
 
 ---
 
+# Configuration via CMakeLists.txt
+
+## Overview
+
+All driver configuration can be set directly in **`CMakeLists.txt`** via `target_compile_definitions`, without needing to edit any source or header files.
+
+This approach is especially convenient when:
+
+- you use the driver as a **library** in a larger project,
+- you want to **switch between different hardware setups** by maintaining separate CMake build configurations,
+- you want to keep your source tree clean and avoid modifying `hub75.hpp` directly.
+
+If a define is **not provided** in `CMakeLists.txt`, the driver falls back to the **default values** specified in `hub75.hpp` (see [Notes on Default Values](#notes-on-default-values) below).
+
+---
+
+## All Available Defines and Their Default Values
+
+The table below lists every configurable preprocessor define, its **default value** as declared in `hub75.hpp`, and a short description.
+
+| Define | Default Value | Description |
+|---|---|---|
+| `PICO_RP2350A` | *(not set)* | Set to `0` for RP2350**B** microcontrollers. Leave unset or set to `1` for RP2350**A**. Only relevant for RP2350-based boards. |
+| `USE_PICO_GRAPHICS` | `true` | Set to `false` if hub75 is used as a pure library without pico_graphics. Removes any dependency on pico_graphics. |
+| `MATRIX_PANEL_WIDTH` | `64` | Physical width of the LED matrix panel in pixels. |
+| `MATRIX_PANEL_HEIGHT` | `64` | Physical height of the LED matrix panel in pixels. |
+| `DATA_BASE_PIN` | `0` | First GPIO pin in the consecutive colour data block (R0). |
+| `DATA_N_PINS` | `6` | Number of colour data pins (always 6 for standard HUB75: R0, G0, B0, R1, G1, B1). |
+| `ROWSEL_BASE_PIN` | `6` | First GPIO pin in the consecutive row-select (address) block (A0). |
+| `ROWSEL_N_PINS` | `5` | Number of address pins available on the panel connector (A0–A4 for 5). Must match the physical panel. |
+| `CLK_PIN` | `11` | GPIO pin for the pixel clock (CLK). |
+| `STROBE_PIN` | `12` | GPIO pin for the latch/strobe signal (LAT). |
+| `OEN_PIN` | `13` | GPIO pin for the output enable signal (OE). |
+| `PANEL_TYPE` | `PANEL_GENERIC` | Driver IC initialisation type. Valid values: `PANEL_GENERIC`, `PANEL_FM6126A`, `PANEL_RUL6024`. |
+| `INVERTED_STB` | `false` | Set to `true` if the latch (strobe) signal is inverted on your board. |
+| `TEMPORAL_DITHERING` | `false`  | Define to enable experimental temporal dithering for increased perceived colour depth (≈ 12 bits per channel). Undefined by default. |
+| `SM_CLOCKDIV_FACTOR` | `1.0f` | PIO state machine clock divider factor. Values > 1.0 slow down the state machine. Useful to reduce ghosting or flickering on smaller panels. |
+| `BIT_DEPTH` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
+| `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
+
+> ⚠️ Setting `SM_CLOCKDIV_FACTOR` in CMakeLists.txt implicitly enables the clock divider. If you do not set `SM_CLOCKDIV_FACTOR`, the state machine runs at full speed (equivalent to a factor of `1.0f`).
+
+> ⚠️ For a bare RP2350 microcontroller without a board besides setting `PICO_RP2350A` to `0` and
+  ```c
+  # Uncomment the following two lines to compile for bare RP2350 without a board
+  # set(PICO_PLATFORM rp2350)
+  # set(PICO_BOARD none CACHE STRING "Board type")
+  ```
+
+---
+
+## Full CMakeLists.txt Example
+
+The following example shows a complete `target_compile_definitions` block for a **RP2350B** microcontroller using GPIO pins 30–43. 
+
+Make sure to uncomment the following lines in CMakeLists.txt for a RP2350 microcontroller without a board.
+
+```cmake
+# set(PICO_PLATFORM rp2350)
+# set(PICO_BOARD none CACHE STRING "Board type")
+```
+
+```cmake
+# No need to modify preprocessor defines in hub75.cpp - instead set their values here.
+#
+# Example:
+# Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
+# Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
+target_compile_definitions(hub75 PRIVATE
+    PICO_RP2350A=0              # `PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller
+                                # - uncomment for RP235xB microcontroller only!
+    USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library
+                                # - any reference to pico_graphics is removed
+    MATRIX_PANEL_WIDTH=64       # your matrix panel width
+    MATRIX_PANEL_HEIGHT=64      # your matrix panel height
+    DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+    DATA_N_PINS=6               # number (count) of colour pins (usually 6)
+    ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D, E) GPIO pins
+    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board
+                                # (look at your panel's connector)
+    CLK_PIN=41                  # GPIO pin for CLK
+    STROBE_PIN=42               # GPIO pin for STROBE (LATCH)
+    OEN_PIN=43                  # GPIO for OE pin
+    PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE: PANEL_GENERIC, PANEL_FM6126A or PANEL_RUL6024
+    INVERTED_STB=false          # set to true if the latch signal is inverted on your board
+    TEMPORAL_DITHERING=true     # experimental - switch on temporal dithering to improve colour depth
+                                # (currently 2 additional bits)
+    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce
+                                # state machine speed (values > 1.0 slow down the state machine)
+    BIT_DEPTH=8                 # number (count) of bit-planes used for BCM (Binary Code Modulation)
+                                # - valid values for BIT_DEPTH are 8 or 10
+    HUB75_MULTICORE=true        # use core1 for the hub75 driver
+)
+```
+
+A minimal configuration for the default RP2350A wiring (GPIO 0–13) only needs to override what differs from the defaults, for example:
+
+```cmake
+target_compile_definitions(hub75 PRIVATE
+    MATRIX_PANEL_WIDTH=32
+    MATRIX_PANEL_HEIGHT=16
+    ROWSEL_N_PINS=3
+    BIT_DEPTH=8
+)
+```
+
+All other values fall back to the defaults in `hub75.hpp`.
+
+---
+
+## Notes on Default Values
+
+When no `target_compile_definitions` entry is provided for a given define, the driver uses the **default values** declared in `hub75.hpp`. These defaults correspond to the standard wiring and a **64×64 panel** connected to a **Raspberry Pi Pico** using GPIO 0–13:
+
+```cpp
+// hub75.hpp — default values (used when not overridden in CMakeLists.txt)
+
+#ifndef MATRIX_PANEL_WIDTH
+#define MATRIX_PANEL_WIDTH   64
+#endif
+
+#ifndef MATRIX_PANEL_HEIGHT
+#define MATRIX_PANEL_HEIGHT  64
+#endif
+
+#ifndef DATA_BASE_PIN
+#define DATA_BASE_PIN        0
+#endif
+
+#ifndef DATA_N_PINS
+#define DATA_N_PINS          6
+#endif
+
+#ifndef ROWSEL_BASE_PIN
+#define ROWSEL_BASE_PIN      6
+#endif
+
+#ifndef ROWSEL_N_PINS
+#define ROWSEL_N_PINS        5
+#endif
+
+#ifndef CLK_PIN
+#define CLK_PIN              11
+#endif
+
+#ifndef STROBE_PIN
+#define STROBE_PIN           12
+#endif
+
+#ifndef OEN_PIN
+#define OEN_PIN              13
+#endif
+
+#ifndef PANEL_TYPE
+#define PANEL_TYPE           PANEL_GENERIC
+#endif
+
+#ifndef INVERTED_STB
+#define INVERTED_STB         false
+#endif
+
+// TEMPORAL_DITHERING is experimental - development still in progress
+#ifndef TEMPORAL_DITHERING
+#define TEMPORAL_DITHERING   false
+#endif
+
+#ifndef SM_CLOCKDIV_FACTOR
+#define SM_CLOCKDIV_FACTOR   1.0f
+#endif
+
+#ifndef BIT_DEPTH
+#define BIT_DEPTH            10
+#endif
+
+#ifndef HUB75_MULTICORE
+#define HUB75_MULTICORE      true
+#endif
+```
+
+> 💡 You only need to specify the defines that differ from these defaults. There is no need to copy the entire block into `CMakeLists.txt` for a standard setup.
+
+---
 
 # Configuring Your HUB75 LED Matrix Panel
 
-All panel-specific configuration is done in **`hub75.hpp`**.
-The goal is to describe your panel’s **geometry**, **scan method**, and **electronics** so the driver can map pixels correctly and drive the panel reliably.
+All panel-specific configuration is done in **`hub75.hpp`** — or, preferably, via [`CMakeLists.txt`](#configuration-via-cmakeliststxt) as described above.
+The goal is to describe your panel's **geometry**, **scan method**, and **electronics** so the driver can map pixels correctly and drive the panel reliably.
 
 This section walks you through the configuration **step by step**, starting from the most obvious parameters (panel size) to the more subtle ones (scan rate, driver chip quirks).
 
@@ -799,7 +986,7 @@ Each panel type has it's own pixel mapping.
 HUB75 panels do not accept pixels in simple row-major order.
 
 Instead, pixel data is shifted into the panel in the exact order expected by the
-panel’s internal shift registers and multiplexing logic.
+panel's internal shift registers and multiplexing logic.
 
 Key properties:
 
@@ -811,7 +998,7 @@ Key properties:
   - how the panel internally wires its row drivers
 
 Each mapping below describes how pixels from the linear source buffer (`src`)
-are reordered into the panel’s shift buffer (`frame_buffer`).
+are reordered into the panel's shift buffer (`frame_buffer`).
 
 
 ***HUB75_MULTIPLEX_2_ROWS Mapping***
@@ -1027,7 +1214,7 @@ This usually points to a **row addressing issue**.
 multiplexed_rows = MATRIX_PANEL_HEIGHT / 2^ROWSEL_N_PINS
 ```
 
-If this value does not match the panel’s actual multiplexing, rows will be:
+If this value does not match the panel's actual multiplexing, rows will be:
 
 * skipped
 * duplicated
@@ -1145,10 +1332,3 @@ Follow this **minimal recovery procedure**:
 4. Change **one parameter at a time**
 
 ---
-
-
-
-
-
-
-
