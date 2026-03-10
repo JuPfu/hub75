@@ -531,9 +531,8 @@ The table below lists every configurable preprocessor define, its **default valu
 
 > ⚠️ Setting `SM_CLOCKDIV_FACTOR` in CMakeLists.txt implicitly enables the clock divider. If you do not set `SM_CLOCKDIV_FACTOR`, the state machine runs at full speed (equivalent to a factor of `1.0f`).
 
-> ⚠️ For a bare RP2350 microcontroller without a board besides setting `PICO_RP2350A` to `0` and
+> ⚠️ For a bare RP2350 microcontroller without a board besides setting `PICO_RP2350A` to `0` uncomment the following two lines to compile for bare RP2350 without a board
   ```c
-  # Uncomment the following two lines to compile for bare RP2350 without a board
   # set(PICO_PLATFORM rp2350)
   # set(PICO_BOARD none CACHE STRING "Board type")
   ```
