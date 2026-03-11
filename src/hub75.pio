@@ -108,7 +108,7 @@ static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset
 %}
 
 .program hub75_data_rgb
-.define BIT_DEPTH 10
+.define BIT_DEPTH 10               ; Placeholder - will be overwritten in hub75_data_rgb_program_init
 .side_set 1
 
 ; Each FIFO record consists of a RGB101010 pixel. (This is ok for e.g. an RGB888
