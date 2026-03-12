@@ -528,7 +528,7 @@ The table below lists every configurable preprocessor define, its **default valu
 | `OEN_PIN` | `13` | GPIO pin for the output enable signal (OE). |
 | `PANEL_TYPE` | `PANEL_GENERIC` | Driver IC initialisation type. Valid values: `PANEL_GENERIC`, `PANEL_FM6126A`, `PANEL_RUL6024`. |
 | `INVERTED_STB` | `false` | Set to `true` if the latch (strobe) signal is inverted on your board. |
-| `TEMPORAL_DITHERING` | `false`  | Define to enable experimental temporal dithering for increased perceived colour depth (≈ 12 bits per channel). Undefined by default. |
+| `TEMPORAL_DITHERING` | `false`  | Define to enable experimental temporal dithering for increased perceived colour depth (≈ 12 bits per channel). |
 | `SM_CLOCKDIV_FACTOR` | `1.0f` | PIO state machine clock divider factor. Values > 1.0 slow down the state machine. Useful to reduce ghosting or flickering on smaller panels. |
 | `BIT_DEPTH` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
@@ -954,13 +954,13 @@ Some panels benefit from a slower clock to reduce:
 To activate TEMPORAL_DITHERING switch from 
 
 ```cpp
-#undef TEMPORAL_DITHERING
+#define TEMPORAL_DITHERING false
 ```
 
 to
 
 ```cpp
-#define TEMPORAL_DITHERING
+#define TEMPORAL_DITHERING true
 ```
 
 
@@ -1302,7 +1302,7 @@ Temporal dithering increases perceived color depth but also increases complexity
 Disable it first:
 
 ```cpp
-#undef TEMPORAL_DITHERING
+#define TEMPORAL_DITHERING false
 ```
 
 > ⚠️ Always debug **mapping and scan issues first**, then enable temporal dithering later.
@@ -1318,7 +1318,7 @@ Follow this **minimal recovery procedure**:
    ```cpp
    #define HUB75_MULTIPLEX_2_ROWS
    #define PANEL_TYPE PANEL_GENERIC
-   #undef TEMPORAL_DITHERING
+   #define TEMPORAL_DITHERING false
    #define SM_CLOCKDIV 0
    ```
 
