@@ -161,7 +161,7 @@ static volatile uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default
 static volatile uint32_t scaled_basis[BIT_DEPTH];
 
 // Basis factor (coarse brightness)
-static volatile uint32_t basis_factor = 6u;
+static volatile uint32_t basis_factor = BASIS_BRIGHTNESS_FACTOR;
 
 inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
 {

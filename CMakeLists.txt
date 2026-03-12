@@ -56,7 +56,7 @@ set(PANEL_RUL6024 2)
 # Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
 # Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
 target_compile_definitions(hub75 PRIVATE
-    # PICO_RP2350A=0              # `PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
+    # PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     # USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     # MATRIX_PANEL_WIDTH=64       # your matrix panel width
     # MATRIX_PANEL_HEIGHT=64      # your matrix panel height
@@ -69,10 +69,11 @@ target_compile_definitions(hub75 PRIVATE
     # OEN_PIN=43                  # GPIO for OE pin
     # PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
     # INVERTED_STB=false          # inverted pin signal for OE (untested)
-    # TEMPORAL_DITHERING=true    # experimental - switch on temporal dithering to improve colour depth (currently 2 additional bits)
+    # TEMPORAL_DITHERING=false    # experimental - switch on temporal dithering to improve colour depth (currently 2 additional bits)
     # SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
-    # BIT_DEPTH=8                # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
+    # BIT_DEPTH=10                # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
     # HUB75_MULTICORE=true        # use core1 for the hub75 driver
+    # BASIS_BRIGHTNESS_FACTOR=6u  # calibrate the brightness of a matrix panel
 )
 
 # Generate PIO header

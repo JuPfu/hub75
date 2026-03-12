@@ -126,6 +126,13 @@
 #define ACC_BITS (BIT_DEPTH + 2)
 #endif
 
+// The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel. 
+// Different matrix panels are likely to have different base brightness levels. 
+// So some panels need a higher value of basis_factor other matrix panels might need a reduced value.
+#ifndef BASIS_BRIGHTNESS_FACTOR
+#define BASIS_BRIGHTNESS_FACTOR 6u
+#endif
+
 #define EXIT_FAILURE 1
 
 #if USE_PICO_GRAPHICS == true
