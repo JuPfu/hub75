@@ -1319,7 +1319,6 @@ Follow this **minimal recovery procedure**:
    #define HUB75_MULTIPLEX_2_ROWS
    #define PANEL_TYPE PANEL_GENERIC
    #define TEMPORAL_DITHERING false
-   #define SM_CLOCKDIV 0
    ```
 
 2. Verify:
