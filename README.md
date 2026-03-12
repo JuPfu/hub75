@@ -409,7 +409,7 @@ For any questions or discussions, feel free to contribute or open an issue!
 
 This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **128x64, 64×32, 32×32, 32x16**, or other HUB75-compatible panels by configuring c preprocessor defines in file hub75.hpp.
 
-The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks**.
+The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks** and **STROBE_PIN** must be immediately followed by **OEN_PIN**.
 
 The default implementation looks like this (see hub75.cpp). An example of a valid alternative pin defintion is shown in [Allowed Deviations](#allowed_deviations_anchor)
 
@@ -445,7 +445,7 @@ The default implementation looks like this (see hub75.cpp). An example of a vali
 - `ROWSEL_BASE_PIN` = **GPIO 6**
 - `ROWSEL_N_PINS` = **5** (A0–A4)
 
-- **Consecutiveness is required** by the PIO program.
+**Consecutiveness is required** by the PIO program.
 
 | Address bit |  connected to      | Pico GPIO |
 | ----------- |--------------------|:---------:|
@@ -457,9 +457,11 @@ The default implementation looks like this (see hub75.cpp). An example of a vali
 
 ### Control Pins
 
-- **CLK** (clock): GPIO 11
-- **LAT** (strobe/latch): GPIO 12
-- **OE** (output enable): GPIO 13
+- **CLK_PIN** (clock): GPIO 11
+- **STROBE** (strobe/latch): GPIO 12
+- **OE_PIN** (output enable): GPIO 13
+
+⚠️ **STROBE_PIN** pin must be immediately followed by **OE_PIN** (must be consecutive)
 
 ### One Glance Mapping HUB75 Connector → Pico GPIOs
 
@@ -469,8 +471,9 @@ The diagram shows the default mapping as defined in the hub75.cpp file.
 
 ## Allowed Deviations  <a id='allowed_deviations_anchor'></a>
 
-The **only strict requirement** is that **data pins** and **row-select pins** must be in **consecutive GPIO blocks**.
-Clock, Latch, and OE pins may be freely chosen.
+The **strict requirement** to be aware of is that **data pins** and **row-select pins** must be in **consecutive GPIO blocks**.
+Be aware of a **second requirement** that **STROBE_PIN (latch pin)** must be immediately followed by **OEN_PIN**.
+Clock pin may be freely chosen.
 
 ### Example: Custom Pin Mapping
 
@@ -481,10 +484,11 @@ Clock, Latch, and OE pins may be freely chosen.
 #define DATA_BASE_PIN    3   // Color data pins starting at GPIO 3
 #define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
 
-// Control pins assigned to arbitrarily GPIO pins
+#define STROBE_PIN       1   // aka latch pin
+#define OEN_PIN          2   // must be consecutive to STROBE_PIN
+
+// Clock pin might be assigned to arbitrarily GPIO pin
 #define CLK_PIN          0
-#define STROBE_PIN       1
-#define OEN_PIN          2
 ```
 
 ---
@@ -528,6 +532,7 @@ The table below lists every configurable preprocessor define, its **default valu
 | `SM_CLOCKDIV_FACTOR` | `1.0f` | PIO state machine clock divider factor. Values > 1.0 slow down the state machine. Useful to reduce ghosting or flickering on smaller panels. |
 | `BIT_DEPTH` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
+| `BASIS_BRIGHTNESS_FACTOR` | `6u` | calibrate the brightness of a matrix panel |
 
 > ⚠️ Setting `SM_CLOCKDIV_FACTOR` in CMakeLists.txt implicitly enables the clock divider. If you do not set `SM_CLOCKDIV_FACTOR`, the state machine runs at full speed (equivalent to a factor of `1.0f`).
 
@@ -580,6 +585,7 @@ target_compile_definitions(hub75 PRIVATE
     BIT_DEPTH=8                 # number (count) of bit-planes used for BCM (Binary Code Modulation)
                                 # - valid values for BIT_DEPTH are 8 or 10
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
+    BASIS_BRIGHTNESS_FACTOR=6u  # calibrate the brightness of a matrix panel
 )
 ```
 
@@ -664,6 +670,13 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 
 #ifndef HUB75_MULTICORE
 #define HUB75_MULTICORE      true
+#endif
+
+// The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel. 
+// Different matrix panels are likely to have different base brightness levels. 
+// So some panels need a higher value of basis_factor other matrix panels might need a reduced value.
+#ifndef BASIS_BRIGHTNESS_FACTOR
+#define BASIS_BRIGHTNESS_FACTOR 6u
 #endif
 ```
 
