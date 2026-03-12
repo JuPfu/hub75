@@ -532,7 +532,6 @@ The table below lists every configurable preprocessor define, its **default valu
 | `SM_CLOCKDIV_FACTOR` | `1.0f` | PIO state machine clock divider factor. Values > 1.0 slow down the state machine. Useful to reduce ghosting or flickering on smaller panels. |
 | `BIT_DEPTH` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
-| `BASIS_BRIGHTNESS_FACTOR` | `6u` | calibrate the brightness of a matrix panel |
 
 > ⚠️ Setting `SM_CLOCKDIV_FACTOR` in CMakeLists.txt implicitly enables the clock divider. If you do not set `SM_CLOCKDIV_FACTOR`, the state machine runs at full speed (equivalent to a factor of `1.0f`).
 
@@ -585,7 +584,6 @@ target_compile_definitions(hub75 PRIVATE
     BIT_DEPTH=8                 # number (count) of bit-planes used for BCM (Binary Code Modulation)
                                 # - valid values for BIT_DEPTH are 8 or 10
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    BASIS_BRIGHTNESS_FACTOR=6u  # calibrate the brightness of a matrix panel
 )
 ```
 
@@ -670,13 +668,6 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 
 #ifndef HUB75_MULTICORE
 #define HUB75_MULTICORE      true
-#endif
-
-// The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel. 
-// Different matrix panels are likely to have different base brightness levels. 
-// So some panels need a higher value of basis_factor other matrix panels might need a reduced value.
-#ifndef BASIS_BRIGHTNESS_FACTOR
-#define BASIS_BRIGHTNESS_FACTOR 6u
 #endif
 ```
 

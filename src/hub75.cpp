@@ -161,7 +161,7 @@ static volatile uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default
 static volatile uint32_t scaled_basis[BIT_DEPTH];
 
 // Basis factor (coarse brightness)
-static volatile uint32_t basis_factor = BASIS_BRIGHTNESS_FACTOR;
+static volatile uint32_t basis_factor = 6u;
 
 inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
 {
@@ -194,6 +194,9 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
  * @brief Set the baseline brightness scaling factor for the panel.
  *
  * This acts as the coarse brightness control (default = 6u).
+ * The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel. 
+ * Different matrix panels are likely to have different base brightness levels. 
+ * Some panels need a higher value of basis_factor some other matrix panels might need a reduced value.
  *
  * @param factor Brightness factor (must be > 0, range 1–255).
  */

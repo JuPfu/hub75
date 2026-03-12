@@ -73,7 +73,6 @@ target_compile_definitions(hub75 PRIVATE
     # SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     # BIT_DEPTH=10                # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
     # HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    # BASIS_BRIGHTNESS_FACTOR=6u  # calibrate the brightness of a matrix panel
 )
 
 # Generate PIO header

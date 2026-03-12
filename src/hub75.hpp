@@ -100,13 +100,6 @@
 #define HUB75_MULTICORE true
 #endif
 
-// The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel. 
-// Different matrix panels are likely to have different base brightness levels. 
-// So some panels need a higher value of basis_factor other matrix panels might need a reduced value.
-#ifndef BASIS_BRIGHTNESS_FACTOR
-#define BASIS_BRIGHTNESS_FACTOR 6u
-#endif
-
 // --- modifications below this line might imply changes in source code ---
 
 #if TEMPORAL_DITHERING != false
