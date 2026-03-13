@@ -667,8 +667,8 @@ __attribute__((optimize("unroll-loops"))) void update(
     constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
     {
-        frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
-        frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
+        frame_buffer[fb_index] = LUT_MAPPING(fb_index, src[j]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING(fb_index + 1, src[j + offset]);
     }
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
@@ -692,8 +692,8 @@ __attribute__((optimize("unroll-loops"))) void update(
         int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
                                              : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
 
-        frame_buffer[fb_index] = LUT_MAPPING(index, src[index]);
-        frame_buffer[fb_index + 1] = LUT_MAPPING(index + HALF_PANEL_OFFSET, src[index + HALF_PANEL_OFFSET]);
+        frame_buffer[fb_index] = LUT_MAPPING(fb_index, src[index]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING(fb_index + 1, src[index + HALF_PANEL_OFFSET]);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -718,20 +718,21 @@ __attribute__((optimize("unroll-loops"))) void update(
     uint line = 0;
 
     // Framebuffer write pointer
-    uint32_t *dst = frame_buffer;
+    volatile uint32_t *dst = frame_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
+        ptrdiff_t fb_index = dst - frame_buffer;
         // even src lines
-        dst[0] = LUT_MAPPING(quarter2, src[quarter2]);
+        dst[0] = LUT_MAPPING(fb_index, src[quarter2]);
         quarter2++;
-        dst[1] = LUT_MAPPING(quarter4, src[quarter4]);
+        dst[1] = LUT_MAPPING(fb_index + 1, src[quarter4]);
         quarter4++;
         // odd src lines
-        dst[line_offset + 0] = LUT_MAPPING(quarter1, src[quarter1]);
+        dst[line_offset + 0] = LUT_MAPPING(fb_index + line_offset, src[quarter1]);
         quarter1++;
-        dst[line_offset + 1] = LUT_MAPPING(quarter3, src[quarter3]);
+        dst[line_offset + 1] = LUT_MAPPING(fb_index + line_offset + 1, src[quarter3]);
         quarter3++;
 
         dst += 2;
@@ -767,10 +768,10 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 #ifdef HUB75_MULTIPLEX_2_ROWS
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     const uint rgb_offset = offset * 3;
-    for (size_t i = 0, j = 0; i < total_pixels; j += 3, i += 2)
+    for (size_t fb_index = 0, j = 0; fb_index < total_pixels; j += 3, fb_index += 2)
     {
-        frame_buffer[i] = LUT_MAPPING_RGB(i, src[j], src[j + 1], src[j + 2]);
-        frame_buffer[i + 1] = LUT_MAPPING_RGB(i, src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
+        frame_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[j], src[j + 1], src[j + 2]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB((fb_index + 1), src[rgb_offset + j], src[rgb_offset + j + 1], src[rgb_offset + j + 2]);
     }
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
@@ -794,9 +795,9 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         int32_t index = !(j & PAIR_HALF_BIT) ? (j - (line << PAIR_HALF_SHIFT)) * 3
                                              : (GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT)) * 3;
 
-        frame_buffer[fb_index] = LUT_MAPPING_RGB(index, src[index], src[index + 1], src[index + 2]);
+        frame_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[index], src[index + 1], src[index + 2]);
         index += HALF_PANEL_OFFSET;
-        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB(index, src[index], src[index + 1], src[index + 2]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB(fb_index + 1, src[index], src[index + 1], src[index + 2]);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -821,20 +822,21 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     uint line = 0;
 
     // Framebuffer write pointer
-    uint32_t *dst = frame_buffer;
+    volatile uint32_t *dst = frame_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
+        ptrdiff_t fb_index = dst - frame_buffer;
         // even src lines
-        dst[0] = LUT_MAPPING_RGB(quarter2, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]);
+        dst[0] = LUT_MAPPING_RGB(fb_index, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]);
         quarter2 += 3;
-        dst[1] = LUT_MAPPING_RGB(quarter4, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]);
+        dst[1] = LUT_MAPPING_RGB(fb_index + 1, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]);
         quarter4 += 3;
         // odd src lines
-        dst[line_width + 0] = LUT_MAPPING_RGB(quarter1, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
+        dst[line_width + 0] = LUT_MAPPING_RGB(fb_index + line_width, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
         quarter1 += 3;
-        dst[line_width + 1] = LUT_MAPPING_RGB(quarter3, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
+        dst[line_width + 1] = LUT_MAPPING_RGB(fb_index + line_width + 1, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
         quarter3 += 3;
 
         dst += 2;

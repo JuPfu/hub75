@@ -102,7 +102,7 @@
 
 // --- modifications below this line might imply changes in source code ---
 
-#if TEMPORAL_DITHERING != false
+#if TEMPORAL_DITHERING == true
 #define LUT_MAPPING(IDX, COLOUR) temporal_dithering(IDX, COLOUR)
 #define LUT_MAPPING_RGB(IDX, R, G, B) temporal_dithering(IDX, R, G, B)
 #else
