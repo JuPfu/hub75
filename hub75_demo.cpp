@@ -122,7 +122,7 @@ void initialize()
 
 #if HUB75_MULTICORE == true
     // Run hub75 driver on core1
-    multicore_reset_core1(); // Reset core 1
+    multicore_reset_core1();             // Reset core 1
     multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 #else
     // Run hub75 on core0 - the Hub75 driver is doing its job here
@@ -218,9 +218,9 @@ int main()
             update(&pixelFill);
         }
 
-        // matrix panel brightness will vary between 0.05 and 1.0 (full brightness at basis brightness level)
+        // matrix panel brightness will vary
         float value = sin(intensity);
-        // setIntensity(MAX(0.05, (value * value * value * value)));
+        // setIntensity(MAX(0.0f, (value * value * value * value)), false);
 
         // Update intensity for next loop
         intensity += step;

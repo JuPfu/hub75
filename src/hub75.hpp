@@ -91,7 +91,7 @@
 #define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 
-// Used in hub75_demo.cpp 
+// Used in hub75_demo.cpp
 // Start hub75 driver on core1 if HUB75_MULTICORE is set to true
 // Start hub75 driver on core0 if HUB75_MULTICORE is set to false
 // The hub75 driver has not much CPU load. Most of it task are handled by DMA and PIO.
@@ -114,7 +114,7 @@
 #define SCAN_GROUPS (1 << ROWSEL_N_PINS)
 
 #if !defined(BIT_DEPTH)
-#define BIT_DEPTH 10  // default
+#define BIT_DEPTH 10 // default
 #endif
 
 #if BIT_DEPTH != 8 && BIT_DEPTH != 10
@@ -125,7 +125,6 @@
 #ifndef ACC_BITS
 #define ACC_BITS (BIT_DEPTH + 2)
 #endif
-
 
 #define EXIT_FAILURE 1
 
@@ -142,3 +141,4 @@ void update(PicoGraphics const *graphics);
 
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);
+void setIntensity(float intensity, bool linear_brightness_control);

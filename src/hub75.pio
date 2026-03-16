@@ -21,15 +21,20 @@
 .side_set 2
 
 .wrap_target
-    out pins, 5 [7]    side 0b10 ; Deassert OEn, output row select
-    mov x, y    [3]    side 0b11 ; Pulse LATCH
+    out pins, 5  [7]   side 0b10 ; Deassert OEn, output row select
+    out null, 27       side 0b10 ; Deassert OEn
+    mov x, y     [3]   side 0b11 ; Pulse LATCH
 wait_loop:
     jmp x-- wait_loop  side 0b10 ; Wait for row to latch
-    out x, 27          side 0b10 ; Get OEn pulse width
-pulse_loop:
-    jmp x-- pulse_loop side 0b00 ; Assert OEn for x+1 cycles
-    in x, 32           side 0b00 ; Output data sent to DMA channel after OEn has finished
+    out x, 32          side 0b10 ; Get OEn lit pulse width
+lit_loop:
+    jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
+    out x, 32          side 0b10 ; Get dark period width
+dark_loop:
+    jmp x-- dark_loop  side 0b10 ; Deassert OEn for x+1 cycles (panel OFF)
+    in x, 32           side 0b10 ; Signal DMA that OEn cycle finished
 .wrap
+
 
 % c-sdk {
 static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
@@ -62,9 +67,19 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
 ; side-set pin 1 is OEn
 ; OUT pins are row select A-E
 ;
-; Each FIFO record consists of:
-; - 5-bit row select (LSBs)
-; - Pulse width - 1 (27 MSBs)
+; Each FIFO record consists of three 32-bit words consumed in order:
+;   Word 0 [bits 4:0]  — 5-bit row select (A–E address lines)
+;          [bits 31:5] — unused (discarded by out null, 27)
+;   Word 1 [31:0]      — lit_cycles:  OEn asserted duration (panel ON),
+;                        BCM weighted, scaled by brightness_fp
+;   Word 2 [31:0]      — dark_cycles: OEn deasserted duration (panel OFF),
+;                        = (basis_factor << bit_plane) - lit_cycles
+;
+; Invariant: lit_cycles + dark_cycles = basis_factor << bit_plane (constant),
+; guaranteeing a brightness-independent frame rate.
+;
+; The in x, 32 at the end pushes 0xFFFFFFFF to the RX FIFO, which triggers
+; oen_finished_chan DMA and ultimately fires the oen_finished_handler() ISR.
 ;
 ; Repeatedly select a row, pulse LATCH, and generate a pulse of a certain
 ; width on OEn (Binary Coded Modulation - BCM).
@@ -73,13 +88,17 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
 
 .wrap_target
     out pins, 5 [7]    side 0b11 ; Deassert OEn, output row select
-    mov x, y    [3]    side 0b10 ; Pulse LATCH
+    out null, 27       side 0b11 ; Deassert OEn
+    mov x, y     [3]   side 0b10 ; Pulse LATCH
 wait_loop:
     jmp x-- wait_loop  side 0b11 ; Wait for row to latch
-    out x, 27          side 0b11 ; Get OEn pulse width
-pulse_loop:
-    jmp x-- pulse_loop side 0b01 ; Assert OEn for x+1 cycles
-    in x, 32           side 0b01 ; Output data sent to DMA channel after OEn has finished
+    out x, 32          side 0b11 ; Get OEn pulse width
+lit_loop:
+    jmp x-- lit_loop   side 0b01 ; Assert OEn for x+1 cycles (panel ON)
+    out x, 32          side 0b11 ; Get dark period width
+dark_loop:
+    jmp x-- dark_loop  side 0b11 ; Deassert OEn for x+1 cycles (panel OFF)
+    in x, 32           side 0b11 ; Signal DMA that OEn cycle finished
 .wrap
 
 % c-sdk {

@@ -141,6 +141,26 @@ static struct
 // Variables for row addressing and bit plane selection
 static uint32_t row_address = 0;
 static uint32_t bit_plane = 0;
+
+// Three-word record sent to the hub75_row PIO state machine for each row/bit-plane.
+// The PIO consumes all three words in order via DMA.
+//
+// Memory layout (must remain packed, no padding):
+//   offset 0: row_address  — 5-bit row select
+//   offset 4: lit_cycles   — OEn asserted   (panel ON)  duration, BCM weighted
+//   offset 8: dark_cycles  — OEn deasserted (panel OFF) duration
+//
+// Invariant: lit_cycles + dark_cycles = basis_factor << bit_plane (constant),
+// which guarantees a brightness-independent frame rate.
+struct OenRecord
+{
+    uint32_t row_address; ///< 5-bit row select; selects which pair of rows to drive
+    uint32_t lit_cycles;  ///< OEn ON  duration for this bit plane, scaled by brightness
+    uint32_t dark_cycles; ///< OEn OFF duration = full BCM period - lit_cycles
+} __attribute__((packed));
+
+static volatile OenRecord oen_data = {0, 0, 0};
+
 static uint32_t row_in_bit_plane = 0;
 
 // Derived constants
@@ -157,36 +177,65 @@ static std::vector<uint16_t> acc_r, acc_g, acc_b;
 // Brightness as fixed-point Q16 (volatile because it may be changed at runtime)
 static volatile uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default == 1.0
 
-// Precomputed scaled basis per bit plane to avoid calculating in ISR
-static volatile uint32_t scaled_basis[BIT_DEPTH];
+// Precomputed scaled lit and dark cycles per bit plane to avoid calculating in ISR
+static volatile uint32_t lit_cycles[BIT_DEPTH];
+static volatile uint32_t dark_cycles[BIT_DEPTH];
 
 // Basis factor (coarse brightness)
 static volatile uint32_t basis_factor = 6u;
 
-inline __attribute__((always_inline)) uint32_t set_row_in_bit_plane(uint32_t row_address, uint32_t bit_plane)
+// l = 116 * f(y) - 16
+// y > (6 / 29)^3  => f(y) = y^(1/3)
+// y >= (6 / 29)^3 => f(y) = (841 / 108) * y + 4/29
+float cie1931_luminance(float y)
 {
-    // scaled_basis[bit_plane] already includes brightness scaling.
-    // left shift by 5 to form the OEn-length encoding.
-    return row_address | (scaled_basis[bit_plane] << 5);
+    constexpr float d = (6.0f / 29.0f) * (6.0f / 29.0f) * (6.0f / 29.0f);
+
+    y = CLAMP(y, 0.0f, 1.0f);
+
+    float h = 0.0f;
+
+    if (y > d)
+    {
+        float u = y - 1.0f;
+        // first four terms of Taylor series of qubic root of x written in Horner schema
+        h = ((5.0f / 81.f * u - 1.0f / 9.0f) * u + 1.0f / 3.0f) * u + 1.0f;
+    }
+    else
+    {
+        h = 841.0f / 108.0f * y + 4.0f / 29.0f;
+    }
+    return (116.0f * h - 16.0f) / 100.0f;
 }
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
 // scaled_basis[b] = (basis_factor << b) * brightness_fp  >> BRIGHTNESS_FP_SHIFT
 __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
 {
-    uint32_t tmp[BIT_DEPTH];
+    uint32_t tmp_lit[BIT_DEPTH];
+    uint32_t tmp_dark[BIT_DEPTH];
 
     for (int b = 0; b < BIT_DEPTH; ++b)
     {
-        // use 64-bit intermediate to avoid overflow during multiply
+        // Full BCM period for this bit plane: doubles with each plane (1, 2, 4, 8 …)
+        // scaled by basis_factor for coarse panel calibration.
         uint64_t base = (uint64_t)basis_factor << b;
-        tmp[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
+        // Lit portion: fraction of the full period during which OEn is asserted.
+        // brightness_fp is Q16 fixed-point: 0 = off, 65536 = full brightness.
+        tmp_lit[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
+        // Dark portion: remaining time OEn is deasserted (panel off).
+        // lit + dark = base, so total period is constant regardless of brightness.
+        tmp_dark[b] = base - tmp_lit[b];
     }
 
     // update scaled_basis atomically w.r.t. interrupts reading it
     uint32_t irq = save_and_disable_interrupts();
     for (int b = 0; b < BIT_DEPTH; ++b)
-        scaled_basis[b] = tmp[b];
+    {
+        lit_cycles[b] = tmp_lit[b];
+        dark_cycles[b] = tmp_dark[b];
+    }
+
     restore_interrupts(irq);
 }
 
@@ -194,8 +243,8 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
  * @brief Set the baseline brightness scaling factor for the panel.
  *
  * This acts as the coarse brightness control (default = 6u).
- * The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel. 
- * Different matrix panels are likely to have different base brightness levels. 
+ * The purpose of BASIS_BRIGHTNESS_FACTOR is to calibrate the brightness of a matrix panel.
+ * Different matrix panels are likely to have different base brightness levels.
  * Some panels need a higher value of basis_factor some other matrix panels might need a reduced value.
  *
  * @param factor Brightness factor (must be > 0, range 1–255).
@@ -217,6 +266,20 @@ void setBasisBrightness(uint8_t factor)
  */
 void setIntensity(float intensity)
 {
+    setIntensity(intensity, true);
+}
+
+/**
+ * @brief Set the runtime brightness level of the panel.
+ *
+ * This acts as the fine brightness/intensity control, scaling within the
+ * current basis brightness range.
+ *
+ * @param intensity Intensity value in range [0.0f, 1.0f].
+ *        Values outside are clamped to the valid range.
+ */
+void setIntensity(float intensity, bool linear_brightness_control)
+{
     if (intensity <= 0.0f)
     {
         brightness_fp = 0;
@@ -228,6 +291,10 @@ void setIntensity(float intensity)
     else
     {
         // stable conversion to Q16
+        if (linear_brightness_control)
+        {
+            intensity = cie1931_luminance(intensity);
+        }
         brightness_fp = (uint32_t)(intensity * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
     }
     recompute_scaled_basis();
@@ -317,10 +384,19 @@ static void oen_finished_handler()
     };
 #endif
 
-    // Compute address and length of OEn pulse for next row
-    row_in_bit_plane = set_row_in_bit_plane(row_address, bit_plane);
+    // Build the three-word OEn record for the next row/bit-plane and point
+    // oen_chan at it.  The PIO state machine consumes all three words in order:
+    //   word 0 — row address
+    //   word 1 — lit duration  (OEn asserted,   panel ON)
+    //   word 2 — dark duration (OEn deasserted, panel OFF)
+    // Using lit + dark instead of a single pulse width keeps the total period
+    // constant, giving a brightness-independent frame rate.
+    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
+    oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
+    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
 
-    dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
+    // dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
+    dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
     // Restart DMA channels for the next row's data transfer
     dma_channel_set_write_addr(oen_finished_chan, (volatile void *)&oen_finished_data, true);
@@ -389,7 +465,10 @@ void start_hub75_driver()
     dma_buffer = frame_buffer1;
     swap_pending = false;
 
-    row_address = 0;
+    oen_data.row_address = 0;
+    oen_data.lit_cycles = lit_cycles[bit_plane];
+    oen_data.dark_cycles = dark_cycles[bit_plane];
+
     // Start DMA channels
     dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
     dma_channel_set_read_addr(pixel_chan, dma_buffer, true);
@@ -526,15 +605,14 @@ static void setup_dma_transfers()
 #endif
 
     dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
-    dma_input_channel_setup(oen_chan, 1, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
+    dma_input_channel_setup(oen_chan, 3, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
     pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
     pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
 
     dma_channel_set_read_addr(dummy_pixel_chan, dummy_pixel_data, false);
 
-    row_in_bit_plane = set_row_in_bit_plane(row_address, bit_plane);
-    dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
+    dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
     dma_channel_config oen_finished_config = dma_channel_get_default_config(oen_finished_chan);
     channel_config_set_transfer_data_size(&oen_finished_config, DMA_SIZE_32);

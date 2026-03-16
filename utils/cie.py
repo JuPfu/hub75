@@ -1,6 +1,6 @@
 # Generate lookup table for converting between perceived LED brightness and PWM
 
-# Adapted from: https://jared.geek.nz/2013/feb/linear-led-pwm
+# Adapted from: https://jared.geek.nz/2013/02/linear-led-pwm/
 # See also: https://ledshield.wordpress.com/2012/11/13/led-brightness-to-your-eye-gamma-correction-no/
 
 from sys import stdout
