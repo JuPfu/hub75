@@ -9,35 +9,45 @@
 
 ; side-set pin 0 is LATCH
 ; side-set pin 1 is OEn
+;
 ; OUT pins are row select A-E
 ;
-; Each FIFO record consists of:
-; - 5-bit row select (LSBs)
-; - Pulse width - 1 (27 MSBs)
+; Each TX FIFO record consists of three 32-bit words consumed in order:
+;   Word 0 [bits 4:0]  — 5-bit row select (A–E address lines)
+;          [bits 31:5] — unused (discarded by out null, 27)
+;   Word 1 [31:0]      — lit_cycles:  OEn asserted duration (panel ON),
+;                        BCM weighted, scaled by brightness_fp
+;   Word 2 [31:0]      — dark_cycles: OEn deasserted duration (panel OFF),
+;                        = (basis_factor << bit_plane) - lit_cycles
 ;
-; Repeatedly select a row, pulse LATCH, and generate a pulse of a certain
-; width on OEn (Binary Coded Modulation - BCM).
+; Invariant: lit_cycles + dark_cycles = basis_factor << bit_plane (constant),
+; guaranteeing a brightness-independent frame rate.
+;
+; Two RX FIFO pushes are produced per record (consumed by ping-pong DMA):
+;   Push 1 (in y, 32): after LATCH — signals oen_lit_chan to start pixel_chan[N+1]
+;   Push 2 (in x, 32): after dark_loop — signals oen_finished_chan to restart oen_chan
+;
+; Repeatedly select a row, pulse LATCH, and generate a pulse of a certain width on OEn (Binary Coded Modulation - BCM).
 
 .side_set 2
 
 .wrap_target
-    out pins, 5  [7]   side 0b10 ; Deassert OEn, output row select
-    out null, 27       side 0b10 ; Deassert OEn
-    mov x, y     [3]   side 0b11 ; Pulse LATCH
-wait_loop:
-    jmp x-- wait_loop  side 0b10 ; Wait for row to latch
-    out x, 32          side 0b10 ; Get OEn lit pulse width
+    out pins, 5  [7]   side 0b10 ; Deassert OEn, output 5-bit row select (bits [4:0] of word 0)
+    out null, 27       side 0b10 ; Discard bits [31:5] of word 0 (row_address in [4:0] only)
+    out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
+    mov y, x     [7]   side 0b11 ; Copy lit_cycles in Y, pulse LATCH for [7]+1 cycles
+    in y, 32           side 0b10 ; Push lit_cycles to RX FIFO → triggers oen_lit_chan (start-of-lit)
 lit_loop:
     jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
-    out x, 32          side 0b10 ; Get dark period width
+    out x, 32          side 0b10 ; Deassert OEn, load dark_cycles (word 2) into X
 dark_loop:
-    jmp x-- dark_loop  side 0b10 ; Deassert OEn for x+1 cycles (panel OFF)
-    in x, 32           side 0b10 ; Signal DMA that OEn cycle finished
+    jmp x-- dark_loop  side 0b10 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
+    in x, 32           side 0b10 ; Push to RX FIFO → triggers oen_finished_chan (end-of-dark)
 .wrap
 
 
 % c-sdk {
-static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
+static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
     pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
@@ -51,12 +61,6 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_out_shift(&c, true, true, 32);
     pio_sm_init(pio, sm, offset, &c);
-
-    // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    // Load wait_cycles into Y-register
-    pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-    pio_sm_put(pio, sm, wait_cycles);
-
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
@@ -87,22 +91,21 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
 .side_set 2
 
 .wrap_target
-    out pins, 5 [7]    side 0b11 ; Deassert OEn, output row select
-    out null, 27       side 0b11 ; Deassert OEn
-    mov x, y     [3]   side 0b10 ; Pulse LATCH
-wait_loop:
-    jmp x-- wait_loop  side 0b11 ; Wait for row to latch
-    out x, 32          side 0b11 ; Get OEn pulse width
+    out pins, 5  [7]   side 0b11 ; Deassert OEn, output 5-bit row select (bits [4:0] of word 0)
+    out null, 27       side 0b11 ; Discard bits [31:5] of word 0 (row_address in [4:0] only)
+    out x, 32          side 0b11 ; Load lit_cycles (word 1) into X
+    mov y, x     [7]   side 0b10 ; Copy lit_cycles in Y, pulse LATCH for [7]+1 cycles
+    in y, 32           side 0b10 ; Push lit_cycles to RX FIFO → triggers oen_lit_chan (start-of-lit)
 lit_loop:
     jmp x-- lit_loop   side 0b01 ; Assert OEn for x+1 cycles (panel ON)
-    out x, 32          side 0b11 ; Get dark period width
+    out x, 32          side 0b11 ; Deassert OEn, load dark_cycles (word 2) into X
 dark_loop:
-    jmp x-- dark_loop  side 0b11 ; Deassert OEn for x+1 cycles (panel OFF)
-    in x, 32           side 0b11 ; Signal DMA that OEn cycle finished
+    jmp x-- dark_loop  side 0b11 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
+    in x, 32           side 0b11 ; Push to RX FIFO → triggers oen_finished_chan (end-of-dark)
 .wrap
 
 % c-sdk {
-static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin,  uint wait_cycles) {
+static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
     pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
@@ -116,12 +119,6 @@ static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_out_shift(&c, true, true, 32);
     pio_sm_init(pio, sm, offset, &c);
-
-    // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    // Load wait_cycles into Y-register
-    pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-    pio_sm_put(pio, sm, wait_cycles);
-
     pio_sm_set_enabled(pio, sm, true);
 }
 %}

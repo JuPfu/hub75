@@ -67,6 +67,7 @@
 #define PANEL_GENERIC 0
 #define PANEL_FM6126A 1
 #define PANEL_RUL6024 2
+#define PANEL_FM6124DJ 3
 
 // set your panel type
 // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set PANEL_TYPE to PANEL_RUL6024

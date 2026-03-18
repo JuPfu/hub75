@@ -49,6 +49,7 @@ pico_set_float_implementation(hub75 pico)
 set(PANEL_GENERIC 0)
 set(PANEL_FM6126A 1)
 set(PANEL_RUL6024 2)
+set(PANEL_FM6124DJ 3)
 
 # No need to modify preprocessor defines in hub75.cpp - instead set their values here.
 #
@@ -95,6 +96,7 @@ target_sources(hub75 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/fm6124dj.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/hue_value_spectrum.hpp
         ${CMAKE_CURRENT_LIST_DIR}/hub75_demo.cpp
         )

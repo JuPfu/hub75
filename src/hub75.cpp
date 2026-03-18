@@ -14,6 +14,7 @@
 
 #include "rul6024.h"
 #include "fm6126a.h"
+#include "fm6124dj.h"
 
 // Deduced from https://jared.geek.nz/2013/02/linear-led-pwm/
 // The CIE 1931 lightness formula is what actually describes how we perceive light.
@@ -112,6 +113,8 @@ static void setup_dma_irq();
 static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 // Control data for the output enable signal
 static volatile uint32_t oen_finished_data = 0;
+// Control data for the latch signal
+static volatile uint32_t oen_lit_data = 0;
 
 // Width and height of the HUB75 LED matrix
 static uint width;
@@ -122,6 +125,10 @@ static uint offset;
 int pixel_chan;
 int dummy_pixel_chan;
 int oen_chan;
+
+// DMA channel that becomes active when output enable (OEn) has finished.
+// This channel's interrupt handler restarts the pixel data DMA channel.
+int oen_lit_chan;
 
 // DMA channel that becomes active when output enable (OEn) has finished.
 // This channel's interrupt handler restarts the pixel data DMA channel.
@@ -161,8 +168,6 @@ struct OenRecord
 
 static volatile OenRecord oen_data = {0, 0, 0};
 
-static uint32_t row_in_bit_plane = 0;
-
 // Derived constants
 static constexpr int ACC_SHIFT = (ACC_BITS - BIT_DEPTH);    // number of low bits preserved in accumulator
 static constexpr uint16_t CLAMP_MAX = (1u << ACC_BITS) - 1; // 4095 for 10-bit, 1023 for 8-bit
@@ -198,7 +203,8 @@ float cie1931_luminance(float y)
     if (y > d)
     {
         float u = y - 1.0f;
-        // first four terms of Taylor series of qubic root of x written in Horner schema
+        // first four terms of Taylor series of qubic root of x written in Horner schema format
+        // ToDo: Use fixed decimal arithmetic
         h = ((5.0f / 81.f * u - 1.0f / 9.0f) * u + 1.0f / 3.0f) * u + 1.0f;
     }
     else
@@ -321,10 +327,10 @@ static void init_accumulators(std::size_t pixel_count)
  * modifies the PIO state machine instruction, and restarts DMA transfers
  * for pixel data to ensure continuous frame updates.
  */
-static void oen_finished_handler()
+static void oen_lit_handler()
 {
     // Clear the interrupt request for the finished DMA channel
-    dma_channel_acknowledge_irq1(oen_finished_chan);
+    dma_channel_acknowledge_irq1(oen_lit_chan);
 
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -398,14 +404,14 @@ static void oen_finished_handler()
     // dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
-    // Restart DMA channels for the next row's data transfer
-    dma_channel_set_write_addr(oen_finished_chan, (volatile void *)&oen_finished_data, true);
-
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 2)], true);
 #endif
+
+    // Re-arm oen_lit_chan to catch the next start-of-lit RX FIFO push.
+    dma_channel_set_write_addr(oen_lit_chan, &oen_lit_data, true);
 }
 
 /**
@@ -440,6 +446,10 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     {
         FM6126A_setup();
     }
+    else if (panel_type == PANEL_FM6124DJ)
+    {
+        FM6124DJ_setup();
+    }
     else if (panel_type == PANEL_RUL6024)
     {
         RUL6024_setup();
@@ -466,12 +476,16 @@ void start_hub75_driver()
     swap_pending = false;
 
     oen_data.row_address = 0;
-    oen_data.lit_cycles = lit_cycles[bit_plane];
-    oen_data.dark_cycles = dark_cycles[bit_plane];
+    oen_data.lit_cycles = lit_cycles[0];
+    oen_data.dark_cycles = dark_cycles[0];
 
     // Start DMA channels
-    dma_channel_set_write_addr(oen_finished_chan, &oen_finished_data, true);
-    dma_channel_set_read_addr(pixel_chan, dma_buffer, true);
+
+    // Arm the ping-pong and start the row PIO.
+    // LATCH will fire into already-valid shift register data.
+    dma_channel_set_read_addr(oen_chan, &oen_data, false);
+    dma_channel_set_write_addr(oen_lit_chan, &oen_lit_data, true);
+    dma_channel_set_read_addr(pixel_chan, dma_buffer, true); // starts the chain
 }
 
 /**
@@ -520,15 +534,12 @@ static void configure_pio(bool inverted_stb)
         }
     }
 
-    // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
-
     hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
 }
 
 /**
@@ -542,6 +553,7 @@ static void configure_dma_channels()
     pixel_chan = dma_claim_unused_channel(true);
     dummy_pixel_chan = dma_claim_unused_channel(true);
     oen_chan = dma_claim_unused_channel(true);
+    oen_lit_chan = dma_claim_unused_channel(true);
     oen_finished_chan = dma_claim_unused_channel(true);
 }
 
@@ -605,6 +617,8 @@ static void setup_dma_transfers()
 #endif
 
     dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
+
+    // start oen_chan when dummy_pixel_data for N+1 row has been completely loaded
     dma_input_channel_setup(oen_chan, 3, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
     pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
@@ -614,11 +628,19 @@ static void setup_dma_transfers()
 
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
+    dma_channel_config oen_lit_config = dma_channel_get_default_config(oen_lit_chan);
+    channel_config_set_transfer_data_size(&oen_lit_config, DMA_SIZE_32);
+    channel_config_set_read_increment(&oen_lit_config, false);
+    channel_config_set_write_increment(&oen_lit_config, false);
+    channel_config_set_dreq(&oen_lit_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
+    dma_channel_configure(oen_lit_chan, &oen_lit_config, &oen_lit_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
+
     dma_channel_config oen_finished_config = dma_channel_get_default_config(oen_finished_chan);
     channel_config_set_transfer_data_size(&oen_finished_config, DMA_SIZE_32);
     channel_config_set_read_increment(&oen_finished_config, false);
     channel_config_set_write_increment(&oen_finished_config, false);
     channel_config_set_dreq(&oen_finished_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
+    channel_config_set_chain_to(&oen_finished_config, oen_lit_chan);
     dma_channel_configure(oen_finished_chan, &oen_finished_config, &oen_finished_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
 }
 
@@ -631,8 +653,8 @@ static void setup_dma_transfers()
  */
 static void setup_dma_irq()
 {
-    irq_set_exclusive_handler(DMA_IRQ_1, oen_finished_handler);
-    dma_channel_set_irq1_enabled(oen_finished_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_1, oen_lit_handler);
+    dma_channel_set_irq1_enabled(oen_lit_chan, true);
     irq_set_enabled(DMA_IRQ_1, true);
 }
 
