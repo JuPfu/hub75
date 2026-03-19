@@ -110,11 +110,9 @@ static void setup_dma_transfers();
 static void setup_dma_irq();
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
-static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-// Control data for the output enable signal
-static volatile uint32_t oen_finished_data = 0;
+static volatile uint32_t dummy_pixel_data[2] = {0x0, 0x0};
 // Control data for the latch signal
-static volatile uint32_t oen_lit_data = 0;
+static volatile uint32_t oen_dark_data = 0;
 
 // Width and height of the HUB75 LED matrix
 static uint width;
@@ -126,13 +124,8 @@ int pixel_chan;
 int dummy_pixel_chan;
 int oen_chan;
 
-// DMA channel that becomes active when output enable (OEn) has finished.
 // This channel's interrupt handler restarts the pixel data DMA channel.
-int oen_lit_chan;
-
-// DMA channel that becomes active when output enable (OEn) has finished.
-// This channel's interrupt handler restarts the pixel data DMA channel.
-int oen_finished_chan;
+int oen_dark_chan;
 
 // PIO configuration structure for state machine numbers and corresponding program offsets
 static struct
@@ -319,6 +312,8 @@ static void init_accumulators(std::size_t pixel_count)
     acc_b.assign(pixel_count, 0);
 }
 
+#define FRAME_MEASURE_INTERVAL 100
+
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -327,10 +322,23 @@ static void init_accumulators(std::size_t pixel_count)
  * modifies the PIO state machine instruction, and restarts DMA transfers
  * for pixel data to ensure continuous frame updates.
  */
-static void oen_lit_handler()
+static void oen_dark_handler()
 {
     // Clear the interrupt request for the finished DMA channel
-    dma_channel_acknowledge_irq1(oen_lit_chan);
+    dma_channel_acknowledge_irq1(oen_dark_chan);
+
+    // Build the three-word OEn record for the next row/bit-plane and point
+    // oen_chan at it.  The PIO state machine consumes all three words in order:
+    //   word 0 — row address
+    //   word 1 — lit duration  (OEn asserted,   panel ON)
+    //   word 2 — dark duration (OEn deasserted, panel OFF)
+    // Using lit + dark instead of a single pulse width keeps the total period
+    // constant, giving a brightness-independent frame rate.
+    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
+    oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
+    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
+
+    dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -390,28 +398,14 @@ static void oen_lit_handler()
     };
 #endif
 
-    // Build the three-word OEn record for the next row/bit-plane and point
-    // oen_chan at it.  The PIO state machine consumes all three words in order:
-    //   word 0 — row address
-    //   word 1 — lit duration  (OEn asserted,   panel ON)
-    //   word 2 — dark duration (OEn deasserted, panel OFF)
-    // Using lit + dark instead of a single pulse width keeps the total period
-    // constant, giving a brightness-independent frame rate.
-    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
-    oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
-    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
-
-    // dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
-    dma_channel_set_read_addr(oen_chan, &oen_data, false);
-
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 2)], true);
 #endif
 
-    // Re-arm oen_lit_chan to catch the next start-of-lit RX FIFO push.
-    dma_channel_set_write_addr(oen_lit_chan, &oen_lit_data, true);
+    // Re-arm oen_dark_chan to catch the next start-of-lit RX FIFO push.
+    dma_channel_set_write_addr(oen_dark_chan, &oen_dark_data, true);
 }
 
 /**
@@ -481,11 +475,19 @@ void start_hub75_driver()
 
     // Start DMA channels
 
-    // Arm the ping-pong and start the row PIO.
-    // LATCH will fire into already-valid shift register data.
+    // Shift row 0 synchronously so it is ready before first LATCH.
+    dma_channel_set_read_addr(pixel_chan, &dma_buffer[0], true);
+    dma_channel_wait_for_finish_blocking(pixel_chan);
+    dma_channel_wait_for_finish_blocking(dummy_pixel_chan);
+
+    // Pre-load oen_chan with row 0 record.
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
-    dma_channel_set_write_addr(oen_lit_chan, &oen_lit_data, true);
-    dma_channel_set_read_addr(pixel_chan, dma_buffer, true); // starts the chain
+
+    // Arm consumer before starting row PIO.
+    dma_channel_set_write_addr(oen_dark_chan, &oen_dark_data, true);
+
+    // Trigger first oen_chan — row PIO starts, displays row 0,
+    dma_channel_set_read_addr(oen_chan, &oen_data, true);
 }
 
 /**
@@ -534,12 +536,15 @@ static void configure_pio(bool inverted_stb)
         }
     }
 
+    // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
+    uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
+
     hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
 }
 
 /**
@@ -553,8 +558,7 @@ static void configure_dma_channels()
     pixel_chan = dma_claim_unused_channel(true);
     dummy_pixel_chan = dma_claim_unused_channel(true);
     oen_chan = dma_claim_unused_channel(true);
-    oen_lit_chan = dma_claim_unused_channel(true);
-    oen_finished_chan = dma_claim_unused_channel(true);
+    oen_dark_chan = dma_claim_unused_channel(true);
 }
 
 /**
@@ -616,7 +620,7 @@ static void setup_dma_transfers()
     dma_input_channel_setup(pixel_chan, width << 2, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
 #endif
 
-    dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
+    dma_input_channel_setup(dummy_pixel_chan, 2, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
 
     // start oen_chan when dummy_pixel_data for N+1 row has been completely loaded
     dma_input_channel_setup(oen_chan, 3, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
@@ -628,20 +632,12 @@ static void setup_dma_transfers()
 
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
-    dma_channel_config oen_lit_config = dma_channel_get_default_config(oen_lit_chan);
-    channel_config_set_transfer_data_size(&oen_lit_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&oen_lit_config, false);
-    channel_config_set_write_increment(&oen_lit_config, false);
-    channel_config_set_dreq(&oen_lit_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
-    dma_channel_configure(oen_lit_chan, &oen_lit_config, &oen_lit_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
-
-    dma_channel_config oen_finished_config = dma_channel_get_default_config(oen_finished_chan);
-    channel_config_set_transfer_data_size(&oen_finished_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&oen_finished_config, false);
-    channel_config_set_write_increment(&oen_finished_config, false);
-    channel_config_set_dreq(&oen_finished_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
-    channel_config_set_chain_to(&oen_finished_config, oen_lit_chan);
-    dma_channel_configure(oen_finished_chan, &oen_finished_config, &oen_finished_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
+    dma_channel_config oen_dark_config = dma_channel_get_default_config(oen_dark_chan);
+    channel_config_set_transfer_data_size(&oen_dark_config, DMA_SIZE_32);
+    channel_config_set_read_increment(&oen_dark_config, false);
+    channel_config_set_write_increment(&oen_dark_config, false);
+    channel_config_set_dreq(&oen_dark_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
+    dma_channel_configure(oen_dark_chan, &oen_dark_config, &oen_dark_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
 }
 
 /**
@@ -653,8 +649,8 @@ static void setup_dma_transfers()
  */
 static void setup_dma_irq()
 {
-    irq_set_exclusive_handler(DMA_IRQ_1, oen_lit_handler);
-    dma_channel_set_irq1_enabled(oen_lit_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_1, oen_dark_handler);
+    dma_channel_set_irq1_enabled(oen_dark_chan, true);
     irq_set_enabled(DMA_IRQ_1, true);
 }
 
