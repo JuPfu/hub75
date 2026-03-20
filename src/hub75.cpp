@@ -142,6 +142,9 @@ static struct
 static uint32_t row_address = 0;
 static uint32_t bit_plane = 0;
 
+
+static uint32_t wait_cycles = 0;
+
 // Three-word record sent to the hub75_row PIO state machine for each row/bit-plane.
 // The PIO consumes all three words in order via DMA.
 //
@@ -224,7 +227,11 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
         tmp_lit[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
         // Dark portion: remaining time OEn is deasserted (panel off).
         // lit + dark = base, so total period is constant regardless of brightness.
-        tmp_dark[b] = base - tmp_lit[b];
+        if ((base - tmp_lit[b]) > wait_cycles) {
+            tmp_dark[b] = base - tmp_lit[b] - wait_cycles;
+        } else {
+            tmp_dark[b] = wait_cycles;
+        }
     }
 
     // update scaled_basis atomically w.r.t. interrupts reading it
@@ -311,8 +318,6 @@ static void init_accumulators(std::size_t pixel_count)
     acc_g.assign(pixel_count, 0);
     acc_b.assign(pixel_count, 0);
 }
-
-#define FRAME_MEASURE_INTERVAL 100
 
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
@@ -537,14 +542,14 @@ static void configure_pio(bool inverted_stb)
     }
 
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
+    wait_cycles = clock_get_hz(clk_sys) / 4000000;
 
     hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
 }
 
 /**

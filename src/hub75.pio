@@ -37,18 +37,15 @@
     out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
 lit_loop:
     jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
-    in x, 32           side 0b11 ; Push dark_cycles to RX FIFO → triggers triggers oen_dark_chan: start pixel_chan[N+1]
-    mov x, y           side 0b11 ; Copy wait cycles from Y register into X register
-wait_loop:
-    jmp x-- wait_loop  side 0b11 ; Wait for row to latch
     out x, 32          side 0b11 ; Deassert OEn, load dark_cycles (word 2) into X
 dark_loop:
     jmp x-- dark_loop  side 0b11 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
+    in x, 32           side 0b10 ; Push value to RX FIFO → triggers oen_dark_chan: start pixel_chan[N+1]
 .wrap
 
 
 % c-sdk {
-static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
+static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
     pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
@@ -62,12 +59,6 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_out_shift(&c, true, true, 32);
     pio_sm_init(pio, sm, offset, &c);
-
-    // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    // Load wait_cycles into Y-register
-    pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-    pio_sm_put(pio, sm, wait_cycles);
-
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
@@ -112,7 +103,7 @@ dark_loop:
 .wrap
 
 % c-sdk {
-static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
+static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin) {
     pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
     for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
@@ -126,12 +117,6 @@ static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset
     sm_config_set_in_shift(&c, true, true, 32);
     sm_config_set_out_shift(&c, true, true, 32);
     pio_sm_init(pio, sm, offset, &c);
-
-    // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    // Load wait_cycles into Y-register
-    pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-    pio_sm_put(pio, sm, wait_cycles);
-
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
