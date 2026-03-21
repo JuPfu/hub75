@@ -227,14 +227,10 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
         tmp_lit[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
         // Dark portion: remaining time OEn is deasserted (panel off).
         // lit + dark = base, so total period is constant regardless of brightness.
-        if ((base - tmp_lit[b]) > wait_cycles) {
-            tmp_dark[b] = base - tmp_lit[b] - wait_cycles;
-        } else {
-            tmp_dark[b] = wait_cycles;
-        }
+        tmp_dark[b] = base - tmp_lit[b];
     }
 
-    // update scaled_basis atomically w.r.t. interrupts reading it
+    // update scaled_basis atomically with regard to interrupts reading it
     uint32_t irq = save_and_disable_interrupts();
     for (int b = 0; b < BIT_DEPTH; ++b)
     {
@@ -297,10 +293,10 @@ void setIntensity(float intensity, bool linear_brightness_control)
     else
     {
         // stable conversion to Q16
-        if (linear_brightness_control)
-        {
-            intensity = cie1931_luminance(intensity);
-        }
+        // if (linear_brightness_control)
+        // {
+        //     intensity = cie1931_luminance(intensity);
+        // }
         brightness_fp = (uint32_t)(intensity * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
     }
     recompute_scaled_basis();
@@ -547,9 +543,9 @@ static void configure_pio(bool inverted_stb)
     hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN);
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
 }
 
 /**
