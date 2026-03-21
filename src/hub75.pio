@@ -34,18 +34,17 @@
 .wrap_target
     out pins, 5  [7]   side 0b10 ; Deassert OEn, output 5-bit row select (bits [4:0] of word 0)
     out null, 27       side 0b10 ; Discard bits [31:5] of word 0 (row_address in [4:0] only)
+    mov x, y           side 0b10 ; Copy wait cycles from Y register into X register
+wait_loop:
+    jmp x-- wait_loop  side 0b11 ; Wait for row to latch
     out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
 lit_loop:
     jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
     in x, 32           side 0b10 ; Push dark_cycles to RX FIFO → triggers triggers oen_dark_chan: start pixel_chan[N+1]
-    mov x, y           side 0b10 ; Copy wait cycles from Y register into X register
-wait_loop:
-    jmp x-- wait_loop  side 0b11 ; Wait for row to latch
     out x, 32          side 0b10 ; Deassert OEn, load dark_cycles (word 2) into X
- dark_loop:
+dark_loop:
     jmp x-- dark_loop  side 0b10 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
 .wrap
-
 
 % c-sdk {
 static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {

@@ -142,7 +142,6 @@ static struct
 static uint32_t row_address = 0;
 static uint32_t bit_plane = 0;
 
-
 static uint32_t wait_cycles = 0;
 
 // Three-word record sent to the hub75_row PIO state machine for each row/bit-plane.
@@ -211,7 +210,6 @@ float cie1931_luminance(float y)
 }
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
-// scaled_basis[b] = (basis_factor << b) * brightness_fp  >> BRIGHTNESS_FP_SHIFT
 __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
 {
     uint32_t tmp_lit[BIT_DEPTH];
@@ -221,7 +219,7 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
     {
         // Full BCM period for this bit plane: doubles with each plane (1, 2, 4, 8 …)
         // scaled by basis_factor for coarse panel calibration.
-        uint64_t base = (uint64_t)basis_factor << b;
+        uint32_t base = basis_factor << b;
         // Lit portion: fraction of the full period during which OEn is asserted.
         // brightness_fp is Q16 fixed-point: 0 = off, 65536 = full brightness.
         tmp_lit[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
@@ -328,19 +326,6 @@ static void oen_dark_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(oen_dark_chan);
 
-    // Build the three-word OEn record for the next row/bit-plane and point
-    // oen_chan at it.  The PIO state machine consumes all three words in order:
-    //   word 0 — row address
-    //   word 1 — lit duration  (OEn asserted,   panel ON)
-    //   word 2 — dark duration (OEn deasserted, panel OFF)
-    // Using lit + dark instead of a single pulse width keeps the total period
-    // constant, giving a brightness-independent frame rate.
-    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
-    oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
-    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
-
-    dma_channel_set_read_addr(oen_chan, &oen_data, false);
-
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     // plane wise BCM (Binary Coded Modulation)
@@ -399,6 +384,18 @@ static void oen_dark_handler()
     };
 #endif
 
+    // Build the three-word OEn record for the next row/bit-plane and point
+    // oen_chan at it.  The PIO state machine consumes all three words in order:
+    //   word 0 — row address
+    //   word 1 — lit duration  (OEn asserted,   panel ON)
+    //   word 2 — dark duration (OEn deasserted, panel OFF)
+    // Using lit + dark instead of a single pulse width keeps the total period
+    // constant, giving a brightness-independent frame rate.
+    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
+    oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
+    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
+
+    dma_channel_set_read_addr(oen_chan, &oen_data, false);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 1)], true);
 #elif defined(HUB75_P10_3535_16X32_4S) || defined(HUB75_P3_1415_16S_64X64_S31)
@@ -406,7 +403,7 @@ static void oen_dark_handler()
 #endif
 
     // Re-arm oen_dark_chan to catch the next start-of-lit RX FIFO push.
-    dma_channel_set_write_addr(oen_dark_chan, &oen_dark_data, true);
+    dma_channel_start(oen_dark_chan);
 }
 
 /**
@@ -481,14 +478,11 @@ void start_hub75_driver()
     dma_channel_wait_for_finish_blocking(pixel_chan);
     dma_channel_wait_for_finish_blocking(dummy_pixel_chan);
 
-    // Pre-load oen_chan with row 0 record.
-    dma_channel_set_read_addr(oen_chan, &oen_data, false);
-
     // Arm consumer before starting row PIO.
     dma_channel_set_write_addr(oen_dark_chan, &oen_dark_data, true);
 
     // Trigger first oen_chan — row PIO starts, displays row 0,
-    dma_channel_set_read_addr(oen_chan, &oen_data, true);
+    dma_channel_start(oen_chan);
 }
 
 /**
