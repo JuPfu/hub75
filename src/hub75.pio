@@ -37,10 +37,10 @@
     mov x, y           side 0b10 ; Copy wait cycles from Y register into X register
 wait_loop:
     jmp x-- wait_loop  side 0b11 ; Wait for row to latch
+    in x, 32           side 0b10 ; Push dark_cycles to RX FIFO → triggers triggers oen_dark_chan: start pixel_chan[N+1]
     out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
 lit_loop:
     jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
-    in x, 32           side 0b10 ; Push dark_cycles to RX FIFO → triggers triggers oen_dark_chan: start pixel_chan[N+1]
     out x, 32          side 0b10 ; Deassert OEn, load dark_cycles (word 2) into X
 dark_loop:
     jmp x-- dark_loop  side 0b10 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
