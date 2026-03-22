@@ -112,7 +112,7 @@ static void setup_dma_irq();
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
 static volatile uint32_t dummy_pixel_data[2] = {0x0, 0x0};
 // Control data for the latch signal
-static volatile uint32_t oen_dark_data = 0;
+static volatile uint32_t row_start_data = 0;
 
 // Width and height of the HUB75 LED matrix
 static uint width;
@@ -125,7 +125,7 @@ int dummy_pixel_chan;
 int oen_chan;
 
 // This channel's interrupt handler restarts the pixel data DMA channel.
-int oen_dark_chan;
+int row_start_chan;
 
 // PIO configuration structure for state machine numbers and corresponding program offsets
 static struct
@@ -184,29 +184,32 @@ static volatile uint32_t dark_cycles[BIT_DEPTH];
 // Basis factor (coarse brightness)
 static volatile uint32_t basis_factor = 6u;
 
-// l = 116 * f(y) - 16
-// y > (6 / 29)^3  => f(y) = y^(1/3)
-// y >= (6 / 29)^3 => f(y) = (841 / 108) * y + 4/29
-float cie1931_luminance(float y)
+// Inverse CIE 1931: perceptual input t (0..1) -> linear light Y (0..1)
+//
+// L* = t * 100  (scale from normalised to 0..100)
+// If L* > 8:    Y = ((L* + 16) / 116)^3
+// If L* <= 8:   Y = L* / 903.3
+float cie1931_inverse(float t)
 {
-    constexpr float d = (6.0f / 29.0f) * (6.0f / 29.0f) * (6.0f / 29.0f);
+    if (t <= 0.0f)
+        return 0.0f;
+    if (t >= 1.0f)
+        return 1.0f;
 
-    y = CLAMP(y, 0.0f, 1.0f);
+    float L = t * 100.0f; // scale to 0..100
 
-    float h = 0.0f;
-
-    if (y > d)
+    float Y;
+    if (L > 8.0f)
     {
-        float u = y - 1.0f;
-        // first four terms of Taylor series of qubic root of x written in Horner schema format
-        // ToDo: Use fixed decimal arithmetic
-        h = ((5.0f / 81.f * u - 1.0f / 9.0f) * u + 1.0f / 3.0f) * u + 1.0f;
+        float f = (L + 16.0f) / 116.0f;
+        Y = f * f * f;
     }
     else
     {
-        h = 841.0f / 108.0f * y + 4.0f / 29.0f;
+        Y = L / 903.3f; // linear segment for very dark values
     }
-    return (116.0f * h - 16.0f) / 100.0f;
+
+    return CLAMP(Y, 0.0f, 1.0f);
 }
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
@@ -290,12 +293,14 @@ void setIntensity(float intensity, bool linear_brightness_control)
     }
     else
     {
-        // stable conversion to Q16
-        // if (linear_brightness_control)
-        // {
-        //     intensity = cie1931_luminance(intensity);
-        // }
-        brightness_fp = (uint32_t)(intensity * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
+        float y = intensity;
+        if (linear_brightness_control)
+        {
+            // Convert perceptual input to linear light output.
+            // Without this, the panel appears to jump from dark to bright very quickly because human vision is logarithmic.
+            y = cie1931_inverse(intensity);
+        }
+        brightness_fp = (uint32_t)(y * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
     }
     recompute_scaled_basis();
 }
@@ -313,6 +318,12 @@ static void init_accumulators(std::size_t pixel_count)
     acc_b.assign(pixel_count, 0);
 }
 
+static volatile uint32_t frame_count = 0;
+static volatile uint32_t frame_freq_us = 0; // last measured period for N frames
+static absolute_time_t frame_time_start;
+
+#define FRAME_MEASURE_INTERVAL 100
+
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -321,10 +332,10 @@ static void init_accumulators(std::size_t pixel_count)
  * modifies the PIO state machine instruction, and restarts DMA transfers
  * for pixel data to ensure continuous frame updates.
  */
-static void oen_dark_handler()
+static void row_start_handler()
 {
     // Clear the interrupt request for the finished DMA channel
-    dma_channel_acknowledge_irq1(oen_dark_chan);
+    dma_channel_acknowledge_irq1(row_start_chan);
 
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
@@ -335,6 +346,21 @@ static void oen_dark_handler()
         if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
+
+            if (frame_count == 0)
+            {
+                frame_time_start = get_absolute_time();
+            }
+            else if (frame_count == FRAME_MEASURE_INTERVAL)
+            {
+                frame_freq_us = (uint32_t)absolute_time_diff_us(frame_time_start, get_absolute_time());
+                frame_count = -1; // reset so it measures again next interval
+
+                uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us;
+                printf("Frame frequency: %u Hz\n", freq);
+                frame_freq_us = 0; // clear until next measurement
+            }
+            frame_count++;
 
             if (swap_pending)
             {
@@ -402,8 +428,8 @@ static void oen_dark_handler()
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 2)], true);
 #endif
 
-    // Re-arm oen_dark_chan to catch the next start-of-lit RX FIFO push.
-    dma_channel_start(oen_dark_chan);
+    // Re-arm row_start_chan to catch the next start-of-lit RX FIFO push.
+    dma_channel_start(row_start_chan);
 }
 
 /**
@@ -479,7 +505,7 @@ void start_hub75_driver()
     dma_channel_wait_for_finish_blocking(dummy_pixel_chan);
 
     // Arm consumer before starting row PIO.
-    dma_channel_set_write_addr(oen_dark_chan, &oen_dark_data, true);
+    dma_channel_set_write_addr(row_start_chan, &row_start_data, true);
 
     // Trigger first oen_chan — row PIO starts, displays row 0,
     dma_channel_start(oen_chan);
@@ -553,7 +579,7 @@ static void configure_dma_channels()
     pixel_chan = dma_claim_unused_channel(true);
     dummy_pixel_chan = dma_claim_unused_channel(true);
     oen_chan = dma_claim_unused_channel(true);
-    oen_dark_chan = dma_claim_unused_channel(true);
+    row_start_chan = dma_claim_unused_channel(true);
 }
 
 /**
@@ -627,12 +653,12 @@ static void setup_dma_transfers()
 
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
-    dma_channel_config oen_dark_config = dma_channel_get_default_config(oen_dark_chan);
+    dma_channel_config oen_dark_config = dma_channel_get_default_config(row_start_chan);
     channel_config_set_transfer_data_size(&oen_dark_config, DMA_SIZE_32);
     channel_config_set_read_increment(&oen_dark_config, false);
     channel_config_set_write_increment(&oen_dark_config, false);
     channel_config_set_dreq(&oen_dark_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
-    dma_channel_configure(oen_dark_chan, &oen_dark_config, &oen_dark_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
+    dma_channel_configure(row_start_chan, &oen_dark_config, &row_start_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
 }
 
 /**
@@ -644,8 +670,8 @@ static void setup_dma_transfers()
  */
 static void setup_dma_irq()
 {
-    irq_set_exclusive_handler(DMA_IRQ_1, oen_dark_handler);
-    dma_channel_set_irq1_enabled(oen_dark_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_1, row_start_handler);
+    dma_channel_set_irq1_enabled(row_start_chan, true);
     irq_set_enabled(DMA_IRQ_1, true);
 }
 
