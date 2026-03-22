@@ -104,8 +104,9 @@ The modifications to the Pimoroni HUB75 driver result in the following improveme
 - **Performance Boost**: Implements self-paced, interlinked DMA and PIO processes.
 - **Eliminates Synchronization Delays**: No need for `hub75_wait_tx_stall`, removing blocking synchronization.
 - **Optimized Interrupt Handling**: Reduces code complexity in the interrupt handler.
+- **Parallel Data Loading**: Pixel data for the next row is shifted into the panel shift registers in parallel with the current row's BCM display cycle, eliminating dead time between row updates.
 
-These enhancements lead to significant performance improvements. In tests up to a **250 MHz system clock**, no ghost images were observed.
+These enhancements lead to significant performance improvements. In tests up to a **266 MHz system clock**, no ghost images were observed.
 
 ---
 
@@ -188,16 +189,29 @@ This approach allows fully **chained DMA execution** without CPU intervention.
 ### Overview
 
 The following diagram illustrates the interactions between **DMA channels** and **PIO state machines**:
+```
+[ hub75_row PIO ] ──── BCM display cycle (lit + dark) ─────────►
+                            │
+                            │ start-of-lit: RX FIFO push
+                            ▼
+                    [ row_start_chan DMA ] ──► row_start_handler ISR
+                            │                       │
+                            │                       ▼
+                            │                       [ Pixel Data DMA ] ──► [ hub75_data_rgb PIO ]
+                            │                              │               (shifting next row) 
+                            │                              │
+                            │                              │--> [ Dummy Pixel DMA ] ──► [ hub75_data_rgb PIO ]
+                            │                                         │                 (complete shifting next row)
+                            │                                         │  
+                            │                                         │--> [ OEn Data DMA ] ──► [ hub75_row PIO ]
+                            │                                             
+                            │                                     
+                            ▼
+                    BCM display cycle continues...
+```
 
-```
-[ Pixel Data DMA ] -> [ hub75_data_rgb888 PIO ]
-       |
-       |--> [ Dummy Pixel Data DMA ] -> [ hub75_data_rgb888 PIO ]
-                  |
-                  |--> [ OEn Data DMA ] -> [ hub75_row PIO ]
-                           |
-                           |--> [ OEn Finished DMA ] (Triggers interrupt)
-```
+The hardware chain `pixel_chan → dummy_pixel_chan → oen_chan` guarantees that LATCH only fires after pixel shifting is fully complete — this ordering is enforced by the DMA controller, not by software polling.
+
 
 ### Step-by-Step Breakdown
 
@@ -225,23 +239,37 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ### Refresh Rate Performance
 
-With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
+The starting point for the evaluation is
 
-| System Clock | Refresh Rate     | Refresh Rate with Pimoroni Anti Ghosting |
-|--------------|------------------|-------------------------
-| 100 MHz      | ~179 Hz          | ~174 Hz                |
-| 150 MHz      | ~268 Hz          | ~260 Hz                |
-| 200 MHz      | ~358 Hz          | ~347 Hz                |
-| 250 MHz      | ~448 Hz          | ~434 Hz                |
+- Raspberry Pi Pico RP2350B
+- Demo programs in hub75_demo.cpp
+- System clock 266 MHz
+- BITDEPTH set to 8 and 10
+- Standard Hub75 matrix panel (64x64)
+  
+| Base Brightness	| BITDEPTH	| Refresh Rate (Hz) | BITDEPTH | Refresh Rate (Hz) |
+|-----------------|-----------|-------------------|----------|-------------------|
+| 1	              | 10	      | ~696              | 8        |	~911             |
+| 2	              | 10	      | ~640              | 8        |	~911             |
+| 4	              | 10	      | ~555              | 8        |	~911             |
+| 8	              | 10	      | ~555              | 8        |	~911             |
+| 16	            | 10        | ~310              | 8        |	~822             |
+| 32              | 10	      | ~193              | 8        |	~632             |
+| 64	            | 10	      | ~109              | 8        |	~409             |
+| 128	            | 10        | ~58               | 8        |	~233             |
+| 255             | 10	      | ~30               | 8        |	~127             |
 
-With a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
+With 8-bit depth, the BCM component does not play such a dominant role during data loading.
 
-| System Clock | Refresh Rate     | Refresh Rate with Pimoroni Anti Ghosting |
-|--------------|------------------|-------------------------
-| 100 MHz      | ~300 Hz          | ~291 Hz                |
-| 150 MHz      | ~447 Hz          | ~433 Hz                |
-| 200 MHz      | ~590 Hz          | ~572 Hz                |
-| 250 MHz      | ~732 Hz          | ~709 Hz                |
+The HUB75 driver achieves the following refresh rates for a 64 x 64 matrix with basis brightness set to 10 depending on system clock
+
+| System Clock | BITDEPTH	| Refresh Rate     |  BITDEPTH	| Refresh Rate     | 
+|--------------|----------|------------------|------------|------------------|
+| 100 MHz      | 10	      | ~186 Hz           | 8	        | ~347 Hz          |
+| 150 MHz      | 10	      | ~277 Hz          | 8	        | ~515 Hz          |
+| 200 MHz      | 10	      | ~367 Hz          | 8	        | ~678 Hz          |
+| 250 MHz      | 10	      | ~455 Hz          | 8	        | ~839 Hz          |
+| 266 MHz      | 10	      | ~483 Hz          | 8	        | ~890 Hz          |
 
 
 These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
@@ -298,8 +326,8 @@ In addition to bitplane modulation, the driver supports **software-based brightn
 ### API Functions
 
 ```cpp
-// Set the baseline brightness scaling factor (default = 6, range 1–255).
-// Larger values increase brightness but also raise OEn frequency.
+// Set the baseline brightness scaling factor (default = 10, range 1–255).
+// Larger values increase brightness but also raise OEn frequency thereby reducing the frame frequency (refresh rate)
 void setBasisBrightness(uint8_t factor);
 
 // Set fine-grained brightness intensity as a fraction [0.0 – 1.0].
