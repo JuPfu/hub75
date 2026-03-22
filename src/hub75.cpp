@@ -338,6 +338,7 @@ static void row_start_handler()
     dma_channel_acknowledge_irq1(row_start_chan);
 
     // Advance row addressing; reset and increment bit-plane if needed
+
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     // plane wise BCM (Binary Coded Modulation)
     if (++row_address >= (height >> 1))
@@ -428,7 +429,7 @@ static void row_start_handler()
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 2)], true);
 #endif
 
-    // Re-arm row_start_chan to catch the next start-of-lit RX FIFO push.
+    // Re-arm row_start_chan to catch the next RX FIFO push.
     dma_channel_start(row_start_chan);
 }
 
