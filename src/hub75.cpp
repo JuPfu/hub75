@@ -650,15 +650,14 @@ static void setup_dma_transfers()
     pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
 
     dma_channel_set_read_addr(dummy_pixel_chan, dummy_pixel_data, false);
-
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
-    dma_channel_config oen_dark_config = dma_channel_get_default_config(row_start_chan);
-    channel_config_set_transfer_data_size(&oen_dark_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&oen_dark_config, false);
-    channel_config_set_write_increment(&oen_dark_config, false);
-    channel_config_set_dreq(&oen_dark_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
-    dma_channel_configure(row_start_chan, &oen_dark_config, &row_start_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
+    dma_channel_config row_start_config = dma_channel_get_default_config(row_start_chan);
+    channel_config_set_transfer_data_size(&row_start_config, DMA_SIZE_32);
+    channel_config_set_read_increment(&row_start_config, false);
+    channel_config_set_write_increment(&row_start_config, false);
+    channel_config_set_dreq(&row_start_config, pio_get_dreq(pio_config.row_pio, pio_config.sm_row, false));
+    dma_channel_configure(row_start_chan, &row_start_config, &row_start_data, &pio_config.row_pio->rxf[pio_config.sm_row], dma_encode_transfer_count(1), false);
 }
 
 /**
