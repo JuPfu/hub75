@@ -157,19 +157,20 @@ int main()
     struct repeating_timer timer;
     add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
 
-    // The Hub75 driver is constantly running on core 1 with a frequency much higher than 200Hz. CPU load on core 1 is low due to DMA and PIO usage.
+    // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
+    // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
     float hz = 100.0f;
     float ms = 1000.0f / hz;
 
     // set basis brightness of matrix panel
-    setBasisBrightness(10);
+    setBasisBrightness(255);
 
     // set full brightness of panel
     float intensity = 1.0f;
     setIntensity(intensity);
 
-    float step = 0.01f;
+    float step = -0.005f;
 
     while (true)
     {
@@ -218,17 +219,21 @@ int main()
             update(&pixelFill);
         }
 
+        printf("intensity = %f\n", intensity);
         // matrix panel brightness will vary
-        float value = sin(intensity);
-        setIntensity(MAX(0.0f, (value * value * value * value)), false);
+        setIntensity(intensity);
 
         // Update intensity for next loop
         intensity += step;
-        if (intensity >= M_PI)
+        if (intensity >= 1.0f)
         {
-            intensity = 0.0f;
+            step = -step;
+        }
+        else if (intensity <= 0.0f)
+        {
+            step = -step;
         }
 
-        sleep_ms(ms); // hz updates per second - the HUB75 driver is running independently with far more than 200Hz (see README.md)
+        sleep_ms(ms); // hz updates per second - the HUB75 driver is running independently usually with far more than 200Hz (see README.md)
     }
 }
