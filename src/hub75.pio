@@ -37,7 +37,7 @@
     mov x, y           side 0b10 ; Copy wait cycles from Y register into X register
 wait_loop:
     jmp x-- wait_loop  side 0b11 ; Wait for row to latch
-    in x, 32           side 0b10 ; Push dummy data to RX FIFO → triggers triggers oen_dark_chan: start pixel_chan[N+1]
+    in x, 32           side 0b10 ; Push dummy data to RX FIFO → triggers row_start_chan -> row_start_handler -> start pixel_chan[N+1]
     out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
 lit_loop:
     jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
@@ -102,7 +102,7 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
     mov x, y           side 0b11 ; Copy wait cycles from Y register into X register
 wait_loop:
     jmp x-- wait_loop  side 0b10 ; Wait for row to latch
-    in x, 32           side 0b11 ; Push dummy data to RX FIFO → triggers triggers oen_dark_chan: start pixel_chan[N+1]
+    in x, 32           side 0b11 ; Push dummy data to RX FIFO → triggers row_start_chan -> row_start_handler -> start pixel_chan[N+1]
     out x, 32          side 0b11 ; Load lit_cycles (word 1) into X
 lit_loop:
     jmp x-- lit_loop   side 0b01 ; Assert OEn for x+1 cycles (panel ON)
