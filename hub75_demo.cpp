@@ -219,7 +219,6 @@ int main()
             update(&pixelFill);
         }
 
-        printf("intensity = %f\n", intensity);
         // matrix panel brightness will vary
         setIntensity(intensity);
 
