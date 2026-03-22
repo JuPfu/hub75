@@ -172,7 +172,7 @@ static std::vector<uint16_t> acc_r, acc_g, acc_b;
 
 // Variables for brightness control
 // Q format shift: Q16 gives 1.0 == (1 << 16) == 65536
-#define BRIGHTNESS_FP_SHIFT 16u
+#define BRIGHTNESS_FP_SHIFT 10u
 
 // Brightness as fixed-point Q16 (volatile because it may be changed at runtime)
 static volatile uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default == 1.0
