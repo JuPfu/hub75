@@ -184,32 +184,35 @@ static volatile uint32_t dark_cycles[BIT_DEPTH];
 // Basis factor (coarse brightness)
 static volatile uint32_t basis_factor = 6u;
 
-// l = 116 * f(y) - 16
-// y > (6 / 29)^3  => f(y) = y^(1/3)
-// y >= (6 / 29)^3 => f(y) = (841 / 108) * y + 4/29
-float cie1931_luminance(float y)
+// Inverse CIE 1931: perceptual input t (0..1) -> linear light Y (0..1)
+//
+// L* = t * 100  (scale from normalised to 0..100)
+// If L* > 8:    Y = ((L* + 16) / 116)^3
+// If L* <= 8:   Y = L* / 903.3
+float cie1931_inverse(float t)
 {
-    constexpr float d = (6.0f / 29.0f) * (6.0f / 29.0f) * (6.0f / 29.0f);
+    if (t <= 0.0f)
+        return 0.0f;
+    if (t >= 1.0f)
+        return 1.0f;
 
-    y = CLAMP(y, 0.0f, 1.0f);
+    float L = t * 100.0f; // scale to 0..100
 
-    float h = 0.0f;
-
-    if (y > d)
+    float Y;
+    if (L > 8.0f)
     {
-        float u = y - 1.0f;
-        // first four terms of Taylor series of qubic root of x written in Horner schema
-        h = ((5.0f / 81.f * u - 1.0f / 9.0f) * u + 1.0f / 3.0f) * u + 1.0f;
+        float f = (L + 16.0f) / 116.0f;
+        Y = f * f * f;
     }
     else
     {
-        h = 841.0f / 108.0f * y + 4.0f / 29.0f;
+        Y = L / 903.3f; // linear segment for very dark values
     }
-    return (116.0f * h - 16.0f) / 100.0f;
+
+    return CLAMP(Y, 0.0f, 1.0f);
 }
 
 // Recompute scaled_basis[] using a temporary array and swap under IRQ protection.
-// scaled_basis[b] = (basis_factor << b) * brightness_fp  >> BRIGHTNESS_FP_SHIFT
 __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
 {
     uint32_t tmp_lit[BIT_DEPTH];
@@ -219,7 +222,7 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
     {
         // Full BCM period for this bit plane: doubles with each plane (1, 2, 4, 8 …)
         // scaled by basis_factor for coarse panel calibration.
-        uint64_t base = (uint64_t)basis_factor << b;
+        uint32_t base = basis_factor << b;
         // Lit portion: fraction of the full period during which OEn is asserted.
         // brightness_fp is Q16 fixed-point: 0 = off, 65536 = full brightness.
         tmp_lit[b] = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
@@ -228,7 +231,7 @@ __attribute__((optimize("unroll-loops"))) static void recompute_scaled_basis()
         tmp_dark[b] = base - tmp_lit[b];
     }
 
-    // update scaled_basis atomically w.r.t. interrupts reading it
+    // update scaled_basis atomically with regard to interrupts reading it
     uint32_t irq = save_and_disable_interrupts();
     for (int b = 0; b < BIT_DEPTH; ++b)
     {
@@ -290,12 +293,14 @@ void setIntensity(float intensity, bool linear_brightness_control)
     }
     else
     {
-        // stable conversion to Q16
+        float y = intensity;
         if (linear_brightness_control)
         {
-            intensity = cie1931_luminance(intensity);
+            // Convert perceptual input to linear light output.
+            // Without this, the panel appears to jump from dark to bright very quickly because human vision is logarithmic.
+            y = cie1931_inverse(intensity);
         }
-        brightness_fp = (uint32_t)(intensity * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
+        brightness_fp = (uint32_t)(y * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
     }
     recompute_scaled_basis();
 }
