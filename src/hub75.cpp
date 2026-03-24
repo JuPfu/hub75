@@ -162,7 +162,7 @@ struct OenRecord
 
     uint32_t dark_cycles; ///< OEn OFF duration = full BCM period - lit_cycles
     uint32_t lit_cycles;  ///< OEn ON  duration for this bit plane, scaled by brightness
-        uint32_t row_address; ///< 5-bit row select; selects which pair of rows to drive
+    uint32_t row_address; ///< 5-bit row select; selects which pair of rows to drive
 
 } __attribute__((packed));
 
@@ -328,7 +328,7 @@ static void oen_finished_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq0(oen_finished_chan);
 
-        // Build the three-word OEn record for the next row/bit-plane and point
+    // Build the three-word OEn record for the next row/bit-plane and point
     // oen_chan at it.  The PIO state machine consumes all three words in order:
     //   word 0 — row address
     //   word 1 — lit duration  (OEn asserted,   panel ON)
@@ -341,7 +341,6 @@ static void oen_finished_handler()
     oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
-    // printf("oen_finished_handler\n");
     dma_channel_start(row_start_chan);
 }
 
@@ -364,7 +363,6 @@ static void row_start_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(row_start_chan);
 
-    // printf("row_start_handler %u\n", row_address);
     // Advance row addressing; reset and increment bit-plane if needed
     // oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
     // oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
@@ -388,7 +386,7 @@ static void row_start_handler()
                 frame_count = -1; // reset so it measures again next interval
 
                 uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us;
-                // printf("Frame frequency: %u Hz   %d\n", freq, wait_cycles);
+                printf("Frame frequency: %u Hz   %d\n", freq, wait_cycles);
                 frame_freq_us = 0; // clear until next measurement
             }
             frame_count++;
@@ -588,7 +586,6 @@ static void configure_pio(bool inverted_stb)
 
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     wait_cycles = clock_get_hz(clk_sys) / 4000000;
-    wait_cycles = 100;
 
     hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
