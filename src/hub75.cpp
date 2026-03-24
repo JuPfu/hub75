@@ -400,11 +400,10 @@ static void oen_finished_handler()
     oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
     oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
 
-    // dma_channel_set_read_addr(oen_chan, &row_in_bit_plane, false);
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
     // Restart DMA channels for the next row's data transfer
-    dma_channel_set_write_addr(oen_finished_chan, (volatile void *)&oen_finished_data, true);
+    dma_channel_start(oen_finished_chan);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     dma_channel_set_read_addr(pixel_chan, &dma_buffer[row_address * (width << 1)], true);
