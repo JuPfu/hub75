@@ -72,7 +72,7 @@ target_compile_definitions(hub75 PRIVATE
     # INVERTED_STB=false          # inverted pin signal for OE (untested)
     # TEMPORAL_DITHERING=false    # experimental - switch on temporal dithering to improve colour depth (currently 2 additional bits)
     # SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
-    BIT_DEPTH=8              # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
+    # BIT_DEPTH=10              # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
     # HUB75_MULTICORE=true        # use core1 for the hub75 driver
 )
 

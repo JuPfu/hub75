@@ -40,7 +40,7 @@ dark_loop:
     out x, 32          side 0b10  ; Deassert OEn, load dark_cycles (word 2) into X
 lit_loop:
     jmp x-- lit_loop  side 0b00   ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
-    ; in x, 32          side 0b00   ; oen_finished
+    in x, 32          side 0b00   ; oen_finished
     mov x, y           side 0b10  ; Copy wait cycles from Y register into X register
 wait_loop:
     jmp x-- wait_loop  side 0b10  ; Wait for row to latch
