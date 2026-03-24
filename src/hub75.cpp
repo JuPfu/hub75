@@ -363,10 +363,6 @@ static void row_start_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(row_start_chan);
 
-    // Advance row addressing; reset and increment bit-plane if needed
-    // oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
-    // oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
-
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     // plane wise BCM (Binary Coded Modulation)
     if (++row_address >= (height >> 1))
@@ -439,13 +435,6 @@ static void row_start_handler()
     };
 #endif
 
-    // Build the three-word OEn record for the next row/bit-plane and point
-    // oen_chan at it.  The PIO state machine consumes all three words in order:
-    //   word 0 — row address
-    //   word 1 — lit duration  (OEn asserted,   panel ON)
-    //   word 2 — dark duration (OEn deasserted, panel OFF)
-    // Using lit + dark instead of a single pulse width keeps the total period
-    // constant, giving a brightness-independent frame rate.
     oen_data.row_address = row_address; // 5-bit row select for the next row pair
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
