@@ -32,20 +32,36 @@
 .side_set 2
 
 .wrap_target
-    out pins, 5  [7]   side 0b10 ; Deassert OEn, output 5-bit row select (bits [4:0] of word 0)
-    out null, 27       side 0b10 ; Discard bits [31:5] of word 0 (row_address in [4:0] only)
-    mov x, y           side 0b10 ; Copy wait cycles from Y register into X register
-wait_loop:
-    jmp x-- wait_loop  side 0b11 ; Wait for row to latch
     in x, 32           side 0b10 ; Push random data to RX FIFO → triggers row_start_chan -> row_start_handler ->
                                  ; start pixel_chan[N+1] -chained-> dummy_pixel_chan -chained-> oen_chan
     out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
-lit_loop:
-    jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
-    out x, 32          side 0b10 ; Deassert OEn, load dark_cycles (word 2) into X
 dark_loop:
-    jmp x-- dark_loop  side 0b10 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
+    jmp x-- dark_loop   side 0b10 ; Assert OEn for x+1 cycles (panel ON)
+    out x, 32          side 0b10 ; Deassert OEn, load dark_cycles (word 2) into X
+lit_loop:
+    jmp x-- lit_loop  side 0b00 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
+    in x, 32          side 0b00 ; oen_finished
+    out pins, 5  [7]   side 0b11 ; Deassert OEn, output 5-bit row select (bits [4:0] of word 0)
+    out null, 27       side 0b10 ; Discard bits [31:5] of word 0 (row_address in [4:0] only)
 .wrap
+
+;.wrap_target
+;    out x, 32          side 0b10 ; Load lit_cycles (word 1) into X
+;dark_loop:
+;    jmp x-- dark_loop   side 0b10 ; Assert OEn for x+1 cycles (panel ON)
+;    out x, 32          side 0b10 ; Deassert OEn, load dark_cycles (word 2) into X
+;lit_loop:
+;    jmp x-- lit_loop  side 0b00 ; Deassert OEn for dark_cycles+1 cycles (panel OFF)
+
+;    out pins, 5  [7]   side 0b11 ; Deassert OEn, output 5-bit row select (bits [4:0] of word 0)
+;    out null, 27       side 0b10 ; Discard bits [31:5] of word 0 (row_address in [4:0] only)
+;    mov x, y           side 0b10 ; Copy wait cycles from Y register into X register
+;wait_loop:
+;    ;jmp x-- wait_loop  side 0b10 ; Wait for row to latch
+;    in x, 32           side 0b10 ; Push random data to RX FIFO → triggers row_start_chan -> row_start_handler ->
+;                                 ; start pixel_chan[N+1] -chained-> dummy_pixel_chan -chained-> oen_chan
+;
+;.wrap
 
 % c-sdk {
 static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
