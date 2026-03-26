@@ -4,12 +4,13 @@
 // Avoid redundant function calls by inlining.
 inline float AntialiasedLine::fPartOfNumber(float x)
 {
-    return x - static_cast<int>(x);
+    return x - std::floor(x);
 }
 
 // Optimized color brightness function with minimal floating-point operations
 uint32_t AntialiasedLine::color_brightness(uint32_t color, float brightness)
 {
+    brightness = std::max(0.0f, std::min(1.0f, brightness));
     uint32_t r = ((color >> 16) & 0xFF) * brightness + 0.5f;
     uint32_t g = ((color >> 8) & 0xFF) * brightness + 0.5f;
     uint32_t b = (color & 0xFF) * brightness + 0.5f;
@@ -34,7 +35,7 @@ void AntialiasedLine::drawLine(float x1, float y1, float x2, float y2, uint32_t 
         std::swap(y1, y2);
     }
 
-    float gradient = dy / dx;
+    float gradient = (dx != 0.0f) ? dy / dx : 1.0f;
     float xend = std::round(x1);
     float yend = y1 + gradient * (xend - x1);
     float xgap = 1.0f - fPartOfNumber(x1 + 0.5f);
