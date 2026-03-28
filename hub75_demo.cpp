@@ -114,7 +114,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 250MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(250000, true);
+    set_sys_clock_khz(266000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
@@ -164,7 +164,7 @@ int main()
     float ms = 1000.0f / hz;
 
     // set basis brightness of matrix panel
-    setBasisBrightness(10);
+    setBasisBrightness(1);
 
     // set full brightness of panel
     float intensity = 1.0f;

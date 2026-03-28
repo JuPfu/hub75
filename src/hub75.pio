@@ -21,20 +21,58 @@
 .side_set 2
 
 .wrap_target
-    out pins, 5  [7]   side 0b10 ; Deassert OEn, output row select
-    out null, 27       side 0b10 ; Deassert OEn
-    mov x, y     [3]   side 0b11 ; Pulse LATCH
-wait_loop:
-    jmp x-- wait_loop  side 0b10 ; Wait for row to latch
-    out x, 32          side 0b10 ; Get OEn lit pulse width
-lit_loop:
-    jmp x-- lit_loop   side 0b00 ; Assert OEn for x+1 cycles (panel ON)
-    out x, 32          side 0b10 ; Get dark period width
-dark_loop:
-    jmp x-- dark_loop  side 0b10 ; Deassert OEn for x+1 cycles (panel OFF)
-    in x, 32           side 0b10 ; Signal DMA that OEn cycle finished
-.wrap
+    ; -------------------------------------------------
+    ; 1. Switch panel off (calm down period)
+    ; -------------------------------------------------
+    nop        [7]     side 0b10   ; OEn=1 (OFF), LATCH=0
+    nop        [3]     side 0b10   ; additional stabilisation
 
+    ; -------------------------------------------------
+    ; 2. LATCH (one clear puls)
+    ; -------------------------------------------------
+    nop        [3]     side 0b11   ; LATCH = 1, keep OEn=1 (OFF)
+ 
+    ; -------------------------------------------------
+    ; 3. POST-LATCH
+    ; -------------------------------------------------
+    nop        [7]     side 0b10   ; let data stabilise
+    nop        [3]     side 0b10   ; LATCH = 0
+    
+    ; -------------------------------------------------
+    ; 4. Row address
+    ; -------------------------------------------------
+    out pins, 5  [7]   side 0b10   ; send row select
+    out null, 27 [3]   side 0b10   ; dispose unused bits
+
+    ; -------------------------------------------------
+    ; 5. Wait loop (Pimoronis anti ghosting)
+    ; -------------------------------------------------
+    mov x, y           side 0b10 ; get wait cycles from register Y
+wait_loop:
+    jmp x-- wait_loop  side 0b10 ; wait ...
+
+    ; -------------------------------------------------
+    ; 6. DISPLAY
+    ; -------------------------------------------------
+    out x, 32          side 0b10   ; laod lit cycles count
+
+lit_loop:
+    jmp x-- lit_loop   side 0b00   ; OEn=0 (ON)
+
+    ; -------------------------------------------------
+    ; 7. DARK TIME
+    ; -------------------------------------------------
+    out x, 32          side 0b10   ; load dark cycle count
+
+dark_loop:
+    jmp x-- dark_loop  side 0b10   ; OEn=1 → LEDs AUS
+
+    ; -------------------------------------------------
+    ; 8. SYNC → DMA (move to next line)
+    ; -------------------------------------------------
+    in x, 32           side 0b10   ; Push random data to RX FIFO → triggers oen_finished_chan -> oen_finished_handler ->
+                                   ; start pixel_chan[N+1] -chained-> dummy_pixel_chan -chained-> oen_chan
+.wrap
 
 % c-sdk {
 static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles) {
@@ -87,18 +125,57 @@ static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint ro
 .side_set 2
 
 .wrap_target
-    out pins, 5 [7]    side 0b11 ; Deassert OEn, output row select
-    out null, 27       side 0b11 ; Deassert OEn
-    mov x, y     [3]   side 0b10 ; Pulse LATCH
+    ; -------------------------------------------------
+    ; 1. Switch panel off (calm down period)
+    ; -------------------------------------------------
+    nop        [7]     side 0b11   ; OEn=1 (OFF), LATCH=1
+    nop        [3]     side 0b11   ; additional stabilisation
+
+    ; -------------------------------------------------
+    ; 2. LATCH (one clear puls)
+    ; -------------------------------------------------
+    nop        [3]     side 0b10   ; LATCH = 0, keep OEn=1 (OFF)
+ 
+    ; -------------------------------------------------
+    ; 3. POST-LATCH
+    ; -------------------------------------------------
+    nop        [7]     side 0b11   ; let data stabilise
+    nop        [3]     side 0b11   ; LATCH = 1
+    
+    ; -------------------------------------------------
+    ; 4. Row address
+    ; -------------------------------------------------
+    out pins, 5  [7]   side 0b11   ; send row select
+    out null, 27 [3]   side 0b11   ; dispose unused bits
+
+    ; -------------------------------------------------
+    ; 5. Wait loop
+    ; -------------------------------------------------
+    mov x, y           side 0b11 ; get wait cycles from register Y
 wait_loop:
-    jmp x-- wait_loop  side 0b11 ; Wait for row to latch
-    out x, 32          side 0b11 ; Get OEn pulse width
+    jmp x-- wait_loop  side 0b11 ; wait ...
+
+    ; -------------------------------------------------
+    ; 6. DISPLAY
+    ; -------------------------------------------------
+    out x, 32          side 0b11   ; laod lit cycles count
+
 lit_loop:
-    jmp x-- lit_loop   side 0b01 ; Assert OEn for x+1 cycles (panel ON)
-    out x, 32          side 0b11 ; Get dark period width
+    jmp x-- lit_loop   side 0b01   ; OEn=0 (ON)
+
+    ; -------------------------------------------------
+    ; 7. DARK TIME
+    ; -------------------------------------------------
+    out x, 32          side 0b11   ; load dark cycle count
+
 dark_loop:
-    jmp x-- dark_loop  side 0b11 ; Deassert OEn for x+1 cycles (panel OFF)
-    in x, 32           side 0b11 ; Signal DMA that OEn cycle finished
+    jmp x-- dark_loop  side 0b11   ; OEn=1 → LEDs AUS
+
+    ; -------------------------------------------------
+    ; 8. SYNC → DMA (move to next line)
+    ; -------------------------------------------------
+    in x, 32           side 0b11   ; Push random data to RX FIFO → triggers oen_finished_chan -> oen_finished_handler ->
+                                   ; start pixel_chan[N+1] -chained-> dummy_pixel_chan -chained-> oen_chan
 .wrap
 
 % c-sdk {

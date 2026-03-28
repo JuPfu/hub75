@@ -109,7 +109,7 @@ static void setup_dma_transfers();
 static void setup_dma_irq();
 
 // Dummy pixel data emitted at the end of each row to ensure the last genuine pixels of a row are displayed - keep volatile!
-static volatile uint32_t dummy_pixel_data[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+static volatile uint32_t dummy_pixel_data[2] = {0x0, 0x0};
 // Control data for the output enable signal
 static volatile uint32_t oen_finished_data = 0;
 
@@ -318,6 +318,12 @@ static void init_accumulators(std::size_t pixel_count)
     acc_b.assign(pixel_count, 0);
 }
 
+static volatile uint32_t frame_count = 0;
+static volatile uint32_t frame_freq_us = 0; // last measured period for N frames
+static absolute_time_t frame_time_start;
+
+#define FRAME_MEASURE_INTERVAL 100
+
 /**
  * @brief Interrupt handler for the Output Enable (OEn) finished event.
  *
@@ -331,6 +337,12 @@ static void oen_finished_handler()
     // Clear the interrupt request for the finished DMA channel
     dma_channel_acknowledge_irq1(oen_finished_chan);
 
+    // pio_interrupt_clear(pio_config.row_pio, 0);
+    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
+
+        oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
+    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
+
     // Advance row addressing; reset and increment bit-plane if needed
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     // plane wise BCM (Binary Coded Modulation)
@@ -340,6 +352,21 @@ static void oen_finished_handler()
         if (++bit_plane >= BIT_DEPTH)
         {
             bit_plane = 0;
+
+            if (frame_count == 0)
+            {
+                frame_time_start = get_absolute_time();
+            }
+            else if (frame_count == FRAME_MEASURE_INTERVAL)
+            {
+                frame_freq_us = (uint32_t)absolute_time_diff_us(frame_time_start, get_absolute_time());
+                frame_count = -1; // reset so it measures again next interval
+
+                uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us;
+                printf("Frame frequency: %u Hz\n", freq);
+                frame_freq_us = 0; // clear until next measurement
+            }
+            frame_count++;
 
             if (swap_pending)
             {
@@ -386,7 +413,7 @@ static void oen_finished_handler()
                 swap_pending = false;
             }
         }
-    };
+    }
 #endif
 
     // Build the three-word OEn record for the next row/bit-plane and point
@@ -396,9 +423,7 @@ static void oen_finished_handler()
     //   word 2 — dark duration (OEn deasserted, panel OFF)
     // Using lit + dark instead of a single pulse width keeps the total period
     // constant, giving a brightness-independent frame rate.
-    oen_data.row_address = row_address;            // 5-bit row select for the next row pair
-    oen_data.lit_cycles = lit_cycles[bit_plane];   // ON  duration — BCM weighted, brightness scaled
-    oen_data.dark_cycles = dark_cycles[bit_plane]; // OFF duration — remainder of full BCM period
+
 
     dma_channel_set_read_addr(oen_chan, &oen_data, false);
 
@@ -530,9 +555,9 @@ static void configure_pio(bool inverted_stb)
     hub75_data_rgb_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN);
 
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, 2 * wait_cycles);
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, 2 * wait_cycles);
 }
 
 /**
@@ -608,7 +633,7 @@ static void setup_dma_transfers()
     dma_input_channel_setup(pixel_chan, width << 2, DMA_SIZE_32, true, dummy_pixel_chan, pio_config.data_pio, pio_config.sm_data);
 #endif
 
-    dma_input_channel_setup(dummy_pixel_chan, 8, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
+    dma_input_channel_setup(dummy_pixel_chan, 2, DMA_SIZE_32, false, oen_chan, pio_config.data_pio, pio_config.sm_data);
     dma_input_channel_setup(oen_chan, 3, DMA_SIZE_32, true, oen_chan, pio_config.row_pio, pio_config.sm_row);
 
     pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
@@ -638,6 +663,10 @@ static void setup_dma_irq()
     irq_set_exclusive_handler(DMA_IRQ_1, oen_finished_handler);
     dma_channel_set_irq1_enabled(oen_finished_chan, true);
     irq_set_enabled(DMA_IRQ_1, true);
+
+    // pio_set_irq0_source_enabled(pio_config.row_pio, pis_interrupt0, true);
+    // irq_set_exclusive_handler(PIO0_IRQ_0 + PIO_NUM(pio_config.row_pio) * 2, oen_finished_handler);
+    // irq_set_enabled(PIO0_IRQ_0 + PIO_NUM(pio_config.row_pio) * 2, true);
 }
 
 #if TEMPORAL_DITHERING != false
