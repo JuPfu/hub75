@@ -102,6 +102,8 @@
 
 // --- modifications below this line might imply changes in source code ---
 
+constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+
 #if TEMPORAL_DITHERING == true
 #define LUT_MAPPING(IDX, COLOUR) temporal_dithering(IDX, COLOUR)
 #define LUT_MAPPING_RGB(IDX, R, G, B) temporal_dithering(IDX, R, G, B)
@@ -110,20 +112,22 @@
 #define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B, lut)
 #endif
 
+#define DITHER_PHASES 4
+
 // At the moment only used for HUB75_P10_3535_16X32_4S panels
 #define SCAN_GROUPS (1 << ROWSEL_N_PINS)
 
-#if !defined(BIT_DEPTH)
-#define BIT_DEPTH 10 // default
+#if !defined(BITPLANES)
+#define BITPLANES 10 // default
 #endif
 
-#if BIT_DEPTH != 8 && BIT_DEPTH != 10
-#error "BIT_DEPTH must be 8 or 10"
+#if BITPLANES != 8 && BITPLANES != 10
+#error "BITPLANES must be 8 or 10"
 #endif
 
 // Accumulator precision has to fit the lut precision.
 #ifndef ACC_BITS
-#define ACC_BITS (BIT_DEPTH + 2)
+#define ACC_BITS (BITPLANES + 2)
 #endif
 
 #define EXIT_FAILURE 1
@@ -131,6 +135,22 @@
 #if USE_PICO_GRAPHICS == true
 using namespace pimoroni;
 #endif
+
+namespace PanelConfig {
+    constexpr uint32_t WIDTH  = MATRIX_PANEL_WIDTH;
+    constexpr uint32_t HEIGHT = MATRIX_PANEL_HEIGHT;
+    
+    // The number of address lines (A, B, C...) defines the multiplexing depth
+    constexpr uint32_t ADDR_PINS = ROWSEL_N_PINS; 
+    
+    // How many unique binary addresses are sent to the panel
+    // This is the value your DMA loop for 'row_cmd' should iterate over.
+    constexpr uint32_t SCAN_DEPTH = (1u << ADDR_PINS); // 16 for 1/16 scan
+    
+    // How many physical rows are updated per clock pulse (parallelism)
+    // For standard panels, this is usually 2.
+    constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
+}
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();
