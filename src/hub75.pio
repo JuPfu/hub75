@@ -16,7 +16,10 @@
 
     ; 2. LATCH: Strobe the shifted data into the row registers
     nop         [3]     side 0b11   ; LATCH=1 (Assert strobe)
-    nop         [3]     side 0b10   ; LATCH=0 (Deassert strobe)
+
+    mov x, y            side 0b10   ; Load wait cycles from Y register (init via C++)
+wait_loop1:
+    jmp x-- wait_loop1  side 0b10   ; Wait loop to prevent ghosting
 
     ; 3. PREFETCH: Trigger streamer for the NEXT row (loads data while current row is lit)
     irq nowait 1        side 0b10
