@@ -3,7 +3,7 @@ from sys import stdout
 TABLE_SIZE = 256 
 # Target 10-bit for your build_bitplanes (0-1023)
 # Or 12-bit (0-4095) if you plan to implement temporal dithering later
-RESOLUTION = 256 
+RESOLUTION = 1024 
 
 # White Balance Scaling (0.0 to 1.0)
 # Adjust these based on your specific panel's look

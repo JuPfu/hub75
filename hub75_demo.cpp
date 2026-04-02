@@ -164,7 +164,7 @@ int main()
     float ms = 1000.0f / hz;
 
     // set basis brightness of matrix panel
-    setBasisBrightness(64);
+    setBasisBrightness(32);
 
     // set full brightness of panel
     float intensity = 1.0f;

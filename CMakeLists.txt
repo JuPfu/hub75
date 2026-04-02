@@ -106,7 +106,7 @@ target_link_libraries(hub75
         pico_aon_timer
         hardware_pio
         hardware_dma
-        hardware_timer
+        hardware_interp
         hardware_vreg
         pico_graphics)
 
