@@ -134,10 +134,10 @@ static const uint16_t CIE_BLUE[256] = {
 uint16_t *bcm_lut[DITHER_PHASES];
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
- uint8_t *frame_buffer;  /// Pointer to < Interwoven image data for examples;
- uint8_t *frame_buffer1; ///< Interwoven image data for examples;
- uint8_t *frame_buffer2; ///< Interwoven image data for examples;
- uint8_t *dma_buffer;    ///< Interwoven image data for examples;
+uint8_t *frame_buffer;  /// Pointer to < Interwoven image data for examples;
+uint8_t *frame_buffer1; ///< Interwoven image data for examples;
+uint8_t *frame_buffer2; ///< Interwoven image data for examples;
+uint8_t *dma_buffer;    ///< Interwoven image data for examples;
 
 static uint32_t *lut_buffer;
 
@@ -159,13 +159,13 @@ struct row_cmd_t
 
 } __attribute__((packed));
 
- row_cmd_t *row_cmd_buffer;
- row_cmd_t *row_cmd_buffer1;
- row_cmd_t *row_cmd_buffer2;
- row_cmd_t *dma_row_cmd_buffer;
+row_cmd_t *row_cmd_buffer;
+row_cmd_t *row_cmd_buffer1;
+row_cmd_t *row_cmd_buffer2;
+row_cmd_t *dma_row_cmd_buffer;
 
-static  bool swap_row_cmd_buffer_pending = false;
-static  bool swap_frame_buffer_pending = false;
+static bool swap_row_cmd_buffer_pending = false;
+static bool swap_frame_buffer_pending = false;
 
 // Example: A split sequence for 10 bitplanes
 // We split BP 9 into 4 parts, BP 8 into 2 parts.
@@ -228,10 +228,10 @@ static std::vector<uint16_t> acc_r, acc_g, acc_b;
 #define BRIGHTNESS_FP_SHIFT 16u
 
 // Brightness as fixed-point Q16 ( because it may be changed at runtime)
-static  uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default == 1.0
+static uint32_t brightness_fp = (1u << BRIGHTNESS_FP_SHIFT); // default == 1.0
 
 // Basis factor (coarse brightness)
-static  uint32_t basis_factor = 6u;
+static uint32_t basis_factor = 6u;
 
 // Inverse CIE 1931: perceptual input t (0..1) -> linear light Y (0..1)
 //
@@ -297,7 +297,7 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
 
         for (uint32_t row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
         {
-             row_cmd_t *cmd = &row_cmd_buffer[idx++];
+            row_cmd_t *cmd = &row_cmd_buffer[idx++];
             cmd->row_address = encode_row_address(row);
 
             uint32_t total_lit, total_dark;
@@ -375,9 +375,11 @@ void setIntensity(float intensity, bool linear_brightness_control)
     hub75_build_row_cmd_buffer(brightness_fp);
 }
 
-static  uint32_t frame_count = 0;
-static  uint32_t frame_freq_us = 0; // last measured period for N frames
+#if FRAME_RATE
+static uint32_t frame_count = 0;
+static uint32_t frame_freq_us = 0; // last measured period for N frames
 static absolute_time_t frame_time_start;
+#endif
 
 #define FRAME_MEASURE_INTERVAL 100
 
@@ -388,6 +390,7 @@ void ctrl_chan_handler()
         // Clear the interrupt request for DMA channel
         dma_channel_acknowledge_irq0(row_ctrl_chan);
 
+#if FRAME_RATE
         if (frame_count == 0)
         {
             frame_time_start = get_absolute_time();
@@ -402,6 +405,7 @@ void ctrl_chan_handler()
             frame_freq_us = 0; // clear until next measurement
         }
         frame_count++;
+#endif
 
         if (swap_row_cmd_buffer_pending)
         {
@@ -759,7 +763,7 @@ void setup_interp_for_bitplane(uint8_t bp)
     interp_set_config(interp1, 0, &cfg1);
 }
 
-void build_plane_interpolator(const uint32_t *top, const uint32_t *bot,  uint8_t *dst, size_t width, uint8_t bp)
+void build_plane_interpolator(const uint32_t *top, const uint32_t *bot, uint8_t *dst, size_t width, uint8_t bp)
 {
     for (size_t x = 0; x < width; ++x)
     {
@@ -797,13 +801,13 @@ void build_bitplanes_interleaved(const uint32_t *__restrict expanded,
         // This sets the internal shifts/masks for the current 'bp'
         setup_interp_for_bitplane(bp);
 
-         uint8_t *bp_base = dst + current_plane_offset;
+        uint8_t *bp_base = dst + current_plane_offset;
 
         for (size_t row = 0; row < rows; ++row)
         {
             const uint32_t *top = expanded + (row + rows) * width;
             const uint32_t *bot = expanded + row * width;
-             uint8_t *out = bp_base + (row * width);
+            uint8_t *out = bp_base + (row * width);
 
             // 2. THE FAST STREAMING LOOP
             // This function should now ONLY contain the interp->accum/peek logic
@@ -914,7 +918,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     uint line = 0;
 
     // Framebuffer write pointer
-     uint32_t *dst = frame_buffer;
+    uint32_t *dst = frame_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
@@ -1016,7 +1020,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     uint line = 0;
 
     // Framebuffer write pointer
-     uint32_t *dst = frame_buffer;
+    uint32_t *dst = frame_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
