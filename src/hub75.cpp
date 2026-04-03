@@ -164,11 +164,19 @@ row_cmd_t *dma_row_cmd_buffer;
 static bool swap_row_cmd_buffer_pending = false;
 static bool swap_frame_buffer_pending = false;
 
-// Example: A split sequence for 10 bitplanes
+#if BITPLANES == 10
+// Split sequence for 10 bitplanes
 // We split BP 9 into 4 parts, BP 8 into 2 parts.
 static const uint8_t BCM_SEQUENCE[] = {
     9, 0, 1, 2, 8, 3, 4, 9, 5, 6, 8, 7, 9, 9 // 14 steps instead of 10
 };
+#else
+// Split sequence for 8 bitplanes
+// We split BP 7 into 3 parts, BP 6 into 2 parts
+static const uint8_t BCM_SEQUENCE[] = {
+    7, 0, 1, 2, 6, 3, 4, 7,  5, 6, 7, // 11 steps instead of 8
+};
+#endif
 
 constexpr uint8_t bcm_sequence_length = sizeof(BCM_SEQUENCE) / sizeof(uint8_t);
 
@@ -274,10 +282,18 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         // Calculate the "weight" of this slice
         // If we split BP 9 into 4 parts, each part gets 1/4 of the duration
         uint32_t split_factor = 1;
+#if BITPLANES == 10
         if (bp == 9)
             split_factor = 4;
         else if (bp == 8)
             split_factor = 2;
+#else
+        if (bp == 7)
+            split_factor = 3;
+        else if (bp == 6) {
+            split_factor = 2;
+        }
+#endif
 
         for (uint32_t row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
         {
@@ -435,7 +451,7 @@ void read_chan_handler()
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
         // Inside read_chan_handler
-        uint8_t *plane_dst = frame_buffer + (bitplane * BITPLANE_COUNT);
+        uint8_t *plane_dst = frame_buffer + (bitplane * BITPLANE_PIXELS);
         dma_channel_set_write_addr(write_chan, plane_dst, false); // Update the "reload" address
         dma_channel_set_read_addr(read_chan, lut_buffer, false);
         dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
@@ -491,7 +507,7 @@ static void setup_bitplane_creation()
         &c_write,
         nullptr,                                       // Write address set later
         &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
-        BITPLANE_COUNT,                                // Total bytes to collect
+        BITPLANE_PIXELS,                               // Total bytes to collect
         false                                          // Don't start yet
     );
 }
@@ -532,7 +548,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
 
     lut_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer
 
-    offset = BITPLANE_COUNT;
+    offset = BITPLANE_PIXELS;
 
     if (panel_type == PANEL_FM6126A)
     {
@@ -700,7 +716,7 @@ static void setup_dma_transfers()
 
     channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan);
 
-    dma_channel_configure(pixel_chan, &pixel_chan_config, &pio_config.data_pio->txf[pio_config.sm_data], dma_buffer, dma_encode_transfer_count(BITPLANE_COUNT * bcm_sequence_length), false);
+    dma_channel_configure(pixel_chan, &pixel_chan_config, &pio_config.data_pio->txf[pio_config.sm_data], dma_buffer, dma_encode_transfer_count(BITPLANE_PIXELS * bcm_sequence_length), false);
 
     // pixel ctrl channel
     dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan);

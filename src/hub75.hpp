@@ -118,11 +118,6 @@ constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 #error "BITPLANES must be 8 or 10"
 #endif
 
-// Accumulator precision has to fit the lut precision.
-#ifndef ACC_BITS
-#define ACC_BITS (BITPLANES + 2)
-#endif
-
 #define EXIT_FAILURE 1
 
 // Frame rate
@@ -150,7 +145,7 @@ namespace PanelConfig {
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
 }
 
-constexpr uint32_t BITPLANE_COUNT = MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH;
+constexpr uint32_t BITPLANE_PIXELS = MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH;
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();

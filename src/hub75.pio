@@ -1,3 +1,10 @@
+;
+; Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+; The following source code has been derived from an example program of Raspberry Pi (Trading) Ltd..
+;
 .pio_version 0 // only requires PIO version 0
 
 .program hub75_row
@@ -195,7 +202,7 @@ pixel_loop:
 %}
 
 .program hub75_bitplane_setup
-.define BIT_DEPTH 10               ; Placeholder - will be overwritten in hub75_data_rgb_program_init
+.define BITPLANES 10         ; Placeholder - valid for 10 and for 8 BITPLANES
 
 .wrap_target  
                              ; first word RGB101010 or RGB888 depending on BITPLANES setting        
@@ -203,11 +210,11 @@ public shift0:               ; R0 G0 B0
     pull                     ; gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
     in osr, 1                ; Red0 N
 public out_red0:
-    out null, BIT_DEPTH      ; move to green bit
+    out null, BITPLANES      ; move to green bit
 
     in osr, 1                ; Green0 N
 public out_green0:
-    out null, BIT_DEPTH      ; Green0 discard
+    out null, BITPLANES      ; Green0 discard
 
     in osr, 1                ; Blue0 N
     out null, 32             ; Remainder discard
@@ -217,17 +224,16 @@ public shift1:               ; R1 G1 B1
     pull                     ; gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
     in osr, 1                ; Red1 N
 public out_red1:
-    out null, BIT_DEPTH      ; Red1 discard
+    out null, BITPLANES      ; Red1 discard
 
     in osr, 1                ; Green1 N
 public out_green1:
-    out null, BIT_DEPTH      ; Green1 discard
+    out null, BITPLANES      ; Green1 discard
 
     in osr, 1                ; Blue1 N
     out null, 32             ; Remainder discard
-                             ; auto push (1 byte) of the ISR content into the RX FIFO
-    in null, 26              ; shift right
-.wrap
+
+    in null, 26              ; shift right and auto_push (1 byte) of the ISR content into the RX FIFO
 
 % c-sdk {
 static inline void hub75_bitplane_setup_program_init(PIO pio, uint sm, uint offset) {
@@ -239,15 +245,6 @@ static inline void hub75_bitplane_setup_program_init(PIO pio, uint sm, uint offs
     sm_config_set_in_shift(&c, true, true, 8);
 
     pio_sm_init(pio, sm, offset, &c);
-
-    // set BIT_DEPTH
-    uint instr = pio_encode_out(pio_null, BITPLANES); 
-    uint side_0 = pio_encode_sideset (1, 0);
-    uint side_1 = pio_encode_sideset (1, 1);
-    pio->instr_mem[offset + hub75_bitplane_setup_offset_out_red0] = instr;
-    pio->instr_mem[offset + hub75_bitplane_setup_offset_out_green0] = instr;
-    pio->instr_mem[offset + hub75_bitplane_setup_offset_out_red1] = instr;
-    pio->instr_mem[offset + hub75_bitplane_setup_offset_out_green1] = instr;
 
     pio_sm_exec(pio, sm, offset);
     pio_sm_set_enabled(pio, sm, true);
