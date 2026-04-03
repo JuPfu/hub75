@@ -174,7 +174,17 @@ static const uint8_t BCM_SEQUENCE[] = {
 // Split sequence for 8 bitplanes
 // We split BP 7 into 3 parts, BP 6 into 2 parts
 static const uint8_t BCM_SEQUENCE[] = {
-    7, 0, 1, 2, 6, 3, 4, 7,  5, 6, 7, // 11 steps instead of 8
+    7,
+    0,
+    1,
+    2,
+    6,
+    3,
+    4,
+    7,
+    5,
+    6,
+    7, // 11 steps instead of 8
 };
 #endif
 
@@ -290,7 +300,8 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
 #else
         if (bp == 7)
             split_factor = 3;
-        else if (bp == 6) {
+        else if (bp == 6)
+        {
             split_factor = 2;
         }
 #endif
@@ -774,9 +785,6 @@ __attribute__((optimize("unroll-loops"))) void update(
         lut_buffer[fb_index] = LUT_MAPPING(fb_index, src[j]);
         lut_buffer[fb_index + 1] = LUT_MAPPING(fb_index + 1, src[j + offset]);
     }
-    dma_channel_set_write_addr(write_chan, frame_buffer, false);
-    dma_channel_set_read_addr(read_chan, lut_buffer, false);
-    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
@@ -854,6 +862,9 @@ __attribute__((optimize("unroll-loops"))) void update(
         }
     }
 #endif
+    dma_channel_set_write_addr(write_chan, frame_buffer, false);
+    dma_channel_set_read_addr(read_chan, lut_buffer, false);
+    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 }
 #endif
 
@@ -875,9 +886,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         lut_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[j + 2], src[j + 1], src[j]);
         lut_buffer[fb_index + 1] = LUT_MAPPING_RGB((fb_index + 1), src[rgb_offset + j + 2], src[rgb_offset + j + 1], src[rgb_offset + j]);
     }
-    dma_channel_set_write_addr(write_chan, frame_buffer, false);
-    dma_channel_set_read_addr(read_chan, lut_buffer, false);
-    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
@@ -956,4 +964,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
+    dma_channel_set_write_addr(write_chan, frame_buffer, false);
+    dma_channel_set_read_addr(read_chan, lut_buffer, false);
+    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 }
