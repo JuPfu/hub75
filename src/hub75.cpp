@@ -7,7 +7,6 @@
 #include "hardware/dma.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
-#include "hardware/interp.h"
 #include "pico/sync.h"
 
 #include "hub75.hpp"
@@ -131,8 +130,6 @@ static const uint16_t CIE_BLUE[256] = {
     218, 220, 223, 225, 228, 230, 232, 235, 237, 240, 242, 245, 247, 250, 252, 255};
 #endif
 
-uint16_t *bcm_lut[DITHER_PHASES];
-
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 uint8_t *frame_buffer;  /// Pointer to < Interwoven image data for examples;
 uint8_t *frame_buffer1; ///< Interwoven image data for examples;
@@ -214,14 +211,9 @@ static struct
 static uint32_t row_address = 0;
 static uint32_t bitplane = 0;
 
-static uint32_t row_in_bit_plane = 0;
-
 // Derived constants
 static constexpr int ACC_SHIFT = (ACC_BITS - BITPLANES);    // number of low bits preserved in accumulator
 static constexpr uint16_t CLAMP_MAX = (1u << ACC_BITS) - 1; // 4095 for 10-bit, 1023 for 8-bit
-
-// Per-channel accumulators (allocated at runtime)
-static std::vector<uint16_t> acc_r, acc_g, acc_b;
 
 // Variables for brightness control
 // Q format shift: Q16 gives 1.0 == (1 << 16) == 65536
@@ -752,129 +744,6 @@ static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b)
     return (CIE_BLUE[b] << 20) | (CIE_GREEN[g] << 10) | CIE_RED[r];
 }
 
-static inline void build_expanded_rgb10(const uint32_t *src, uint32_t *dst, size_t pixels)
-{
-    for (size_t i = 0; i < pixels; ++i)
-    {
-        uint32_t p = src[i];
-
-        // Standardize: Red = High (20), Green = Mid (10), Blue = Low (0)
-        uint32_t r = CIE_RED[(p >> 16) & 0xFF];  // R from source (bits 16-23)
-        uint32_t g = CIE_GREEN[(p >> 8) & 0xFF]; // G from source (bits 8-15)
-        uint32_t b = CIE_BLUE[p & 0xFF];         // B from source (bits 0-7)
-
-        // CORRECT PACKING FOR INTERLEAVER:
-        dst[i] = ((b & 0x3FF) << 20) | ((g & 0x3FF) << 10) | (r & 0x3FF);
-    }
-}
-
-// void setup_interp_for_bitplane(uint8_t bp)
-// {
-//     // INTERP0 => TOP pixel and
-//     // INTERP1 => BOTTOM pixel
-
-//     // --- INTERP0: TOP PIXEL (Outputs to bits 5, 4, 3) ---
-//     interp_config cfg0 = interp_default_config();
-//     // Lane 0: Extract Red (bit 20+bp) -> Move to bit 5
-//     interp_config_set_shift(&cfg0, 20 + bp);
-//     interp_config_set_mask(&cfg0, 0, 0); // Only bit 0
-//     // Logic: result = (accum >> shift) & mask.
-//     // We'll use a manual shift in the loop for the G/B bits to keep it simple,
-//     // OR use the 'Cross-result' to OR them together.
-
-//     // --- INTERP1: BOTTOM PIXEL (Outputs to bits 2, 1, 0) ---
-//     interp_config cfg1 = interp_default_config();
-//     interp_config_set_shift(&cfg1, 20 + bp); // Bottom Red
-//     interp_config_set_mask(&cfg1, 0, 0);
-
-//     interp_set_config(interp0, 0, &cfg0);
-//     interp_set_config(interp1, 0, &cfg1);
-// }
-
-void build_plane_interpolator(const uint32_t *top, const uint32_t *bot, uint8_t *dst, size_t width, uint8_t bp)
-{
-    for (size_t x = 0; x < width; ++x)
-    {
-        uint32_t t = top[x];
-        uint32_t b = bot[x];
-
-        // We extract 1 bit from each color field (R=20, G=10, B=0)
-        // and pack them into the 6-bit HUB75 byte: [TR TG TB BR BG BB]
-
-        uint8_t res = 0;
-        // Top Pixel (Bits 5, 4, 3)
-        res |= ((t >> (20 + bp)) & 1) << 5; // Red
-        res |= ((t >> (10 + bp)) & 1) << 4; // Green
-        res |= ((t >> (0 + bp)) & 1) << 3;  // Blue
-
-        // Bottom Pixel (Bits 2, 1, 0)
-        res |= ((b >> (20 + bp)) & 1) << 2; // Red
-        res |= ((b >> (10 + bp)) & 1) << 1; // Green
-        res |= ((b >> (0 + bp)) & 1) << 0;  // Blue
-
-        dst[x] = res;
-    }
-}
-
-void build_bitplanes_interleaved(const uint32_t *__restrict expanded,
-                                 uint8_t *__restrict dst,
-                                 size_t width)
-{
-    const size_t rows = PanelConfig::SCAN_DEPTH;
-    size_t current_plane_offset = 0;
-
-    for (uint8_t bp : BCM_SEQUENCE)
-    {
-        // 1. CONFIGURE HARDWARE ONCE PER BITPLANE
-        // This sets the internal shifts/masks for the current 'bp'
-        // setup_interp_for_bitplane(bp);
-
-        uint8_t *bp_base = dst + current_plane_offset;
-
-        for (size_t row = 0; row < rows; ++row)
-        {
-            const uint32_t *top = expanded + (row + rows) * width;
-            const uint32_t *bot = expanded + row * width;
-            uint8_t *out = bp_base + (row * width);
-
-            // 2. THE FAST STREAMING LOOP
-            // This function should now ONLY contain the interp->accum/peek logic
-            build_plane_interpolator(top, bot, (uint8_t *)out, width, bp);
-        }
-        current_plane_offset += (rows * width);
-    }
-}
-
-enum class ColorOrder
-{
-    RGB,
-    BGR
-};
-
-template <ColorOrder Order>
-void build_expanded_generic(
-    const uint8_t *__restrict src,
-    uint32_t *__restrict expanded,
-    size_t pixels)
-{
-    uint b = 2;
-    uint r = 0;
-
-    if constexpr (Order == ColorOrder::BGR)
-    {
-        b = 0;
-        r = 2;
-    }
-
-    for (size_t i = 0; i < pixels; ++i)
-    {
-        const uint8_t *p = &src[i * 3];
-
-        // Pack into 10-bit slots for the bitplane engine
-        expanded[i] = (CIE_RED[p[r]] << 20) | (CIE_GREEN[p[1]] << 10) | CIE_BLUE[p[b]];
-    }
-}
-
 #if USE_PICO_GRAPHICS == true
 /**
  * @brief Update frame_buffer from PicoGraphics source (RGB888 / packed 32-bit),
@@ -891,11 +760,6 @@ __attribute__((optimize("unroll-loops"))) void update(
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-    // constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-
-    // build_expanded_rgb10(src, lut_buffer, pixels);
-    // build_bitplanes_interleaved(lut_buffer, frame_buffer, width);
-
     constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
     {
@@ -1000,10 +864,6 @@ __attribute__((optimize("unroll-loops"))) void update(
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
 #ifdef HUB75_MULTIPLEX_2_ROWS
-
-    // build_expanded_generic<ColorOrder::RGB>(src, lut_buffer, pixels);
-    // build_bitplanes_interleaved(lut_buffer, frame_buffer, width);
-
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     const uint rgb_offset = offset * 3;
     for (size_t fb_index = 0, j = 0; fb_index < total_pixels; j += 3, fb_index += 2)

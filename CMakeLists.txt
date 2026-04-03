@@ -69,11 +69,10 @@ target_compile_definitions(hub75 PRIVATE
     OEN_PIN=43                  # GPIO for OE pin
     PANEL_TYPE=PANEL_RUL6024    # select PANEL_TYPE
     INVERTED_STB=false          # inverted pin signal for OE (untested)
-    TEMPORAL_DITHERING=false    # experimental - switch on temporal dithering to improve colour depth (currently 2 additional bits)
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     BITPLANES=10               # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    FRAME_RATE=true            # for testing and debugging purpose only: output frame rate information (printf) in monitor
+    FRAME_RATE=true            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
 
 # Generate PIO header
@@ -107,7 +106,6 @@ target_link_libraries(hub75
         pico_aon_timer
         hardware_pio
         hardware_dma
-        hardware_interp
         hardware_vreg
         pico_graphics)
 
