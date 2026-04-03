@@ -292,6 +292,8 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
             cmd->dark_cycles = total_dark / split_factor;
         }
     }
+    row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
+    swap_row_cmd_buffer_pending = true;
 }
 
 /**
@@ -836,10 +838,6 @@ __attribute__((optimize("unroll-loops"))) void update(
         }
     }
 #endif
-    // uint32_t irq = save_and_disable_interrupts();
-    // swap_frame_buffer_pending = true;
-    // frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-    // restore_interrupts(irq);
 }
 #endif
 
