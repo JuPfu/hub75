@@ -1092,8 +1092,4 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
-    // uint32_t irq = save_and_disable_interrupts();
-    // swap_frame_buffer_pending = true;
-    // frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-    // restore_interrupts(irq);
 }

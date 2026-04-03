@@ -197,8 +197,6 @@ pixel_loop:
 .program hub75_bitplane_setup
 .define BIT_DEPTH 10               ; Placeholder - will be overwritten in hub75_data_rgb_program_init
 
-public entry_point:
-   
 .wrap_target  
                              ; first word RGB101010 or RGB888 depending on BITPLANES setting        
 public shift0:               ; R0 G0 B0
@@ -251,7 +249,7 @@ static inline void hub75_bitplane_setup_program_init(PIO pio, uint sm, uint offs
     pio->instr_mem[offset + hub75_bitplane_setup_offset_out_red1] = instr;
     pio->instr_mem[offset + hub75_bitplane_setup_offset_out_green1] = instr;
 
-    pio_sm_exec(pio, sm, offset + hub75_bitplane_setup_offset_entry_point);
+    pio_sm_exec(pio, sm, offset);
     pio_sm_set_enabled(pio, sm, true);
 }
 
