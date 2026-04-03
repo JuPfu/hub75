@@ -108,8 +108,8 @@ constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 #define LUT_MAPPING(IDX, COLOUR) temporal_dithering(IDX, COLOUR)
 #define LUT_MAPPING_RGB(IDX, R, G, B) temporal_dithering(IDX, R, G, B)
 #else
-#define LUT_MAPPING(IDX, COLOUR) pack_lut_rgb(COLOUR, lut)
-#define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B, lut)
+#define LUT_MAPPING(IDX, COLOUR) pack_lut_rgb(COLOUR)
+#define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B)
 #endif
 
 #define DITHER_PHASES 4

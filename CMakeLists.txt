@@ -73,7 +73,7 @@ target_compile_definitions(hub75 PRIVATE
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     BITPLANES=10               # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor
+    FRAME_RATE=true            # for testing and debugging purpose only: output frame rate information (printf) in monitor
 )
 
 # Generate PIO header

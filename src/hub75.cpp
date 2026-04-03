@@ -192,8 +192,8 @@ int row_ctrl_chan;
 int pixel_chan;
 int pixel_ctrl_chan;
 
-int bitplane_stream_chan;
-int bitstream_ctrl_chan;
+int read_chan;
+int write_chan;
 
 // PIO configuration structure for state machine numbers and corresponding program offsets
 static struct
@@ -205,9 +205,9 @@ static struct
     PIO row_pio;
     uint row_prog_offs;
 
-    uint sm_bitplane_stream;
-    PIO pio_bitplane_stream;
-    uint offs_bitplane_stream;
+    uint sm_read;
+    PIO pio_read;
+    uint offs_read;
 } pio_config;
 
 // Variables for row addressing and bit plane selection
@@ -437,31 +437,85 @@ void setup_irq()
     irq_set_enabled(DMA_IRQ_0, true);
 }
 
-// void bitplane_stream_chan_handler()
-// {
-//     // Clear the interrupt request for DMA channel
-//     dma_channel_acknowledge_irq0(bitplane_stream_chan);
+void read_chan_handler()
+{
+    // Clear the interrupt request for DMA channel
+    dma_channel_acknowledge_irq1(read_chan);
 
-//     // go through all bitplanes in BCM_SEQUENCE
-//     if ( ++bitplane < bcm_sequence_length ) {
-//         uint shamt = BCM_SEQUENCE[bitplane];
-//         hub75_bitplane_setup_set_shift(pio_config.pio_bitplane_stream, pio_config.sm_bitplane_stream, pio_config.offs_bitplane_stream, shamt);
+    // go through all bitplanes in BCM_SEQUENCE
+    if (++bitplane < bcm_sequence_length)
+    {
+        uint shamt = BCM_SEQUENCE[bitplane];
+        hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
-//         dma_channel_set_read_addr(bitplane_stream_chan, lut_buffer, true);
-//     } else {
-//         bitplane = 0;
+        // Inside read_chan_handler
+        uint8_t *plane_dst = frame_buffer + (bitplane * width * PanelConfig::SCAN_DEPTH);
+        dma_channel_set_write_addr(write_chan, plane_dst, false); // Update the "reload" address
+        dma_channel_set_read_addr(read_chan, lut_buffer, false);
+        dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
+    }
+    else
+    {
+        __dmb();
 
-//         swap_frame_buffer_pending = true;
-//         frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-//     }
-// }
+        bitplane = 0;
+        uint shamt = BCM_SEQUENCE[bitplane];
+        hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
-// void setup_bitplane_stream_irq()
-// {
-//     dma_channel_set_irq1_enabled(bitplane_stream_chan, true);
-//     irq_set_exclusive_handler(DMA_IRQ_1, bitplane_stream_chan_handler);
-//     irq_set_enabled(DMA_IRQ_1, true);
-// }
+        frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+        swap_frame_buffer_pending = true;
+    }
+}
+
+static void setup_bitplane_creation()
+{
+    read_chan = dma_claim_unused_channel(true);
+    write_chan = dma_claim_unused_channel(true);
+
+    // --- READ CHANNEL (Memory -> PIO) ---
+    dma_channel_config c_read = dma_channel_get_default_config(read_chan);
+    channel_config_set_transfer_data_size(&c_read, DMA_SIZE_32);
+    channel_config_set_read_increment(&c_read, true);
+    channel_config_set_write_increment(&c_read, false);
+    // DREQ: Wait for PIO TX FIFO space
+    channel_config_set_dreq(&c_read, pio_get_dreq(pio_config.pio_read, pio_config.sm_read, true));
+    channel_config_set_high_priority(&c_read, true);
+
+    dma_channel_configure(
+        read_chan,
+        &c_read,
+        &pio_config.pio_read->txf[pio_config.sm_read], // Write to PIO TX FIFO
+        nullptr,                                       // Read address set later
+        PIXELS,                                        // Total pixel pairs to process
+        false                                          // Don't start yet
+    );
+
+    // --- WRITE CHANNEL (PIO -> Memory) ---
+    dma_channel_config c_write = dma_channel_get_default_config(write_chan);
+    channel_config_set_transfer_data_size(&c_write, DMA_SIZE_8); // PIO pushes 1 byte
+    channel_config_set_read_increment(&c_write, false);
+    channel_config_set_write_increment(&c_write, true);
+    // DREQ: Wait for PIO RX FIFO data
+    channel_config_set_dreq(&c_write, pio_get_dreq(pio_config.pio_read, pio_config.sm_read, false));
+
+    channel_config_set_high_priority(&c_write, true);
+
+    dma_channel_configure(
+        write_chan,
+        &c_write,
+        nullptr,                                       // Write address set later
+        &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
+        width * PanelConfig::SCAN_DEPTH,               // Total bytes to collect
+        false                                          // Don't start yet
+    );
+}
+
+void setup_bitplane_stream_irq()
+{
+    dma_channel_set_irq1_enabled(read_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_1, read_chan_handler);
+    irq_set_enabled(DMA_IRQ_1, true);
+}
 
 /**
  * @brief Initializes the HUB75 display by setting up DMA and PIO subsystems.
@@ -507,7 +561,9 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
 
     configure_pio(inverted_stb);
     setup_dma_transfers();
+    setup_bitplane_creation();
     setup_irq();
+    setup_bitplane_stream_irq();
     hub75_build_row_cmd_buffer(brightness_fp);
 }
 
@@ -593,13 +649,15 @@ static void configure_pio(bool inverted_stb)
         hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
 
     if (!pio_claim_free_sm_and_add_program(
-            &hub75_bitplane_stream_program,
-            &pio_config.pio_bitplane_stream,
-            &pio_config.sm_bitplane_stream,
-            &pio_config.offs_bitplane_stream))
+            &hub75_bitplane_setup_program,
+            &pio_config.pio_read,
+            &pio_config.sm_read,
+            &pio_config.offs_read))
     {
         panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
     }
+
+    hub75_bitplane_setup_program_init(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read);
 }
 
 /**
@@ -677,52 +735,21 @@ static void setup_dma_transfers()
     pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
 }
 
-static void setup_bitplane_creation()
+// Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
+static inline uint32_t pack_lut_rgb(uint32_t color)
 {
-    bitplane_stream_chan = dma_claim_unused_channel(true);
-    // bitstream_ctrl_chan = dma_claim_unused_channel(true);
+    // Standardize: Red = High (20), Green = Mid (10), Blue = Low (0)
+    uint32_t r = CIE_RED[(color >> 16) & 0xFF];  // R from source (bits 16-23)
+    uint32_t g = CIE_GREEN[(color >> 8) & 0xFF]; // G from source (bits 8-15)
+    uint32_t b = CIE_BLUE[color & 0xFF];         // B from source (bits 0-7)
 
-    // bitstream channel
-    dma_channel_config bitplane_stream_chan_config = dma_channel_get_default_config(row_chan);
-
-    channel_config_set_transfer_data_size(&bitplane_stream_chan_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&bitplane_stream_chan_config, true);
-    channel_config_set_write_increment(&bitplane_stream_chan_config, true);
-
-    channel_config_set_high_priority(&bitplane_stream_chan_config, true);
-
-    channel_config_set_dreq(&bitplane_stream_chan_config, pio_get_dreq(pio_config.pio_bitplane_stream, pio_config.sm_bitplane_stream, true));
-
-    channel_config_set_chain_to(&bitplane_stream_chan_config, bitstream_ctrl_chan);
-
-    dma_channel_configure(row_chan, &bitplane_stream_chan_config, &pio_config.row_pio->txf[pio_config.sm_bitplane_stream], lut_buffer, dma_encode_transfer_count(PIXELS), false);
-
-    // // bitstream ctrl channel
-    // dma_channel_config bitstream_ctrl_chan_config = dma_channel_get_default_config(bitstream_ctrl_chan);
-
-    // channel_config_set_transfer_data_size(&bitstream_ctrl_chan_config, DMA_SIZE_32);
-    // channel_config_set_read_increment(&bitstream_ctrl_chan_config, false);
-    // channel_config_set_write_increment(&bitstream_ctrl_chan_config, false);
-
-    // channel_config_set_dreq(&bitstream_ctrl_chan_config, DREQ_FORCE);
-
-    // channel_config_set_high_priority(&bitstream_ctrl_chan_config, true);
-
-    // dma_channel_configure(row_ctrl_chan, &bitstream_ctrl_chan_config, &dma_hw->ch[row_chan].read_addr, dma_row_cmd_buffer, 1, false);
+    return ((b & 0x3FF) << 20) | ((g & 0x3FF) << 10) | (r & 0x3FF);
 }
 
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
-static inline uint32_t pack_lut_rgb(uint32_t color, const uint16_t *lut)
+static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b)
 {
-    return (lut[(color & 0x0000ff)] << (2 * BITPLANES)) |
-           (lut[(color >> 8) & 0x0000ff] << BITPLANES) |
-           (lut[(color >> 16) & 0x0000ff]);
-}
-
-// Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
-static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b, const uint16_t *lut)
-{
-    return lut[r] << (2 * BITPLANES) | lut[g] << BITPLANES | lut[b];
+    return (CIE_BLUE[b] << 20) | (CIE_GREEN[g] << 10) | CIE_RED[r];
 }
 
 static inline void build_expanded_rgb10(const uint32_t *src, uint32_t *dst, size_t pixels)
@@ -741,27 +768,28 @@ static inline void build_expanded_rgb10(const uint32_t *src, uint32_t *dst, size
     }
 }
 
-void setup_interp_for_bitplane(uint8_t bp)
-{
-    // We use INTERP0 for the TOP pixel and INTERP1 for the BOTTOM pixel
+// void setup_interp_for_bitplane(uint8_t bp)
+// {
+//     // INTERP0 => TOP pixel and
+//     // INTERP1 => BOTTOM pixel
 
-    // --- INTERP0: TOP PIXEL (Outputs to bits 5, 4, 3) ---
-    interp_config cfg0 = interp_default_config();
-    // Lane 0: Extract Red (bit 20+bp) -> Move to bit 5
-    interp_config_set_shift(&cfg0, 20 + bp);
-    interp_config_set_mask(&cfg0, 0, 0); // Only bit 0
-    // Logic: result = (accum >> shift) & mask.
-    // We'll use a manual shift in the loop for the G/B bits to keep it simple,
-    // OR use the 'Cross-result' to OR them together.
+//     // --- INTERP0: TOP PIXEL (Outputs to bits 5, 4, 3) ---
+//     interp_config cfg0 = interp_default_config();
+//     // Lane 0: Extract Red (bit 20+bp) -> Move to bit 5
+//     interp_config_set_shift(&cfg0, 20 + bp);
+//     interp_config_set_mask(&cfg0, 0, 0); // Only bit 0
+//     // Logic: result = (accum >> shift) & mask.
+//     // We'll use a manual shift in the loop for the G/B bits to keep it simple,
+//     // OR use the 'Cross-result' to OR them together.
 
-    // --- INTERP1: BOTTOM PIXEL (Outputs to bits 2, 1, 0) ---
-    interp_config cfg1 = interp_default_config();
-    interp_config_set_shift(&cfg1, 20 + bp); // Bottom Red
-    interp_config_set_mask(&cfg1, 0, 0);
+//     // --- INTERP1: BOTTOM PIXEL (Outputs to bits 2, 1, 0) ---
+//     interp_config cfg1 = interp_default_config();
+//     interp_config_set_shift(&cfg1, 20 + bp); // Bottom Red
+//     interp_config_set_mask(&cfg1, 0, 0);
 
-    interp_set_config(interp0, 0, &cfg0);
-    interp_set_config(interp1, 0, &cfg1);
-}
+//     interp_set_config(interp0, 0, &cfg0);
+//     interp_set_config(interp1, 0, &cfg1);
+// }
 
 void build_plane_interpolator(const uint32_t *top, const uint32_t *bot, uint8_t *dst, size_t width, uint8_t bp)
 {
@@ -799,7 +827,7 @@ void build_bitplanes_interleaved(const uint32_t *__restrict expanded,
     {
         // 1. CONFIGURE HARDWARE ONCE PER BITPLANE
         // This sets the internal shifts/masks for the current 'bp'
-        setup_interp_for_bitplane(bp);
+        // setup_interp_for_bitplane(bp);
 
         uint8_t *bp_base = dst + current_plane_offset;
 
@@ -863,13 +891,20 @@ __attribute__((optimize("unroll-loops"))) void update(
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
+    // constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+
+    // build_expanded_rgb10(src, lut_buffer, pixels);
+    // build_bitplanes_interleaved(lut_buffer, frame_buffer, width);
+
     constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-
-    build_expanded_rgb10(src, lut_buffer, pixels);
-    build_bitplanes_interleaved(lut_buffer, frame_buffer, width);
-
-    // dma_channel_set_write_addr(bitplane_stream_chan, frame_buffer, false);
-    // dma_channel_set_read_addr(bitplane_stream_chan, lut_buffer, true);
+    for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
+    {
+        lut_buffer[fb_index] = LUT_MAPPING(fb_index, src[j]);
+        lut_buffer[fb_index + 1] = LUT_MAPPING(fb_index + 1, src[j + offset]);
+    }
+    dma_channel_set_write_addr(write_chan, frame_buffer, false);
+    dma_channel_set_read_addr(read_chan, lut_buffer, false);
+    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
@@ -947,10 +982,10 @@ __attribute__((optimize("unroll-loops"))) void update(
         }
     }
 #endif
-    uint32_t irq = save_and_disable_interrupts();
-    swap_frame_buffer_pending = true;
-    frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-    restore_interrupts(irq);
+    // uint32_t irq = save_and_disable_interrupts();
+    // swap_frame_buffer_pending = true;
+    // frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+    // restore_interrupts(irq);
 }
 #endif
 
@@ -966,11 +1001,19 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
 #ifdef HUB75_MULTIPLEX_2_ROWS
 
-    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    // build_expanded_generic<ColorOrder::RGB>(src, lut_buffer, pixels);
+    // build_bitplanes_interleaved(lut_buffer, frame_buffer, width);
 
-    build_expanded_generic<ColorOrder::RGB>(src, lut_buffer, pixels);
-    build_bitplanes_interleaved(lut_buffer, frame_buffer, width);
-
+    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    const uint rgb_offset = offset * 3;
+    for (size_t fb_index = 0, j = 0; fb_index < total_pixels; j += 3, fb_index += 2)
+    {
+        lut_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[j + 2], src[j + 1], src[j]);
+        lut_buffer[fb_index + 1] = LUT_MAPPING_RGB((fb_index + 1), src[rgb_offset + j + 2], src[rgb_offset + j + 1], src[rgb_offset + j]);
+    }
+    dma_channel_set_write_addr(write_chan, frame_buffer, false);
+    dma_channel_set_read_addr(read_chan, lut_buffer, false);
+    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
@@ -993,9 +1036,9 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         int32_t index = !(j & PAIR_HALF_BIT) ? (j - (line << PAIR_HALF_SHIFT)) * 3
                                              : (GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT)) * 3;
 
-        frame_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[index], src[index + 1], src[index + 2]);
+        frame_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[index + 2], src[index + 1], src[index]);
         index += HALF_PANEL_OFFSET;
-        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB(fb_index + 1, src[index], src[index + 1], src[index + 2]);
+        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB(fb_index + 1, src[index + 2], src[index + 1], src[index]);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -1027,14 +1070,14 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     {
         ptrdiff_t fb_index = dst - frame_buffer;
         // even src lines
-        dst[0] = LUT_MAPPING_RGB(fb_index, src[quarter2], src[quarter2 + 1], src[quarter2 + 2]);
+        dst[0] = LUT_MAPPING_RGB(fb_index, src[quarter2 + 2], src[quarter2 + 1], src[quarter2]);
         quarter2 += 3;
-        dst[1] = LUT_MAPPING_RGB(fb_index + 1, src[quarter4], src[quarter4 + 1], src[quarter4 + 2]);
+        dst[1] = LUT_MAPPING_RGB(fb_index + 1, src[quarter4 + 2], src[quarter4 + 1], src[quarter4]);
         quarter4 += 3;
         // odd src lines
-        dst[line_width + 0] = LUT_MAPPING_RGB(fb_index + line_width, src[quarter1], src[quarter1 + 1], src[quarter1 + 2]);
+        dst[line_width + 0] = LUT_MAPPING_RGB(fb_index + line_width, src[quarter1 + 2], src[quarter1 + 1], src[quarter1]);
         quarter1 += 3;
-        dst[line_width + 1] = LUT_MAPPING_RGB(fb_index + line_width + 1, src[quarter3], src[quarter3 + 1], src[quarter3 + 2]);
+        dst[line_width + 1] = LUT_MAPPING_RGB(fb_index + line_width + 1, src[quarter3 + 2], src[quarter3 + 1], src[quarter3]);
         quarter3 += 3;
 
         dst += 2;
@@ -1049,8 +1092,8 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
-    uint32_t irq = save_and_disable_interrupts();
-    swap_frame_buffer_pending = true;
-    frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-    restore_interrupts(irq);
+    // uint32_t irq = save_and_disable_interrupts();
+    // swap_frame_buffer_pending = true;
+    // frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+    // restore_interrupts(irq);
 }
