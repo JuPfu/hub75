@@ -104,15 +104,8 @@
 
 constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 
-#if TEMPORAL_DITHERING == true
-#define LUT_MAPPING(IDX, COLOUR) temporal_dithering(IDX, COLOUR)
-#define LUT_MAPPING_RGB(IDX, R, G, B) temporal_dithering(IDX, R, G, B)
-#else
 #define LUT_MAPPING(IDX, COLOUR) pack_lut_rgb(COLOUR)
 #define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B)
-#endif
-
-#define DITHER_PHASES 4
 
 // At the moment only used for HUB75_P10_3535_16X32_4S panels
 #define SCAN_GROUPS (1 << ROWSEL_N_PINS)
@@ -156,6 +149,8 @@ namespace PanelConfig {
     // For standard panels, this is usually 2.
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
 }
+
+constexpr uint32_t BITPLANE_COUNT = MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH;
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();

@@ -172,9 +172,6 @@ static const uint8_t BCM_SEQUENCE[] = {
 
 constexpr uint8_t bcm_sequence_length = sizeof(BCM_SEQUENCE) / sizeof(uint8_t);
 
-// Reload-Buffer (nur Startadresse!)
-static uint32_t *row_reload_buffer;
-
 static void configure_pio(bool);
 static void setup_dma_transfers();
 
@@ -207,13 +204,8 @@ static struct
     uint offs_read;
 } pio_config;
 
-// Variables for row addressing and bit plane selection
-static uint32_t row_address = 0;
+// Variable for bit plane selection
 static uint32_t bitplane = 0;
-
-// Derived constants
-static constexpr int ACC_SHIFT = (ACC_BITS - BITPLANES);    // number of low bits preserved in accumulator
-static constexpr uint16_t CLAMP_MAX = (1u << ACC_BITS) - 1; // 4095 for 10-bit, 1023 for 8-bit
 
 // Variables for brightness control
 // Q format shift: Q16 gives 1.0 == (1 << 16) == 65536
@@ -441,7 +433,7 @@ void read_chan_handler()
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
         // Inside read_chan_handler
-        uint8_t *plane_dst = frame_buffer + (bitplane * width * PanelConfig::SCAN_DEPTH);
+        uint8_t *plane_dst = frame_buffer + (bitplane * BITPLANE_COUNT);
         dma_channel_set_write_addr(write_chan, plane_dst, false); // Update the "reload" address
         dma_channel_set_read_addr(read_chan, lut_buffer, false);
         dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
@@ -497,7 +489,7 @@ static void setup_bitplane_creation()
         &c_write,
         nullptr,                                       // Write address set later
         &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
-        width * PanelConfig::SCAN_DEPTH,               // Total bytes to collect
+        BITPLANE_COUNT,                                // Total bytes to collect
         false                                          // Don't start yet
     );
 }
@@ -536,11 +528,9 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     dma_row_cmd_buffer = row_cmd_buffer1;
     row_cmd_buffer = row_cmd_buffer2;
 
-    // *bcm_lut = new uint16_t[256][DITHER_PHASES]();
-
     lut_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer
 
-    offset = width * PanelConfig::SCAN_DEPTH;
+    offset = BITPLANE_COUNT;
 
     if (panel_type == PANEL_FM6126A)
     {
@@ -708,7 +698,7 @@ static void setup_dma_transfers()
 
     channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan);
 
-    dma_channel_configure(pixel_chan, &pixel_chan_config, &pio_config.data_pio->txf[pio_config.sm_data], dma_buffer, dma_encode_transfer_count(width * PanelConfig::SCAN_DEPTH * bcm_sequence_length), false);
+    dma_channel_configure(pixel_chan, &pixel_chan_config, &pio_config.data_pio->txf[pio_config.sm_data], dma_buffer, dma_encode_transfer_count(BITPLANE_COUNT * bcm_sequence_length), false);
 
     // pixel ctrl channel
     dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan);
