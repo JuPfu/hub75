@@ -29,7 +29,7 @@
 #define ROWSEL_BASE_PIN 6 // start gpio pin of address pins
 #endif
 #ifndef ROWSEL_N_PINS
-#define ROWSEL_N_PINS 5 // count of consecutive address pins - adapt to the number of address pins of your panel
+#define ROWSEL_N_PINS 4 // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11
@@ -78,11 +78,6 @@
 #define INVERTED_STB false
 #endif
 
-// TEMPORAL_DITHERING is experimental - development still in progress
-#ifndef TEMPORAL_DITHERING
-#define TEMPORAL_DITHERING false
-#endif
-
 #ifndef SM_CLOCKDIV_FACTOR
 // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
 // For panels with height less or equal to 16 rows try a factor of 8.0f
@@ -104,8 +99,8 @@
 
 constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 
-#define LUT_MAPPING(IDX, COLOUR) pack_lut_rgb(COLOUR)
-#define LUT_MAPPING_RGB(IDX, R, G, B) pack_lut_rgb_(R, G, B)
+#define LUT_MAPPING(COLOUR) pack_lut_rgb(COLOUR)
+#define LUT_MAPPING_RGB(R, G, B) pack_lut_rgb_(R, G, B)
 
 // At the moment only used for HUB75_P10_3535_16X32_4S panels
 #define SCAN_GROUPS (1 << ROWSEL_N_PINS)
@@ -145,8 +140,6 @@ namespace PanelConfig {
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
 }
 
-constexpr uint32_t BITPLANE_PIXELS = MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH;
-
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();
 void update_bgr(const uint8_t *src);
@@ -157,3 +150,4 @@ void update(PicoGraphics const *graphics);
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);
 void setIntensity(float intensity, bool linear_brightness_control);
+

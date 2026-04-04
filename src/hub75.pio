@@ -7,48 +7,67 @@
 ;
 .pio_version 0 // only requires PIO version 0
 
+
+; =============================================================================
+; PROGRAM: hub75_row
+; =============================================================================
+; Drives row selection, latching and brightness timing (BCM) for HUB75 panels.
+;
+; Responsibilities:
+;   - Synchronise with pixel streamer via IRQ handshake
+;   - Latch shifted pixel data into panel registers
+;   - Apply row address (A–E lines)
+;   - Generate BCM timing (lit/dark phases via OEn)
+;   - Trigger prefetch of next row while current row is displayed
+;
+; Data format (via DMA, 3 words per row/bit-plane):
+;   1. row_address (5-bit used)
+;   2. lit_cycles  (OEn active → LEDs ON)
+;   3. dark_cycles (OEn inactive → LEDs OFF)
+;
 .program hub75_row
 
 .side_set 2
 
 ; Bit 0: LATCH (STB)
-; Bit 1: OEn (Output Enable, Inverted: 1=OFF, 0=ON)
+; Bit 1: OEn (Output Enable, active LOW: 0=ON, 1=OFF)
 
-    ; --- INITIALIZATION (Executed once at startup) ---
-    irq nowait 1        side 0b10   ; Trigger pixel streamer for the VERY FIRST row
+    ; --- INITIALISATION (executed once at start-up) ---
+    irq nowait 1        side 0b10   ; Kick off pixel streamer for the very first row
     
 .wrap_target
-    ; 1. Sync: Wait until the pixel streamer has finished shifting data
-    wait 1 irq 0        side 0b10   ; Keep panel dark (OEn=1) during wait
+    ; 1. SYNC: wait until pixel data for the current row has been fully shifted
+    wait 1 irq 0        side 0b10   ; Keep panel blanked (OEn=1) during wait
 
-    ; 2. LATCH: Strobe the shifted data into the row registers
-    nop         [3]     side 0b11   ; LATCH=1 (Assert strobe)
+    ; 2. LATCH: transfer shift register contents into output latches
+    nop         [3]     side 0b11   ; Assert LATCH (STB=1)
 
+    ; Optional dead-time to reduce ghosting (panel-dependent)
     mov x, y            side 0b10   ; Load wait cycles from Y register (init via C++)
 wait_loop1:
-    jmp x-- wait_loop1  side 0b10   ; Wait loop to prevent ghosting
+    jmp x-- wait_loop1  side 0b10
 
-    ; 3. PREFETCH: Trigger streamer for the NEXT row (loads data while current row is lit)
+    ; 3. PREFETCH: trigger pixel streamer for next row (loads data during BCM)
     irq nowait 1        side 0b10
 
-    ; 4. ADDRESSING: Apply row address corresponding to the latched data
-    out pins, 5         side 0b10   ; Apply A, B, C, D, E address lines
-    out null, 27        side 0b10   ; Discard remaining bits from DMA word
+    ; 4. ADDRESSING: select row corresponding to latched data
+    out pins, 5         side 0b10   ; Output A–E row address
+    out null, 27        side 0b10   ; Discard unused bits
 
-    ; 5. SETTLING TIME: Brief pause to allow address decoders to stabilize
+    ; 5. SETTLING: allow row decoder signals to stabilise
     mov x, y            side 0b10   ; Load wait cycles from Y register (init via C++)
 wait_loop:
-    jmp x-- wait_loop   side 0b10   ; Wait loop to prevent ghosting
+    jmp x-- wait_loop   side 0b10
 
-    ; 6. DISPLAY (BCM Timing - ON Phase)
-    out x, 32           side 0b10   ; Load 'lit_cycles' from DMA
+    ; 6. DISPLAY (BCM ON phase)
+    out x, 32           side 0b10   ; Load lit_cycles
 lit_loop:
-    jmp x-- lit_loop    side 0b00   ; OEn=0 (Panel ON)
+    jmp x-- lit_loop    side 0b00   ; OEn=0 → LEDs ON
 
-    ; 7. BLANKING (BCM Timing - OFF Phase)
-    out x, 32           side 0b10   ; Load 'dark_cycles' from DMA
+    ; 7. BLANKING (BCM OFF phase)
+    out x, 32           side 0b10   ; Load dark_cycles
 dark_loop:
-    jmp x-- dark_loop   side 0b10   ; OEn=1 (Panel OFF)
+    jmp x-- dark_loop   side 0b10   ; OEn=1 → LEDs OFF
 .wrap
 
 % c-sdk {
@@ -77,45 +96,51 @@ dark_loop:
     }
 %}
 
+; =============================================================================
+; PROGRAM: hub75_row_inverted
+; =============================================================================
+; Same functionality as hub75_row, but with inverted latch timing.
+; Required for panels where STB polarity or timing differs.
+;
 .program hub75_row_inverted
 
 .side_set 2
 
 ; Bit 0: LATCH (STB)
-; Bit 1: OEn (Output Enable, Inverted: 1=OFF, 0=ON)
+; Bit 1: OEn (active LOW: 0=ON, 1=OFF)
 
-    ; --- INITIALIZATION (Executed once at startup) ---
-    irq nowait 1        side 0b11   ; Trigger pixel streamer for the VERY FIRST row
+    ; --- INITIALISATION ---
+    irq nowait 1        side 0b11   ; Trigger pixel streamer
     
 .wrap_target
-    ; 1. Sync: Wait until the pixel streamer has finished shifting data
-    wait 1 irq 0        side 0b11   ; Keep panel dark (OEn=1) during wait
+    ; 1. SYNC
+    wait 1 irq 0        side 0b11   ; Keep panel blanked
 
-    ; 2. LATCH: Strobe the shifted data into the row registers
-    nop         [3]     side 0b10   ; LATCH=1 (Assert strobe)
-    nop         [3]     side 0b11   ; LATCH=0 (Deassert strobe)
+    ; 2. LATCH (explicit assert + deassert)
+    nop         [3]     side 0b10   ; STB=1 (assert)
+    nop         [3]     side 0b11   ; STB=0 (deassert)
 
-    ; 3. PREFETCH: Trigger streamer for the NEXT row (loads data while current row is lit)
+    ; 3. PREFETCH
     irq nowait 1        side 0b11
 
-    ; 4. ADDRESSING: Apply row address corresponding to the latched data
-    out pins, 5         side 0b11   ; Apply A, B, C, D, E address lines
-    out null, 27        side 0b11   ; Discard remaining bits from DMA word
+    ; 4. ADDRESSING
+    out pins, 5         side 0b11
+    out null, 27        side 0b11
 
-    ; 5. SETTLING TIME: Brief pause to allow address decoders to stabilize
-    mov x, y            side 0b11   ; Load wait cycles from Y register (init via C++)
+    ; 5. SETTLING
+    mov x, y            side 0b11
 wait_loop:
-    jmp x-- wait_loop   side 0b11   ; Wait loop to prevent ghosting
+    jmp x-- wait_loop   side 0b11
 
-    ; 6. DISPLAY (BCM Timing - ON Phase)
-    out x, 32           side 0b11   ; Load 'lit_cycles' from DMA
+    ; 6. DISPLAY (ON)
+    out x, 32           side 0b11
 lit_loop:
-    jmp x-- lit_loop    side 0b01   ; OEn=0 (Panel ON)
+    jmp x-- lit_loop    side 0b01   ; OEn=0 → LEDs ON
 
-    ; 7. BLANKING (BCM Timing - OFF Phase)
-    out x, 32           side 0b11   ; Load 'dark_cycles' from DMA
+    ; 7. BLANKING (OFF)
+    out x, 32           side 0b11
 dark_loop:
-    jmp x-- dark_loop   side 0b11   ; OEn=1 (Panel OFF)
+    jmp x-- dark_loop   side 0b11   ; OEn=1 → LEDs OFF
 .wrap
 
 % c-sdk {
@@ -144,6 +169,21 @@ dark_loop:
     }
 %}
 
+; =============================================================================
+; PROGRAM: hub75_bitplane_stream
+; =============================================================================
+; Streams pixel data (bitplanes) into HUB75 shift registers.
+;
+; Responsibilities:
+;   - Wait for row engine to request next row (IRQ handshake)
+;   - Shift RGB data (6 parallel lines: R0,G0,B0,R1,G1,B1)
+;   - Generate clock pulses (side-set)
+;   - Signal completion back to row engine
+;
+; Data format:
+;   - Each byte: [xx R0 G0 B0 R1 G1 B1]
+;   - Lower 6 bits used, upper 2 bits discarded
+;
 .program hub75_bitplane_stream
 
 ; side-set pin 0 is CLK (Clock)
@@ -158,24 +198,24 @@ dark_loop:
     ; Wait for a signal from the 'hub75_row' program to start shifting the next row
     wait 1 irq 1        side 0 ; CLK Low
 
-pixel_loop:
+bitstream_loop:
     ; --- PIXEL DATA SHIFTING ---
     ; Pull 6 bits (R0, G0, B0, R1, G1, B1) and apply to pins. 
     ; [1] adds a small setup delay before the rising clock edge.
-    out pins, 6    [1]  side 0 ; CLK ↓
+    out pins, 6    [1]      side 0 ; CLK ↓
 
     ; Discard the remaining 2 bits of the byte (padding) to trigger DMA auto-pull
-    out null, 2         side 0 ; CLK ↓
+    out null, 2             side 0 ; CLK ↓
 
     ; Pulse the clock High to shift the data into the panel's shift registers
-    nop            [3]  side 1 ; CLK ↑, [3] extends the hold time for high-speed panels
+    nop            [3]      side 1 ; CLK ↑, [3] extends the hold time for high-speed panels
 
-    ; Decrement X and loop until all pixels in the row are processed
-    jmp x--, pixel_loop side 0 ; CLK ↓
+    ; Loop until full row transferred
+    jmp x--, bitstream_loop side 0 ; CLK ↓
 
     ; --- SYNCHRONIZATION ---
-    ; Notify the 'hub75_row' program that the shift registers for this row are full
-    irq nowait 0        side 0 ; CLK ↓
+    ; Notify the 'hub75_row' program that the panels shift registers for this row are complete
+    irq nowait 0            side 0 ; CLK ↓
 .wrap
 
 % c-sdk {
@@ -201,39 +241,60 @@ pixel_loop:
     }
 %}
 
+; =============================================================================
+; PROGRAM: hub75_bitplane_setup
+; =============================================================================
+; Converts packed RGB bitplanes (R10G10B10 or R8G8B8) into serialised
+; 6-bit output words suitable for hub75_bitplane_stream.
+;
+; Responsibilities:
+;   - Extract individual bitplanes from packed RGB words
+;   - Interleave top/bottom pixel pairs (R0/G0/B0 + R1/G1/B1)
+;   - Push formatted bytes into FIFO for streaming
+;
+; Uses self-modifying code:
+;   - `pull` instructions may be patched to `out null, n`
+;   - Enables dynamic bit-plane selection (shift amount)
+;
 .program hub75_bitplane_setup
-.define BITPLANES 10         ; Placeholder - valid for 10 and for 8 BITPLANES
+.define BITPLANES 10         ; Alias - valid for 10 and for 8 BITPLANES
 
 .wrap_target  
-                             ; first word RGB101010 or RGB888 depending on BITPLANES setting        
-public shift0:               ; R0 G0 B0
-    pull                     ; gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
-    in osr, 1                ; Red0 N
+                             ; first word R10G10B10 or R8G8B8       
+public shift0:               ; Pixel Red0 Green0 Blue0 (8 or 10 bit format)
+    pull                     ; Instruction gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
+                             ; pre-shift left to current bitplane n if n nonzero
+                             ; else no pre-shift necessary
+    in osr, 1                ; shift right into ISR register first OSR bit: Red0
 public out_red0:
-    out null, BITPLANES      ; move to green bit
+    out null, BITPLANES      ; shift to green bit
 
-    in osr, 1                ; Green0 N
+    in osr, 1                ; shift right into ISR register first OSR bit:  Green0 RED0
 public out_green0:
-    out null, BITPLANES      ; Green0 discard
+    out null, BITPLANES      ; shift to blue bit
 
-    in osr, 1                ; Blue0 N
-    out null, 32             ; Remainder discard
+    in osr, 1                ; shift right into ISR register first OSR bit: Blue0 Green0 RED0
+    out null, 32             ; Discard rest
 
-                             ; second word RGB101010 or RGB888 depending on BITPLANES setting    
-public shift1:               ; R1 G1 B1 
-    pull                     ; gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
-    in osr, 1                ; Red1 N
+                             ; second word R10G10B10 or R8G8B8 
+                             ; pre-shift left to current bitplane n if n nonzero
+                             ; else no pre-shift necessary   
+public shift1:               ; Pixel Red1 Green1 Blue1 (8 or 10 bit format)
+    pull                     ; Instruction gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
+    in osr, 1                ; shift right into ISR register first OSR bit:  Red1 Blue0 Green0 RED0
 public out_red1:
-    out null, BITPLANES      ; Red1 discard
+    out null, BITPLANES      ; shift to green bit
 
-    in osr, 1                ; Green1 N
+    in osr, 1                ; shift right into ISR register first OSR bit: Green1 Red1 Blue0 Green0 RED0
 public out_green1:
-    out null, BITPLANES      ; Green1 discard
+    out null, BITPLANES      ; shift to blue bit
 
-    in osr, 1                ; Blue1 N
-    out null, 32             ; Remainder discard
+    in osr, 1                ; shift right into ISR register first OSR bit: Blue1 Green1 Red1 Blue0 Green0 RED0
+    out null, 32             ; Discard rest to trigger auto-pull
 
-    in null, 26              ; shift right and auto_push (1 byte) of the ISR content into the RX FIFO
+    in null, 26              ; shift right and auto_push first byte (00B1G1R1B0G0R0) of the ISR content into the RX FIFO
+
+.wrap
 
 % c-sdk {
 static inline void hub75_bitplane_setup_program_init(PIO pio, uint sm, uint offset) {

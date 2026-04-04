@@ -136,7 +136,7 @@ uint8_t *frame_buffer1; ///< Interwoven image data for examples;
 uint8_t *frame_buffer2; ///< Interwoven image data for examples;
 uint8_t *dma_buffer;    ///< Interwoven image data for examples;
 
-static uint32_t *lut_buffer;
+static uint32_t *rgb_buffer;
 
 // Three-word record sent to the hub75_row PIO state machine for each row/bit-plane.
 // The PIO consumes all three words in order via DMA.
@@ -146,8 +146,7 @@ static uint32_t *lut_buffer;
 //   offset 4: lit_cycles   — OEn asserted   (panel ON)  duration, BCM weighted
 //   offset 8: dark_cycles  — OEn deasserted (panel OFF) duration
 //
-// Invariant: lit_cycles + dark_cycles = basis_factor << bit_plane (constant),
-// which guarantees a brightness-independent frame rate.
+// Invariant: lit_cycles + dark_cycles = basis_factor << bit_plane (constant), which guarantees a brightness-independent frame rate.
 struct row_cmd_t
 {
     uint32_t row_address; ///< 5-bit row select; selects which pair of rows to drive
@@ -174,17 +173,7 @@ static const uint8_t BCM_SEQUENCE[] = {
 // Split sequence for 8 bitplanes
 // We split BP 7 into 3 parts, BP 6 into 2 parts
 static const uint8_t BCM_SEQUENCE[] = {
-    7,
-    0,
-    1,
-    2,
-    6,
-    3,
-    4,
-    7,
-    5,
-    6,
-    7, // 11 steps instead of 8
+    7, 0, 1, 2, 6, 3, 4, 7, 5, 6, 7 // 11 steps instead of 8
 };
 #endif
 
@@ -196,7 +185,6 @@ static void setup_dma_transfers();
 // Width and height of the HUB75 LED matrix
 static uint width;
 static uint height;
-static uint offset;
 
 // DMA channel numbers
 int row_chan;
@@ -458,23 +446,26 @@ void read_chan_handler()
     // go through all bitplanes in BCM_SEQUENCE
     if (++bitplane < bcm_sequence_length)
     {
+        // Set shift to suit next biplane
         uint shamt = BCM_SEQUENCE[bitplane];
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
-        // Inside read_chan_handler
-        uint8_t *plane_dst = frame_buffer + (bitplane * BITPLANE_PIXELS);
+        // Prepare DMA channels for building next bitplane
+        uint8_t *plane_dst = frame_buffer + (bitplane * (PIXELS >> 1));
         dma_channel_set_write_addr(write_chan, plane_dst, false); // Update the "reload" address
-        dma_channel_set_read_addr(read_chan, lut_buffer, false);
+        dma_channel_set_read_addr(read_chan, rgb_buffer, false);
         dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
     }
     else
     {
         __dmb();
 
+        // Reset shift for biplane 0
         bitplane = 0;
         uint shamt = BCM_SEQUENCE[bitplane];
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
+        // Rebuild of frame_buffer complete - swap to accomodate for next update
         frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
         swap_frame_buffer_pending = true;
     }
@@ -499,7 +490,7 @@ static void setup_bitplane_creation()
         &c_read,
         &pio_config.pio_read->txf[pio_config.sm_read], // Write to PIO TX FIFO
         nullptr,                                       // Read address set later
-        PIXELS,                                        // Total pixel pairs to process
+        dma_encode_transfer_count(PIXELS),             // Total pixel (pairs) to process
         false                                          // Don't start yet
     );
 
@@ -518,7 +509,7 @@ static void setup_bitplane_creation()
         &c_write,
         nullptr,                                       // Write address set later
         &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
-        BITPLANE_PIXELS,                               // Total bytes to collect
+        dma_encode_transfer_count(PIXELS >> 1),        // Total bytes to collect
         false                                          // Don't start yet
     );
 }
@@ -545,8 +536,8 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     width = w;
     height = h;
 
-    frame_buffer1 = new uint8_t[PanelConfig::WIDTH * PanelConfig::HEIGHT / PanelConfig::ROWS_IN_PARALLEL * bcm_sequence_length]; // Allocate memory for frame buffer
-    frame_buffer2 = new uint8_t[PanelConfig::WIDTH * PanelConfig::HEIGHT / PanelConfig::ROWS_IN_PARALLEL * bcm_sequence_length]; // Allocate memory for frame buffer
+    frame_buffer1 = new uint8_t[(PIXELS >> 1) * bcm_sequence_length];
+    frame_buffer2 = new uint8_t[(PIXELS >> 1) * bcm_sequence_length];
 
     dma_buffer = frame_buffer1;
     frame_buffer = frame_buffer2;
@@ -557,9 +548,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     dma_row_cmd_buffer = row_cmd_buffer1;
     row_cmd_buffer = row_cmd_buffer2;
 
-    lut_buffer = new uint32_t[width * height](); // Allocate memory for frame buffer
-
-    offset = BITPLANE_PIXELS;
+    rgb_buffer = new uint32_t[width * height](); // Allocate memory for rgb buffer
 
     if (panel_type == PANEL_FM6126A)
     {
@@ -696,7 +685,16 @@ static void setup_dma_transfers()
 
     channel_config_set_chain_to(&row_chan_config, row_ctrl_chan);
 
-    dma_channel_configure(row_chan, &row_chan_config, &pio_config.row_pio->txf[pio_config.sm_row], dma_row_cmd_buffer, dma_encode_transfer_count(bcm_sequence_length * PanelConfig::SCAN_DEPTH * 3), false);
+    // One big transfer of the complete content of dma_row_cmd_buffer.
+    // The dma_row_cmd_buffer
+    //    - has (mostly) different lit cycles and dark cycles for each bitplane
+    //    - has the addresses of each row in each bitplane
+    dma_channel_configure(row_chan,
+                          &row_chan_config,
+                          &pio_config.row_pio->txf[pio_config.sm_row],
+                          dma_row_cmd_buffer,
+                          dma_encode_transfer_count(bcm_sequence_length * PanelConfig::SCAN_DEPTH * 3),
+                          false);
 
     // row ctrl channel
     dma_channel_config row_ctrl_chan_config = dma_channel_get_default_config(row_ctrl_chan);
@@ -709,7 +707,9 @@ static void setup_dma_transfers()
 
     channel_config_set_high_priority(&row_chan_config, true);
 
-    dma_channel_configure(row_ctrl_chan, &row_ctrl_chan_config, &dma_hw->ch[row_chan].read_addr, dma_row_cmd_buffer, 1, false);
+    // When row_chan has finished a complete frame (each row in each bitplane) has been emitted.
+    // The row_ctrl_chan resets the start address of row_chan to dma_row_cmd_buffer.
+    dma_channel_configure(row_ctrl_chan, &row_ctrl_chan_config, &dma_hw->ch[row_chan].read_addr, dma_row_cmd_buffer, dma_encode_transfer_count(1), false);
 
     // pixel channel
     pixel_chan = dma_claim_unused_channel(true);
@@ -727,7 +727,14 @@ static void setup_dma_transfers()
 
     channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan);
 
-    dma_channel_configure(pixel_chan, &pixel_chan_config, &pio_config.data_pio->txf[pio_config.sm_data], dma_buffer, dma_encode_transfer_count(BITPLANE_PIXELS * bcm_sequence_length), false);
+    // Due to DMA channel row_chan the complete pre-calculated bit planes have to be transferred for DMA channel pixel_chan.
+    // The pixel chan iterates over all bitplanes in one big swoop.
+    dma_channel_configure(pixel_chan,
+                          &pixel_chan_config,
+                          &pio_config.data_pio->txf[pio_config.sm_data],
+                          dma_buffer,
+                          dma_encode_transfer_count((PIXELS >> 1) * bcm_sequence_length),
+                          false);
 
     // pixel ctrl channel
     dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan);
@@ -740,6 +747,8 @@ static void setup_dma_transfers()
 
     channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
 
+    // When pixel_chan has finished a complete frame (each row in each bitplane) has been emitted.
+    // The pixel_ctrl_chan resets the start address of pixel_chan to dma_buffer.
     dma_channel_configure(pixel_ctrl_chan, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan].read_addr, dma_buffer, 1, false);
 
     pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
@@ -780,10 +789,11 @@ __attribute__((optimize("unroll-loops"))) void update(
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
     constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    constexpr size_t offset = pixels >> 1;
     for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
     {
-        lut_buffer[fb_index] = LUT_MAPPING(fb_index, src[j]);
-        lut_buffer[fb_index + 1] = LUT_MAPPING(fb_index + 1, src[j + offset]);
+        rgb_buffer[fb_index] = LUT_MAPPING(src[j]);
+        rgb_buffer[fb_index + 1] = LUT_MAPPING(src[j + offset]);
     }
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
@@ -807,8 +817,8 @@ __attribute__((optimize("unroll-loops"))) void update(
         int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
                                              : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
 
-        frame_buffer[fb_index] = LUT_MAPPING(fb_index, src[index]);
-        frame_buffer[fb_index + 1] = LUT_MAPPING(fb_index + 1, src[index + HALF_PANEL_OFFSET]);
+        rgb_buffer[fb_index] = LUT_MAPPING(src[index]);
+        rgb_buffer[fb_index + 1] = LUT_MAPPING(src[index + HALF_PANEL_OFFSET]);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -833,21 +843,20 @@ __attribute__((optimize("unroll-loops"))) void update(
     uint line = 0;
 
     // Framebuffer write pointer
-    uint32_t *dst = frame_buffer;
+    uint32_t *dst = rgb_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
-        ptrdiff_t fb_index = dst - frame_buffer;
         // even src lines
-        dst[0] = LUT_MAPPING(fb_index, src[quarter2]);
+        dst[0] = LUT_MAPPING(src[quarter2]);
         quarter2++;
-        dst[1] = LUT_MAPPING(fb_index + 1, src[quarter4]);
+        dst[1] = LUT_MAPPING(src[quarter4]);
         quarter4++;
         // odd src lines
-        dst[line_offset + 0] = LUT_MAPPING(fb_index + line_offset, src[quarter1]);
+        dst[line_offset + 0] = LUT_MAPPING(src[quarter1]);
         quarter1++;
-        dst[line_offset + 1] = LUT_MAPPING(fb_index + line_offset + 1, src[quarter3]);
+        dst[line_offset + 1] = LUT_MAPPING(src[quarter3]);
         quarter3++;
 
         dst += 2;
@@ -863,7 +872,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     }
 #endif
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
-    dma_channel_set_read_addr(read_chan, lut_buffer, false);
+    dma_channel_set_read_addr(read_chan, rgb_buffer, false);
     dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 }
 #endif
@@ -879,12 +888,12 @@ __attribute__((optimize("unroll-loops"))) void update(
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
 #ifdef HUB75_MULTIPLEX_2_ROWS
-    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    const uint rgb_offset = offset * 3;
+    constexpr size_t total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    constexpr size_t offset = (PIXELS >> 1) * 3;
     for (size_t fb_index = 0, j = 0; fb_index < total_pixels; j += 3, fb_index += 2)
     {
-        lut_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[j + 2], src[j + 1], src[j]);
-        lut_buffer[fb_index + 1] = LUT_MAPPING_RGB((fb_index + 1), src[rgb_offset + j + 2], src[rgb_offset + j + 1], src[rgb_offset + j]);
+        rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[j + 2], src[j + 1], src[j]);
+        rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
     }
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
@@ -908,9 +917,9 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         int32_t index = !(j & PAIR_HALF_BIT) ? (j - (line << PAIR_HALF_SHIFT)) * 3
                                              : (GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT)) * 3;
 
-        frame_buffer[fb_index] = LUT_MAPPING_RGB(fb_index, src[index + 2], src[index + 1], src[index]);
+        rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[index + 2], src[index + 1], src[index]);
         index += HALF_PANEL_OFFSET;
-        frame_buffer[fb_index + 1] = LUT_MAPPING_RGB(fb_index + 1, src[index + 2], src[index + 1], src[index]);
+        rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[index + 2], src[index + 1], src[index]);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -935,21 +944,20 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     uint line = 0;
 
     // Framebuffer write pointer
-    uint32_t *dst = frame_buffer;
+    uint32_t *dst = rgb_buffer;
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
-        ptrdiff_t fb_index = dst - frame_buffer;
         // even src lines
-        dst[0] = LUT_MAPPING_RGB(fb_index, src[quarter2 + 2], src[quarter2 + 1], src[quarter2]);
+        dst[0] = LUT_MAPPING_RGB(src[quarter2 + 2], src[quarter2 + 1], src[quarter2]);
         quarter2 += 3;
-        dst[1] = LUT_MAPPING_RGB(fb_index + 1, src[quarter4 + 2], src[quarter4 + 1], src[quarter4]);
+        dst[1] = LUT_MAPPING_RGB(src[quarter4 + 2], src[quarter4 + 1], src[quarter4]);
         quarter4 += 3;
         // odd src lines
-        dst[line_width + 0] = LUT_MAPPING_RGB(fb_index + line_width, src[quarter1 + 2], src[quarter1 + 1], src[quarter1]);
+        dst[line_width + 0] = LUT_MAPPING_RGB(src[quarter1 + 2], src[quarter1 + 1], src[quarter1]);
         quarter1 += 3;
-        dst[line_width + 1] = LUT_MAPPING_RGB(fb_index + line_width + 1, src[quarter3 + 2], src[quarter3 + 1], src[quarter3]);
+        dst[line_width + 1] = LUT_MAPPING_RGB(src[quarter3 + 2], src[quarter3 + 1], src[quarter3]);
         quarter3 += 3;
 
         dst += 2;
@@ -965,6 +973,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     }
 #endif
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
-    dma_channel_set_read_addr(read_chan, lut_buffer, false);
+    dma_channel_set_read_addr(read_chan, rgb_buffer, false);
     dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
 }
