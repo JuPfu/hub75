@@ -292,7 +292,7 @@ public out_green1:
     in osr, 1                ; shift right into ISR register first OSR bit: Blue1 Green1 Red1 Blue0 Green0 RED0
     out null, 32             ; Discard rest to trigger auto-pull
 
-    in null, 26              ; shift right and auto_push first byte (00B1G1R1B0G0R0) of the ISR content into the RX FIFO
+    in null, 2               ; shift right and auto_push four bytes (each byte looks like 00B1G1R1B0G0R0) of the ISR content into the RX FIFO
 
 .wrap
 
@@ -303,7 +303,7 @@ static inline void hub75_bitplane_setup_program_init(PIO pio, uint sm, uint offs
     sm_config_set_out_shift(&c, true, true, 32);
 
     // ISR shift to left. R0 ends up at bit 5.
-    sm_config_set_in_shift(&c, true, true, 8);
+    sm_config_set_in_shift(&c, true, true, 32);
 
     pio_sm_init(pio, sm, offset, &c);
 

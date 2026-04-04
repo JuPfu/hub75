@@ -496,7 +496,7 @@ static void setup_bitplane_creation()
 
     // --- WRITE CHANNEL (PIO -> Memory) ---
     dma_channel_config c_write = dma_channel_get_default_config(write_chan);
-    channel_config_set_transfer_data_size(&c_write, DMA_SIZE_8); // PIO pushes 1 byte
+    channel_config_set_transfer_data_size(&c_write, DMA_SIZE_32); // PIO pushes 4 bytes
     channel_config_set_read_increment(&c_write, false);
     channel_config_set_write_increment(&c_write, true);
     // DREQ: Wait for PIO RX FIFO data
@@ -509,7 +509,7 @@ static void setup_bitplane_creation()
         &c_write,
         nullptr,                                       // Write address set later
         &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
-        dma_encode_transfer_count(PIXELS >> 1),        // Total bytes to collect
+        dma_encode_transfer_count(PIXELS >> 3),        // Total bytes to collect
         false                                          // Don't start yet
     );
 }
