@@ -178,6 +178,7 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
     {
 
         uint32_t split_factor = 1;
+#if BALANCED_LIGHT_OUTPUT
 #if BITPLANES == 10
         if (bp == 9)
         {
@@ -198,6 +199,7 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         {
             split_factor = 2;
         }
+#endif
 #endif
 
         for (uint32_t row = 0; row < PanelConfig::SCAN_DEPTH; ++row)

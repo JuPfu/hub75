@@ -96,6 +96,10 @@
 #define CIE_BLUE CIE
 #endif
 
+#ifndef BALANCED_LIGHT_OUTPUT
+BALANCED_LIGHT_OUTPUT true
+#endif
+
 // Used in hub75_demo.cpp
 // Start hub75 driver on core1 if HUB75_MULTICORE is set to true
 // Start hub75 driver on core0 if HUB75_MULTICORE is set to false
