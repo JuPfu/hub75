@@ -86,6 +86,16 @@
 #define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 
+#ifndef SEPARATE_CIE_CHANNELS
+#define SEPARATE_CIE_CHANNELS false
+#endif
+
+#if SEPARATE_CIE_CHANNELS == false
+#define CIE_RED CIE
+#define CIE_GREEN CIE
+#define CIE_BLUE CIE
+#endif
+
 // Used in hub75_demo.cpp
 // Start hub75 driver on core1 if HUB75_MULTICORE is set to true
 // Start hub75 driver on core0 if HUB75_MULTICORE is set to false
