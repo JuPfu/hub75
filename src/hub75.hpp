@@ -96,6 +96,9 @@
 #define CIE_BLUE CIE
 #endif
 
+// Balanced Light Output 
+// High-weight bit-planes are split into multiple smaller slices within the BCM sequence. 
+// This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
 #ifndef BALANCED_LIGHT_OUTPUT
 BALANCED_LIGHT_OUTPUT true
 #endif
