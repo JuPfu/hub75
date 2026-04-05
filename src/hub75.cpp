@@ -173,7 +173,7 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
 {
     uint32_t idx = 0;
 
-    // Iterate through our custom sequence instead of a linear 0-9
+    // Iterate through BCM sequence
     for (uint8_t bp : BCM_SEQUENCE)
     {
 
@@ -183,7 +183,7 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         if (bp == 9)
         {
             // Calculate the "weight" of this slice
-            // If we split BP 9 into 4 parts, each part gets 1/4 of the duration
+            // Split BP 9 into 4 parts, each part gets 1/4 of the duration
             split_factor = 4;
         }
         else if (bp == 8)
@@ -193,6 +193,8 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
 #elif BITPLANES == 8
         if (bp == 7)
         {
+            // Calculate the "weight" of this slice
+            // Split BP 7 into 3 parts, each part gets 1/3 of the duration
             split_factor = 3;
         }
         else if (bp == 6)
@@ -285,6 +287,7 @@ void setIntensity(float intensity, bool linear_brightness_control)
 }
 
 #if FRAME_RATE
+// use only for testing or debugging
 static uint32_t frame_count = 0;
 static uint32_t frame_freq_us = 0; // last measured period for N frames
 static absolute_time_t frame_time_start;
@@ -385,17 +388,17 @@ static void setup_bitplane_creation()
     write_chan = dma_claim_unused_channel(true);
 
     // --- READ CHANNEL (Memory -> PIO) ---
-    dma_channel_config c_read = dma_channel_get_default_config(read_chan);
-    channel_config_set_transfer_data_size(&c_read, DMA_SIZE_32);
-    channel_config_set_read_increment(&c_read, true);
-    channel_config_set_write_increment(&c_read, false);
+    dma_channel_config read_chan_config = dma_channel_get_default_config(read_chan);
+    channel_config_set_transfer_data_size(&read_chan_config, DMA_SIZE_32);
+    channel_config_set_read_increment(&read_chan_config, true);
+    channel_config_set_write_increment(&read_chan_config, false);
     // DREQ: Wait for PIO TX FIFO space
-    channel_config_set_dreq(&c_read, pio_get_dreq(pio_config.pio_read, pio_config.sm_read, true));
-    channel_config_set_high_priority(&c_read, true);
+    channel_config_set_dreq(&read_chan_config, pio_get_dreq(pio_config.pio_read, pio_config.sm_read, true));
+    channel_config_set_high_priority(&read_chan_config, true);
 
     dma_channel_configure(
         read_chan,
-        &c_read,
+        &read_chan_config,
         &pio_config.pio_read->txf[pio_config.sm_read], // Write to PIO TX FIFO
         nullptr,                                       // Read address set later
         dma_encode_transfer_count(PIXELS),             // Total pixel (pairs) to process
@@ -403,18 +406,18 @@ static void setup_bitplane_creation()
     );
 
     // --- WRITE CHANNEL (PIO -> Memory) ---
-    dma_channel_config c_write = dma_channel_get_default_config(write_chan);
-    channel_config_set_transfer_data_size(&c_write, DMA_SIZE_32); // PIO pushes 4 bytes
-    channel_config_set_read_increment(&c_write, false);
-    channel_config_set_write_increment(&c_write, true);
+    dma_channel_config write_chan_config = dma_channel_get_default_config(write_chan);
+    channel_config_set_transfer_data_size(&write_chan_config, DMA_SIZE_32); // PIO pushes 4 bytes
+    channel_config_set_read_increment(&write_chan_config, false);
+    channel_config_set_write_increment(&write_chan_config, true);
     // DREQ: Wait for PIO RX FIFO data
-    channel_config_set_dreq(&c_write, pio_get_dreq(pio_config.pio_read, pio_config.sm_read, false));
+    channel_config_set_dreq(&write_chan_config, pio_get_dreq(pio_config.pio_read, pio_config.sm_read, false));
 
-    channel_config_set_high_priority(&c_write, true);
+    channel_config_set_high_priority(&write_chan_config, true);
 
     dma_channel_configure(
         write_chan,
-        &c_write,
+        &write_chan_config,
         nullptr,                                       // Write address set later
         &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
         dma_encode_transfer_count(PIXELS >> 3),        // Total bytes to collect
