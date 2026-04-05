@@ -110,7 +110,7 @@ dark_loop:
 ; Bit 1: OEn (active LOW: 0=ON, 1=OFF)
 
     ; --- INITIALISATION ---
-    irq nowait 1        side 0b11   ; Trigger pixel streamer
+    irq nowait 1        side 0b11   ; Trigger bitplane streamer
     
 .wrap_target
     ; 1. SYNC
@@ -257,7 +257,7 @@ bitstream_loop:
 ;   - Enables dynamic bit-plane selection (shift amount)
 ;
 .program hub75_bitplane_setup
-.define BITPLANES 10         ; Alias - valid for 10 and for 8 BITPLANES
+.define BITPLANES 10         ; Alias - valid for 10 and for 8 BITPLANES!
 
 .wrap_target  
                              ; first word R10G10B10 or R8G8B8       

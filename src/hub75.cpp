@@ -430,7 +430,7 @@ void ctrl_chan_handler()
     dma_channel_start(row_chan);
 }
 
-void setup_irq()
+void setup_display_irq()
 {
     dma_channel_set_irq0_enabled(row_ctrl_chan, true);
     dma_channel_set_irq0_enabled(pixel_ctrl_chan, true);
@@ -446,13 +446,13 @@ void read_chan_handler()
     // go through all bitplanes in BCM_SEQUENCE
     if (++bitplane < bcm_sequence_length)
     {
-        // Set shift to suit next biplane
+        // Set shift to suit next bitplane
         uint shamt = BCM_SEQUENCE[bitplane];
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
         // Prepare DMA channels for building next bitplane
         uint8_t *plane_dst = frame_buffer + (bitplane * (PIXELS >> 1));
-        dma_channel_set_write_addr(write_chan, plane_dst, false); // Update the "reload" address
+        dma_channel_set_write_addr(write_chan, plane_dst, false);
         dma_channel_set_read_addr(read_chan, rgb_buffer, false);
         dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
     }
@@ -460,12 +460,12 @@ void read_chan_handler()
     {
         __dmb();
 
-        // Reset shift for biplane 0
+        // Reset shift for bitplane 0
         bitplane = 0;
         uint shamt = BCM_SEQUENCE[bitplane];
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
-        // Rebuild of frame_buffer complete - swap to accomodate for next update
+        // Rebuild of frame_buffer complete - swap to accommodate for next update
         frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
         swap_frame_buffer_pending = true;
     }
@@ -548,7 +548,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     dma_row_cmd_buffer = row_cmd_buffer1;
     row_cmd_buffer = row_cmd_buffer2;
 
-    rgb_buffer = new uint32_t[width * height](); // Allocate memory for rgb buffer
+    rgb_buffer = new uint32_t[width * height]();
 
     if (panel_type == PANEL_FM6126A)
     {
@@ -562,7 +562,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     configure_pio(inverted_stb);
     setup_dma_transfers();
     setup_bitplane_creation();
-    setup_irq();
+    setup_display_irq();
     setup_bitplane_stream_irq();
     hub75_build_row_cmd_buffer(brightness_fp);
 }
@@ -648,6 +648,7 @@ static void configure_pio(bool inverted_stb)
     else
         hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
 
+    // State machine for "parallelized" building of the bit-plane structure
     if (!pio_claim_free_sm_and_add_program(
             &hub75_bitplane_setup_program,
             &pio_config.pio_read,
@@ -727,8 +728,8 @@ static void setup_dma_transfers()
 
     channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan);
 
-    // Due to DMA channel row_chan the complete pre-calculated bit planes have to be transferred for DMA channel pixel_chan.
-    // The pixel chan iterates over all bitplanes in one big swoop.
+    // Due to DMA channel row_chan the complete pre-build bit planes can be passed to DMA channel pixel_chan.
+    // The pixel_chan iterates over all bitplanes in one big swoop.
     dma_channel_configure(pixel_chan,
                           &pixel_chan_config,
                           &pio_config.data_pio->txf[pio_config.sm_data],
@@ -758,7 +759,7 @@ static void setup_dma_transfers()
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
 static inline uint32_t pack_lut_rgb(uint32_t color)
 {
-    // Standardize: Red = High (20), Green = Mid (10), Blue = Low (0)
+    // Standardize: Blue = High (20), Green = Mid (10), Red = Low (0)
     uint32_t r = CIE_RED[(color >> 16) & 0xFF];  // R from source (bits 16-23)
     uint32_t g = CIE_GREEN[(color >> 8) & 0xFF]; // G from source (bits 8-15)
     uint32_t b = CIE_BLUE[color & 0xFF];         // B from source (bits 0-7)
@@ -769,6 +770,7 @@ static inline uint32_t pack_lut_rgb(uint32_t color)
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
 static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b)
 {
+    // Standardize: Blue = High (20), Green = Mid (10), Red = Low (0)
     return (CIE_BLUE[b] << 20) | (CIE_GREEN[g] << 10) | CIE_RED[r];
 }
 
@@ -871,6 +873,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         }
     }
 #endif
+    // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
     dma_channel_set_read_addr(read_chan, rgb_buffer, false);
     dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
@@ -972,6 +975,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
+    // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
     dma_channel_set_read_addr(read_chan, rgb_buffer, false);
     dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
