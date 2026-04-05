@@ -71,7 +71,8 @@ target_compile_definitions(hub75 PRIVATE
     INVERTED_STB=false          # inverted pin signal for OE (untested)
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     BITPLANES=10                # numner (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
-    SEPARATE_CIE_CHANNELS=false # Use separate CIE channels for improved colour representation - needs more memory
+    BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
+    SEPARATE_CIE_CHANNELS=false # use separate CIE channels for improved colour representation - needs more memory
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
     FRAME_RATE=true             # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )

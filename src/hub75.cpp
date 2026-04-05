@@ -51,17 +51,29 @@ static bool swap_row_cmd_buffer_pending = false;
 static bool swap_frame_buffer_pending = false;
 
 #if BITPLANES == 10
+#if BALANCED_LIGHT_OUTPUT == true
 // Split sequence for 10 bitplanes
 // We split BP 9 into 4 parts, BP 8 into 2 parts.
 static const uint8_t BCM_SEQUENCE[] = {
     9, 0, 1, 2, 8, 3, 4, 9, 5, 6, 8, 7, 9, 9 // 14 steps instead of 10
 };
 #else
+static const uint8_t BCM_SEQUENCE[] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9 // 10 steps
+};
+#endif
+#elif BITPLANES == 8
+#if BALANCED_LIGHT_OUTPUT == true
 // Split sequence for 8 bitplanes
 // We split BP 7 into 3 parts, BP 6 into 2 parts
 static const uint8_t BCM_SEQUENCE[] = {
     7, 0, 1, 2, 6, 3, 4, 7, 5, 6, 7 // 11 steps instead of 8
 };
+#else
+static const uint8_t BCM_SEQUENCE[] = {
+    0, 1, 2, 3, 4, 5, 6, 7 // 8 steps
+};
+#endif
 #endif
 
 constexpr uint8_t bcm_sequence_length = sizeof(BCM_SEQUENCE) / sizeof(uint8_t);
@@ -164,17 +176,24 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
     // Iterate through our custom sequence instead of a linear 0-9
     for (uint8_t bp : BCM_SEQUENCE)
     {
-        // Calculate the "weight" of this slice
-        // If we split BP 9 into 4 parts, each part gets 1/4 of the duration
+
         uint32_t split_factor = 1;
 #if BITPLANES == 10
         if (bp == 9)
+        {
+            // Calculate the "weight" of this slice
+            // If we split BP 9 into 4 parts, each part gets 1/4 of the duration
             split_factor = 4;
+        }
         else if (bp == 8)
+        {
             split_factor = 2;
-#else
+        }
+#elif BITPLANES == 8
         if (bp == 7)
+        {
             split_factor = 3;
+        }
         else if (bp == 6)
         {
             split_factor = 2;
