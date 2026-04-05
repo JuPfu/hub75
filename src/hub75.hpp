@@ -133,6 +133,7 @@ constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 #define EXIT_FAILURE 1
 
 // Frame rate
+// Use only for testing or debugging
 #ifndef FRAME_RATE
 #define FRAME_RATE false
 #endif
