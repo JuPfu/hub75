@@ -77,6 +77,12 @@
   - [7. Problems While Using TEMPORAL\_DITHERING](#7-problems-while-using-temporal_dithering)
     - [If you see:](#if-you-see)
   - [8. When Nothing Makes Sense Anymore 😄](#8-when-nothing-makes-sense-anymore-)
+  - [Major Architectural Overhaul: Decoupled DMA \& PIO Pipeline](#major-architectural-overhaul-decoupled-dma--pio-pipeline)
+    - [1. Canonical Mapping Stage (`update()` / `update_bgr()`)](#1-canonical-mapping-stage-update--update_bgr)
+    - [2. The New Hardware Pipeline](#2-the-new-hardware-pipeline)
+    - [3. Simplified DMA Structure](#3-simplified-dma-structure)
+    - [4. Advanced Signal Integrity \& Anti-Ghosting](#4-advanced-signal-integrity--anti-ghosting)
+    - [5. Efficient BCM with Split-Bitplanes](#5-efficient-bcm-with-split-bitplanes)
 
 # HUB75 DMA-Based Driver
 
@@ -1334,3 +1340,43 @@ Follow this **minimal recovery procedure**:
 4. Change **one parameter at a time**
 
 ---
+
+## Major Architectural Overhaul: Decoupled DMA & PIO Pipeline
+
+The driver has transitioned from a CPU-intensive real-time mapping approach to a structured, three-stage hardware pipeline. This change significantly reduces CPU overhead and provides native support for complex panel layouts (S31, ZigZag, etc.).
+
+### 1. Canonical Mapping Stage (`update()` / `update_bgr()`)
+* **Panel-Specific Normalization:** All panel-specific quirks (scan-mode, physical row mapping, and ZigZag patterns) are handled during the initial copy to `rgb_buffer`.
+* **Standardized Format:** The buffer is organized into a "canonical" 32-bit RGB format, allowing the subsequent PIO stages to remain generic and extremely fast.
+
+### 2. The New Hardware Pipeline
+The data flow is now managed by three specialized PIO programs working in concert:
+
+| Component | Role | Mechanism |
+| :--- | :--- | :--- |
+| **`hub75_bitplane_setup`** | **Bit-Slicing** | Converts the canonical `rgb_buffer` into the bit-plane structured `frame_buffer`. |
+| **`hub75_bitplane_stream`** | **Data Feeding** | Streams the prepared bit-planes to the panel's shift registers. |
+| **`hub75_row`** | **Timing & Logic** | The "Master" SM. Handles Row Addressing (A-E), BCM timing, and Latch (STB) signals. |
+
+
+
+### 3. Simplified DMA Structure
+The DMA logic has been streamlined. Instead of complex per-row interrupts, the system now uses **DMA Chaining**:
+* **Autonomous Frames:** DMA channels now loop through all bit-planes and rows automatically.
+* **Minimal CPU Interrupts:** The Interrupt Handler is now only called **once per frame**. It handles:
+    1. **Double-Buffering:** Swapping `frame_buffer` and `row_cmd_buffer` only when a full frame is complete.
+    2. **Runtime Updates:** Activating new BCM cycles if brightness was changed via the API.
+
+### 4. Advanced Signal Integrity & Anti-Ghosting
+The `hub75_row` program now includes specific hardware-level timing improvements:
+* **Anti-Ghosting Wait Cycles:** A configurable `wait_loop` is executed after the Latch (STB) signal but before enabling the next row. This ensures the LEDs from the previous row have fully discharged, eliminating the "shadow" or "ghost" effect common in high-speed multiplexing.
+* **Settling Buffers:** Added precise timing padding around the Address (A-E) and Strobe transitions to account for cable capacitance and level-shifter propagation delays.
+* **Hardware Synchronization:** `hub75_row` and `hub75_bitplane_stream` are hardware-locked via PIO IRQ flags, ensuring that row switching never occurs while data is still being shifted.
+
+### 5. Efficient BCM with Split-Bitplanes
+* **Balanced Light Output:** High-weight bit-planes are split into multiple smaller slices within the BCM sequence. This increases the effective refresh rate and eliminates visible flicker, even at low intensity settings.
+* **Constant Frame Rate:** The sum of `lit_cycles` and `dark_cycles` is kept constant, ensuring a rock-solid refresh rate regardless of brightness levels.
+
+
+
+
