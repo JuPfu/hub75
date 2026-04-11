@@ -20,9 +20,7 @@
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
   - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
   - [Improved Colour Perception](#improved-colour-perception)
-    - [Increased Perceptual Colour Depth (Temporal Dithering) - Experimental ⚠️](#increased-perceptual-colour-depth-temporal-dithering---experimental-️)
-    - [✅ Advantages](#-advantages)
-    - [⚠️ Trade-offs](#️-trade-offs)
+    - [Balanced Light Output](#balanced-light-output)
   - [Brightness Control](#brightness-control)
     - [API Functions](#api-functions)
     - [How it Works](#how-it-works)
@@ -254,20 +252,20 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ### Overview of Redesigned Alternative Approach
 
-I did a (nearly) complete rewrite of the DMA <-> PIO pipeline. In doing so, I also removed some features, such as temporal dithering, and added new ones, such as Balanced Light Output and hopefully have correctly implemented **[board707´s](https://github.com/board707)** suggestion of parallel loading of data.
+A (nearly) complete rework of the DMA/PIO pipeline has been done. In doing so, I also removed some features, such as temporal dithering, and added new ones, such as Balanced Light Output and hopefully have correctly implemented **[board707´s](https://github.com/board707)** suggestion of parallel loading of data.
 
 In addition to **[Pimoroni’s anti-ghosting](https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf)**, a “cooling-off period” for the line decoder has been incorporated after the address is set. The matrix panels available to me show no ghosting, no flickering, and no glimmering of pixels at the edges of the matrix even in dark environments.
 
 The output quality has improved due to the usage of Balanced Light Output (can be enabled or disabled via define). That is, bit planes with high weight are divided into several smaller segments within the BCM sequence. This increases the effective refresh rate and reduces flickering.
 
-The DMA/PIO pipeline has been completely reworked. The Hub75 driver runs with almost no CPU involvement. There is an interrupt handler that is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called.
+The DMA/PIO pipeline has been completely revised. The Hub75 driver runs with almost no CPU involvement. There is an interrupt handler that is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called.
 
-A second interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. This tansformation is done on demand when a request for an update is made. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient way.
+A second interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. An interrupt handler is used to setup bitplanes on demand. After a call to update() or update_bgr() the bitplane slices are constructed heavily relying on DMA and PIO support. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient way.
 
 Overall, performance has improved even further. In summary, the following factors are responsible for this:
 
-- First, pixel data (bitplanes) are now loaded in parallel with the BCM as proposed by you.
-- Second, pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel.
+- First, pixel data (bitplanes) are now loaded in parallel with the BCM as proposed by **[board707](https://github.com/board707)**
+- Second, pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel
 
 The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provide any (significant) speedup.
 
@@ -337,24 +335,9 @@ The HUB75 driver takes advantage of this: its PIO/DMA pipeline packs each pixel 
 
 ---
 
-### Increased Perceptual Colour Depth (Temporal Dithering) - Experimental ⚠️
-To go beyond native 10-bit precision without changing the data format, the driver employs  **temporal dithering** (an accumulator-based technique):
+### Balanced Light Output
 
-- Each pixel maintains a high-precision accumulator (e.g. 12 bits).  
-- On every refresh, the top 10 bits are sent to the panel, while the lower bits remain stored.  
-- Over successive frames, these residuals accumulate, averaging out to produce smoother gradients.  
-
-This results in a perceived colour depth equivalent to **12 bits per channel**.
-
-### ✅ Advantages
-
-- Noticeable improvement in gradients and subtle colour transitions.  
-- Minimal CPU overhead (shifts and adds only).  
-
-### ⚠️ Trade-offs
-
-- Requires additional RAM for accumulators.  
-  For a 64×64 panel: `64 × 64 × 3 × sizeof(uint32_t) ≈ 48 KB`.
+ToDo
 
 ## Brightness Control
 
