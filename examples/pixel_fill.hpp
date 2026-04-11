@@ -35,7 +35,7 @@ public:
         static const uint32_t col[] = {0xFF0000, 0x00FF00, 0x0000FF, 0xBE2633, 0xE06F8B, 0x493C2B, 0xA46422, 0xEB8931,
                                        0xF7E26B, 0x2F484E, 0x44891A, 0xA3CE27, 0x1B2632, 0x005784, 0x31A2F2, 0xB2DCEF};
 
-        drawPixel(j++, l, 0xFFFFFF /*col[index]*/);
+        drawPixel(j++, l, col[index]);
 
         if (j >= w)
         {

@@ -96,8 +96,8 @@
 #define CIE_BLUE CIE
 #endif
 
-// Balanced Light Output 
-// High-weight bit-planes are split into multiple smaller slices within the BCM sequence. 
+// Balanced Light Output
+// High-weight bit-planes are split into multiple smaller slices within the BCM sequence.
 // This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
 #ifndef BALANCED_LIGHT_OUTPUT
 BALANCED_LIGHT_OUTPUT true
@@ -142,20 +142,29 @@ constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 using namespace pimoroni;
 #endif
 
-namespace PanelConfig {
-    constexpr uint32_t WIDTH  = MATRIX_PANEL_WIDTH;
+namespace PanelConfig
+{
+    constexpr uint32_t WIDTH = MATRIX_PANEL_WIDTH;
     constexpr uint32_t HEIGHT = MATRIX_PANEL_HEIGHT;
-    
+
     // The number of address lines (A, B, C...) defines the multiplexing depth
-    constexpr uint32_t ADDR_PINS = ROWSEL_N_PINS; 
-    
+    constexpr uint32_t ADDR_PINS = ROWSEL_N_PINS;
+    constexpr uint32_t ADDR_MASK =  (1 << ADDR_PINS) - 1;
+
     // How many unique binary addresses are sent to the panel
     // This is the value your DMA loop for 'row_cmd' should iterate over.
     constexpr uint32_t SCAN_DEPTH = (1u << ADDR_PINS); // 16 for 1/16 scan
-    
+
     // How many physical rows are updated per clock pulse (parallelism)
     // For standard panels, this is usually 2.
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
+
+    // SCAN_MODE_WIDTH: Line width depending on ROWS_IN_PARALLEL (scan-mode)
+    // Hub75 standard panel with scan-mode 2 -> (MATRIX_PANEL_WIDTH >> 1) * 2
+    // Matrix panel with scan-mode 4 -> (MATRIX_PANEL_WIDTH >> 1) * 4
+    // Used in hub75_bitplane_stream as value of Y-register
+    // Each OUT instruction writes color information for 2 pixels: r0g0b0 and r1b1g1
+    constexpr uint32_t SCAN_MODE_WIDTH = (WIDTH >> 1) * ROWS_IN_PARALLEL;
 }
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
@@ -168,4 +177,3 @@ void update(PicoGraphics const *graphics);
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);
 void setIntensity(float intensity, bool linear_brightness_control);
-

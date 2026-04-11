@@ -18,10 +18,10 @@
 #include "cie.hpp"
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-uint8_t *frame_buffer;  /// Pointer to < Interwoven image data for examples;
-uint8_t *frame_buffer1; ///< Interwoven image data for examples;
-uint8_t *frame_buffer2; ///< Interwoven image data for examples;
-uint8_t *dma_buffer;    ///< Interwoven image data for examples;
+alignas(4) uint8_t *frame_buffer; /// Pointer to < Interwoven image data for examples;
+uint8_t *frame_buffer1;           ///< Interwoven image data for examples;
+uint8_t *frame_buffer2;           ///< Interwoven image data for examples;
+uint8_t *dma_buffer;              ///< Interwoven image data for examples;
 
 static uint32_t *rgb_buffer;
 
@@ -165,8 +165,8 @@ static inline void compute_bcm_cycles(uint32_t bitplane, uint32_t brightness_fp,
 
 static inline uint32_t encode_row_address(uint32_t row)
 {
-    // 5 Address Lines A–E
-    return row & 0x1F;
+    // Address lines masked depending on ROWSEL_N_PINS
+    return row & PanelConfig::ADDR_MASK;
 }
 
 void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
@@ -176,7 +176,6 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
     // Iterate through BCM sequence
     for (uint8_t bp : BCM_SEQUENCE)
     {
-
         uint32_t split_factor = 1;
 #if BALANCED_LIGHT_OUTPUT
 #if BITPLANES == 10
@@ -203,7 +202,6 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         }
 #endif
 #endif
-
         for (uint32_t row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
         {
             row_cmd_t *cmd = &row_cmd_buffer[idx++];
@@ -552,12 +550,12 @@ static void configure_pio(bool inverted_stb)
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
 
-    hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, MATRIX_PANEL_WIDTH);
+    hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, PanelConfig::SCAN_MODE_WIDTH);
 
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles * (PanelConfig::ROWS_IN_PARALLEL >> 1));
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles);
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles * (PanelConfig::ROWS_IN_PARALLEL >> 1));
 
     // State machine for "parallelized" building of the bit-plane structure
     if (!pio_claim_free_sm_and_add_program(
@@ -741,42 +739,33 @@ __attribute__((optimize("unroll-loops"))) void update(
     }
 #elif defined HUB75_P3_1415_16S_64X64_S31
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
+    constexpr uint line_offset = PanelConfig::SCAN_MODE_WIDTH;
 
-    constexpr uint quarter = total_pixels >> 2;
+    constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
 
-    uint quarter1 = 0 * quarter;
-    uint quarter2 = 1 * quarter;
-    uint quarter3 = 2 * quarter;
-    uint quarter4 = 3 * quarter;
+    uint quarter1 = 0 * quarter; // rows in quarter1  0–15
+    uint quarter2 = 1 * quarter; // rows in quarter2  16–31
+    uint quarter3 = 2 * quarter; // rows in quarter3  32–47
+    uint quarter4 = 3 * quarter; // rows in quarter4  48–63
 
     uint p = 0; // per line pixel counter
 
-    // Number of logical rows processed
-    uint line = 0;
+    uint line = 0; // Number of logical rows processed
 
-    // Framebuffer write pointer
-    uint32_t *dst = rgb_buffer;
+    uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
-        // even src lines
-        dst[0] = LUT_MAPPING(src[quarter2]);
-        quarter2++;
-        dst[1] = LUT_MAPPING(src[quarter4]);
-        quarter4++;
-        // odd src lines
-        dst[line_offset + 0] = LUT_MAPPING(src[quarter1]);
-        quarter1++;
-        dst[line_offset + 1] = LUT_MAPPING(src[quarter3]);
-        quarter3++;
+        dst[0] = LUT_MAPPING(src[quarter2++]);
+        dst[1] = LUT_MAPPING(src[quarter4++]);
+        dst[line_offset + 0] = LUT_MAPPING(src[quarter1++]);
+        dst[line_offset + 1] = LUT_MAPPING(src[quarter3++]);
 
         dst += 2;
-        p++;
 
         // End of logical row
-        if (p == width)
+        if (++p >= width)
         {
             p = 0;
             line++;
@@ -843,32 +832,28 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     }
 #elif defined HUB75_P3_1415_16S_64X64_S31
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    constexpr uint line_width = 2 * MATRIX_PANEL_WIDTH;
+    constexpr uint line_width = PanelConfig::SCAN_MODE_WIDTH;
 
-    constexpr uint quarter = (total_pixels >> 2) * 3;
+    constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
 
-    uint quarter1 = 0 * quarter;
-    uint quarter2 = 1 * quarter;
-    uint quarter3 = 2 * quarter;
-    uint quarter4 = 3 * quarter;
+    uint quarter1 = 0 * quarter; // rows in quarter1  0–15
+    uint quarter2 = 1 * quarter; // rows in quarter2  16–31
+    uint quarter3 = 2 * quarter; // rows in quarter3  32–47
+    uint quarter4 = 3 * quarter; // rows in quarter4  48–63
 
     uint p = 0; // per line pixel counter
 
-    // Number of logical rows processed
-    uint line = 0;
+    uint line = 0; // Number of logical rows processed
 
-    // Framebuffer write pointer
-    uint32_t *dst = rgb_buffer;
+    uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
     while (line < (height >> 2))
     {
-        // even src lines
         dst[0] = LUT_MAPPING_RGB(src[quarter2 + 2], src[quarter2 + 1], src[quarter2]);
         quarter2 += 3;
         dst[1] = LUT_MAPPING_RGB(src[quarter4 + 2], src[quarter4 + 1], src[quarter4]);
         quarter4 += 3;
-        // odd src lines
         dst[line_width + 0] = LUT_MAPPING_RGB(src[quarter1 + 2], src[quarter1 + 1], src[quarter1]);
         quarter1 += 3;
         dst[line_width + 1] = LUT_MAPPING_RGB(src[quarter3 + 2], src[quarter3 + 1], src[quarter3]);
