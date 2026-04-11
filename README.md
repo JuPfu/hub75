@@ -13,6 +13,9 @@
   - [DMA Chains and PIO State Machines in the Revised HUB75 Driver](#dma-chains-and-pio-state-machines-in-the-revised-hub75-driver)
     - [Overview](#overview)
     - [Step-by-Step Breakdown](#step-by-step-breakdown)
+  - [The Final Hub75 Driver Solution - A Bitplane Stream With Parallel Loading and Display of Pixel-Data](#the-final-hub75-driver-solution---a-bitplane-stream-with-parallel-loading-and-display-of-pixel-data)
+    - [Overview of Redesigned Alternative Approach](#overview-of-redesigned-alternative-approach)
+    - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
     - [Refresh Rate Performance](#refresh-rate-performance)
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
   - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
@@ -247,11 +250,38 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ---
 
+## The Final Hub75 Driver Solution - A Bitplane Stream With Parallel Loading and Display of Pixel-Data
+
+### Overview of Redesigned Alternative Approach
+
+I did a (nearly) complete rewrite of the DMA <-> PIO pipeline. In doing so, I also removed some features, such as temporal dithering, and added new ones, such as Balanced Light Output and hopefully have correctly implemented **[board707´s](https://github.com/board707)** suggestion of parallel loading of data.
+
+In addition to **[Pimoroni’s anti-ghosting](https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf)**, a “cooling-off period” for the line decoder has been incorporated after the address is set. The matrix panels available to me show no ghosting, no flickering, and no glimmering of pixels at the edges of the matrix even in dark environments.
+
+The output quality has improved due to the usage of Balanced Light Output (can be enabled or disabled via define). That is, bit planes with high weight are divided into several smaller segments within the BCM sequence. This increases the effective refresh rate and reduces flickering.
+
+The DMA/PIO pipeline has been completely reworked. The Hub75 driver runs with almost no CPU involvement. There is an interrupt handler that is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called.
+
+A second interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. This tansformation is done on demand when a request for an update is made. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient way.
+
+Overall, performance has improved even further. In summary, the following factors are responsible for this:
+
+- First, pixel data (bitplanes) are now loaded in parallel with the BCM as proposed by you.
+- Second, pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel.
+
+The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provide any (significant) speedup.
+
+The revised driver requires slightly more memory resources to achieve the improved quality. I am using “defines” to disable certain (new) functionalities and thus make more memory available for applications.
+
+### Step-by-Step Breakdown of DMA and PIO Cooperation
+
+ToDo
+
 ### Refresh Rate Performance
 
 With a **bit-depth of 10** or a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 standard Hub75 matrix panel with scan mode 2 depending on the system clock and basis brightness settings.
 
-Here some more relevant settings to repeat and verify the listed frame rates.
+Here some more relevant settings to repeat the measurements and verify the listed frame rates.
 
 ```cmake
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
