@@ -249,23 +249,34 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ### Refresh Rate Performance
 
-With a **bit-depth of 10**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
+With a **bit-depth of 10** or a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 standard Hub75 matrix panel with scan mode 2 depending on the system clock and basis brightness settings.
 
-| System Clock | Refresh Rate     | Refresh Rate with Pimoroni Anti Ghosting |
-|--------------|------------------|-------------------------
-| 100 MHz      | ~179 Hz          | ~174 Hz                |
-| 150 MHz      | ~268 Hz          | ~260 Hz                |
-| 200 MHz      | ~358 Hz          | ~347 Hz                |
-| 250 MHz      | ~448 Hz          | ~434 Hz                |
+Here some more relevant settings to repeat and verify the listed frame rates.
 
-With a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 matrix depending on the system clock:
+```cmake
+    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+    BITPLANES=10                # number of bit-planes used for Binary Code Modulation - valid values for BIT_DEPTH are 8 or 10
+    BALANCED_LIGHT_OUTPUT=true  # it uses some more memory it improves effective refresh rate and really cuts down flicker
+    SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
+    HUB75_MULTICORE=true        # use core1 for the hub75 driver
+    FRAME_RATE=true             # emit frame rate information on usb
+``` 
 
-| System Clock | Refresh Rate     | Refresh Rate with Pimoroni Anti Ghosting |
-|--------------|------------------|-------------------------
-| 100 MHz      | ~300 Hz          | ~291 Hz                |
-| 150 MHz      | ~447 Hz          | ~433 Hz                |
-| 200 MHz      | ~590 Hz          | ~572 Hz                |
-| 250 MHz      | ~732 Hz          | ~709 Hz                |
+| System Clock | Basis Brightness | Refresh Rate for 10 Bitplanes |  Refresh Rate for 8 Bitplanes |
+|--------------|------------------|-------------------------------|-------------------------------|
+| 100 MHz      | 8                | ~272 Hz                       | ~519 Hz                       |
+| 150 MHz      | 8                | ~398 Hz                       | ~762 Hz                       |
+| 200 MHz      | 8                | ~519 Hz                       | ~993 Hz                       |
+| 250 MHz      | 8                | ~635 Hz                       | ~1216 Hz                      |
+| 266 MHz      | 1                | ~1009 Hz                      | ~1285 Hz                      |
+| 266 MHz      | 2                | ~1009 Hz                      | ~1285 Hz                      |
+| 266 MHz      | 4                | ~951 Hz                       | ~1285Hz                       |
+| 266 MHz      | 8                | ~671 Hz                       | ~1285 Hz                      |
+| 266 MHz      | 16               | ~412 Hz                       | ~1121 Hz                      |
+| 266 MHz      | 32               | ~230 Hz                       | ~751 Hz                       |
+| 266 MHz      | 64               | ~121 Hz                       | ~441 Hz                       |
+| 266 MHz      | 128              | ~62 Hz                        | ~239 Hz                       |
+| 266 MHz      | 255              | ~31 Hz                        | ~124 Hz                       |
 
 
 These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
