@@ -1,5 +1,7 @@
 - [HUB75 DMA-Based Driver](#hub75-dma-based-driver)
   - [Documentation and References](#documentation-and-references)
+  - [Hub75 Matrix Panel Driver Version 3.0](#hub75-matrix-panel-driver-version-30)
+    - [A Short Oversight](#a-short-oversight)
   - [Achievements of the Revised Driver](#achievements-of-the-revised-driver)
   - [Motivation](#motivation)
   - [Evolution of Pico HUB75 Drivers](#evolution-of-pico-hub75-drivers)
@@ -101,6 +103,22 @@ To understand how RGB matrix panels work, refer to the article **[Everything You
 For details on Binary Coded Modulation (BCM), see **[LED Dimming Using Binary Code Modulation](https://www.ti.com/lit/an/slva377a/slva377a.pdf)**.
 
 ---
+
+## Hub75 Matrix Panel Driver Version 3.0
+
+⚠️ Documentation in progress ⚠️
+
+### A Short Oversight
+
+A (nearly) complete rework of the DMA/PIO pipeline has been done. The Hub75 driver runs with almost no CPU involvement.
+
+An interrupt handler is used to setup bitplanes on demand. After a call to update() or update_bgr() the bitplane slices are constructed heavily relying on DMA and PIO support.
+
+Colour-data (pixels) from the pre-built bitplanes are now streamed to the matrix panel without any conversion.
+
+A second interrupt handler is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called. 
+
+This documentation will be revised in the near future.
 
 ## Achievements of the Revised Driver
 
