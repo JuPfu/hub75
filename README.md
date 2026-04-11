@@ -13,7 +13,7 @@
   - [DMA Chains and PIO State Machines in the Revised HUB75 Driver](#dma-chains-and-pio-state-machines-in-the-revised-hub75-driver)
     - [Overview](#overview)
     - [Step-by-Step Breakdown](#step-by-step-breakdown)
-  - [The Final Hub75 Driver Solution - A Bitplane Stream With Parallel Loading and Display of Pixel-Data](#the-final-hub75-driver-solution---a-bitplane-stream-with-parallel-loading-and-display-of-pixel-data)
+  - [The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data)
     - [Overview of Redesigned Alternative Approach](#overview-of-redesigned-alternative-approach)
     - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
     - [Refresh Rate Performance](#refresh-rate-performance)
@@ -248,7 +248,7 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ---
 
-## The Final Hub75 Driver Solution - A Bitplane Stream With Parallel Loading and Display of Pixel-Data
+## The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data
 
 ### Overview of Redesigned Alternative Approach
 
