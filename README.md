@@ -16,6 +16,8 @@
   - [The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data)
     - [Overview of the Redesigned Alternative Approach](#overview-of-the-redesigned-alternative-approach)
     - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
+      - [RGB Pixel Data Transformation into Bitplane Slices](#rgb-pixel-data-transformation-into-bitplane-slices)
+      - [Loading and Display of Pixel Data](#loading-and-display-of-pixel-data)
     - [Refresh Rate Performance](#refresh-rate-performance)
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
   - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
@@ -273,13 +275,25 @@ The revised driver requires slightly more memory resources to achieve the improv
 
 ### Step-by-Step Breakdown of DMA and PIO Cooperation
 
+Two independent DMA/PIO pipelines do the "background" work in the **Definitive Hub75 Driver Solution**.
+
+The first DMA/PIO pipeline transforms the RGB pixel data into bitplane slices. This is done <em>On Demand</em> whenever the <code>update(...)</code> or <code>update_bgr(...)</code> method is called by the user.
+
+The second DMA/PIO pipeline streams the bitplanes to the matrix panel.  Each row in the bitplane has its address and on/off BCM duration supplied from a precalculated structure which is read via DMA. Loading of pixel data (bitplanes) and BCM are done in parallel.
+
+#### RGB Pixel Data Transformation into Bitplane Slices
+
+<img src="assets/hub75_bitplane_pipeline_part_1.svg">
+
+#### Loading and Display of Pixel Data
+
 ToDo
 
 ### Refresh Rate Performance
 
 With a **bit-depth of 10** or a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 standard Hub75 matrix panel with scan mode 2 depending on the system clock and basis brightness settings.
 
-Here some more relevant settings if you want to repeat the measurements and verify the listed frame rates.
+Here some more relevant settings if you want to repeat the measurements and verify the listed frame rates:
 
 ```cmake
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
