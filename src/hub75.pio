@@ -201,7 +201,7 @@ dark_loop:
 bitstream_loop:
     ; --- PIXEL DATA SHIFTING ---
     ; Pull 8 bits (x, x, R0, G0, B0, R1, G1, B1) and apply to pins. 
-    ; Here we rely on 6 pins defined as output and therefore the 2 most significant pins being ignored.
+    ; Here we rely on 6 pins defined as output and therefore the 2 most significant pins to be ignored.
     ; [1] adds a small setup delay before the rising clock edge.
     out pins, 8    [1]      side 0 ; CLK ↓
 

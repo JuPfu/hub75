@@ -284,17 +284,17 @@ Here some more relevant settings if you want to repeat the measurements and veri
 ```cmake
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     BITPLANES=10                # number of bit-planes used for Binary Code Modulation - valid values for BIT_DEPTH are 8 or 10
-    BALANCED_LIGHT_OUTPUT=true  # it uses some more memory it improves effective refresh rate and really cuts down flicker
+    BALANCED_LIGHT_OUTPUT=true  # uses some more memory but it improves effective refresh rate and really cuts down flicker
     SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    FRAME_RATE=true             # emit frame rate information on usb
+    FRAME_RATE=true             # emit frame rate information on usb - disable for production usage
 ``` 
 
 | System Clock | Basis Brightness | Refresh Rate for 10 Bitplanes |  Refresh Rate for 8 Bitplanes |
 |--------------|------------------|-------------------------------|-------------------------------|
 | 100 MHz      | 8                | ~281 Hz                       | ~588 Hz                       |
 | 150 MHz      | 8                | ~412 Hz                       | ~860 Hz                       |
-| 200 MHz      | 8                | ~536 Hz                       | ~1118 Hz                       |
+| 200 MHz      | 8                | ~536 Hz                       | ~1118 Hz                      |
 | 250 MHz      | 8                | ~655 Hz                       | ~1365 Hz                      |
 | 266 MHz      | 1                | ~1133 Hz                      | ~1442 Hz                      |
 | 266 MHz      | 2                | ~1133 Hz                      | ~1442 Hz                      |
