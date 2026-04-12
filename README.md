@@ -23,6 +23,8 @@
   - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
   - [Improved Colour Perception](#improved-colour-perception)
     - [Balanced Light Output](#balanced-light-output)
+      - [Example: 10-bit color depth (`BITPLANES=10`)](#example-10-bit-color-depth-bitplanes10)
+      - [Visual comparison](#visual-comparison)
   - [Brightness Control](#brightness-control)
     - [API Functions](#api-functions)
     - [How it Works](#how-it-works)
@@ -353,7 +355,50 @@ The HUB75 driver takes advantage of this: its PIO/DMA pipeline packs each pixel 
 
 ### Balanced Light Output
 
-ToDo
+In standard Binary Code Modulation (BCM), each bitplane is displayed for a duration proportional to its bit weight — the MSB plane stays on for half the entire frame period. At low brightness settings or when the display content changes rapidly, this long uninterrupted ON-period becomes visible as flicker.
+
+**Balanced Light Output** addresses this by splitting high-weight bitplanes into multiple smaller segments, distributing them evenly across the BCM sequence. The total illumination time per bitplane remains identical — only the distribution changes. This increases the effective refresh rate and eliminates visible flicker, even at low brightness levels.
+
+#### Example: 10-bit color depth (`BITPLANES=10`)
+
+Without Balanced Light Output, the BCM sequence processes bitplanes 0–9 in a single pass (10 steps):
+
+```c
+// Standard BCM — 10 steps
+static const uint8_t BCM_SEQUENCE[] = {
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+};
+```
+
+Enabling `BALANCED_LIGHT_OUTPUT=true` in `CMakeLists.txt` produces a 14-step sequence instead. Bitplane 9 (highest weight) is split into **4 segments**, bitplane 8 into **2 segments** — all other bitplanes appear once:
+
+```c
+// Balanced Light Output — 14 steps
+static const uint8_t BCM_SEQUENCE[] = {
+    9, 0, 1, 2, 8, 3, 4, 9, 5, 9, 6, 8, 7, 9
+//  ^           ^        ^     ^     ^     ^
+//  |           |        |     |     |     bitplane 9 (4x total)
+//  bitplane 9 (1st)     |     bitplane 9 (3rd)
+//              |        bitplane 9 (2nd)
+//              bitplane 8 (1st)     |
+//                                   bitplane 8 (2nd)
+};
+```
+
+> **Note:** The sum of all BCM cycle durations is identical in both sequences — Balanced Light Output does not affect overall brightness, only the temporal distribution of light.
+
+#### Visual comparison
+
+```
+Standard BCM (10 steps):
+|0|1|2|3|4|5|6|7|████8████|████████████████9████████████████|
+                           ↑ long ON-period → visible flicker
+
+Balanced Light Output (14 steps):
+|███9███|0|1|2|██8██|3|4|███9███|5|███9███|6|██8██|7|███9███|
+ ↑               ↑          ↑         ↑        ↑        ↑
+ MSB segments spread evenly across the frame → no flicker
+```
 
 ## Brightness Control
 
