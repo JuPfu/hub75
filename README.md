@@ -14,7 +14,7 @@
     - [Overview](#overview)
     - [Step-by-Step Breakdown](#step-by-step-breakdown)
   - [The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data)
-    - [Overview of Redesigned Alternative Approach](#overview-of-redesigned-alternative-approach)
+    - [Overview of the Redesigned Alternative Approach](#overview-of-the-redesigned-alternative-approach)
     - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
     - [Refresh Rate Performance](#refresh-rate-performance)
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
@@ -250,7 +250,7 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ## The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data
 
-### Overview of Redesigned Alternative Approach
+### Overview of the Redesigned Alternative Approach
 
 A (nearly) complete rework of the DMA/PIO pipeline has been done. In doing so, I also removed some features, such as temporal dithering, and added new ones, such as Balanced Light Output and hopefully have correctly implemented **[board707´s](https://github.com/board707)** suggestion of parallel loading of data.
 
@@ -260,7 +260,7 @@ The output quality has improved due to the usage of Balanced Light Output (can b
 
 The DMA/PIO pipeline has been completely revised. The Hub75 driver runs with almost no CPU involvement. There is an interrupt handler that is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called.
 
-A second interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. An interrupt handler is used to setup bitplanes on demand. After a call to update() or update_bgr() the bitplane slices are constructed heavily relying on DMA and PIO support. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient way.
+A second interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. An interrupt handler is used to setup bitplanes on demand. After a call to update() or update_bgr() the bitplane slices are constructed heavily relying on DMA and PIO support. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient manner.
 
 Overall, performance has improved even further. In summary, the following factors are responsible for this:
 
@@ -279,7 +279,7 @@ ToDo
 
 With a **bit-depth of 10** or a **bit-depth of 8**, the HUB75 driver achieves the following refresh rates for a 64 x 64 standard Hub75 matrix panel with scan mode 2 depending on the system clock and basis brightness settings.
 
-Here some more relevant settings to repeat the measurements and verify the listed frame rates.
+Here some more relevant settings if you want to repeat the measurements and verify the listed frame rates.
 
 ```cmake
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
@@ -292,18 +292,18 @@ Here some more relevant settings to repeat the measurements and verify the liste
 
 | System Clock | Basis Brightness | Refresh Rate for 10 Bitplanes |  Refresh Rate for 8 Bitplanes |
 |--------------|------------------|-------------------------------|-------------------------------|
-| 100 MHz      | 8                | ~272 Hz                       | ~519 Hz                       |
-| 150 MHz      | 8                | ~398 Hz                       | ~762 Hz                       |
-| 200 MHz      | 8                | ~519 Hz                       | ~993 Hz                       |
-| 250 MHz      | 8                | ~635 Hz                       | ~1216 Hz                      |
-| 266 MHz      | 1                | ~1009 Hz                      | ~1285 Hz                      |
-| 266 MHz      | 2                | ~1009 Hz                      | ~1285 Hz                      |
-| 266 MHz      | 4                | ~951 Hz                       | ~1285Hz                       |
-| 266 MHz      | 8                | ~671 Hz                       | ~1285 Hz                      |
-| 266 MHz      | 16               | ~412 Hz                       | ~1121 Hz                      |
-| 266 MHz      | 32               | ~230 Hz                       | ~751 Hz                       |
-| 266 MHz      | 64               | ~121 Hz                       | ~441 Hz                       |
-| 266 MHz      | 128              | ~62 Hz                        | ~239 Hz                       |
+| 100 MHz      | 8                | ~281 Hz                       | ~588 Hz                       |
+| 150 MHz      | 8                | ~412 Hz                       | ~860 Hz                       |
+| 200 MHz      | 8                | ~536 Hz                       | ~1118 Hz                       |
+| 250 MHz      | 8                | ~655 Hz                       | ~1365 Hz                      |
+| 266 MHz      | 1                | ~1133 Hz                      | ~1442 Hz                      |
+| 266 MHz      | 2                | ~1133 Hz                      | ~1442 Hz                      |
+| 266 MHz      | 4                | ~1003 Hz                      | ~1442 Hz                      |
+| 266 MHz      | 8                | ~692 Hz                       | ~1442 Hz                      |
+| 266 MHz      | 16               | ~419 Hz                       | ~1172 Hz                      |
+| 266 MHz      | 32               | ~232 Hz                       | ~769 Hz                       |
+| 266 MHz      | 64               | ~121 Hz                       | ~446 Hz                       |
+| 266 MHz      | 128              | ~62 Hz                        | ~240 Hz                       |
 | 266 MHz      | 255              | ~31 Hz                        | ~124 Hz                       |
 
 
