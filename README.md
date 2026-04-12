@@ -264,7 +264,7 @@ A second interrupt handler is used to support the conversion of rgb pixel data i
 
 Overall, performance has improved even further. In summary, the following factors are responsible for this:
 
-- First, pixel data (bitplanes) are now loaded in parallel with the BCM as proposed by **[board707](https://github.com/board707)**
+- First, loading of pixel data (bitplanes) and Binary Coded Modulation (BCM) are done in parallel as proposed by **[board707](https://github.com/board707)**
 - Second, pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel
 
 The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provides any (significant) speedup.
