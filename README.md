@@ -267,7 +267,7 @@ Overall, performance has improved even further. In summary, the following factor
 - First, pixel data (bitplanes) are now loaded in parallel with the BCM as proposed by **[board707](https://github.com/board707)**
 - Second, pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel
 
-The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provide any (significant) speedup.
+The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provides any (significant) speedup.
 
 The revised driver requires slightly more memory resources to achieve the improved quality. I am using “defines” to disable certain (new) functionalities and thus make more memory available for applications.
 
@@ -308,6 +308,8 @@ Here some more relevant settings if you want to repeat the measurements and veri
 
 
 These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
+
+As already remarked - with increasing "Basis Brightness" the BCM component becomes dominant. Even parallel loading of pixel data and the provision in a bit-plane structure no longer provides any (significant) speedup at high brightness values.
 
 ### Key Benefits of this Approach
 

@@ -206,7 +206,7 @@ bitstream_loop:
     out pins, 8    [1]      side 0 ; CLK ↓
 
     ; Pulse the clock high to shift the data into the panel's shift registers
-    nop            [3]      side 1 ; CLK ↑, [3] extends the hold time for high-speed panels
+    nop            [3]      side 1 ; CLK ↑, [3] extends the hold time
 
     ; Loop until full row transferred
     jmp x--, bitstream_loop side 0 ; CLK ↓
@@ -272,7 +272,7 @@ public out_green0:
     out null, BITPLANES      ; shift to blue bit
 
     in osr, 1                ; shift right into ISR register first OSR bit: Blue0 Green0 RED0
-    out null, 32             ; Discard rest
+    out null, 32             ; Discard rest to trigger auto-pull
 
                              ; second word R10G10B10 or R8G8B8 
                              ; pre-shift left to current bitplane n if n nonzero
@@ -290,7 +290,7 @@ public out_green1:
     in osr, 1                ; shift right into ISR register first OSR bit: Blue1 Green1 Red1 Blue0 Green0 RED0
     out null, 32             ; Discard rest to trigger auto-pull
 
-    in null, 2               ; shift right and auto_push four bytes (each byte looks like 00B1G1R1B0G0R0) of the ISR content into the RX FIFO
+    in null, 2               ; shift right and after 4 loops auto push four bytes (each byte looks like 00B1G1R1B0G0R0) from ISR into the RX FIFO
 
 .wrap
 
