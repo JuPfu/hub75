@@ -47,9 +47,6 @@ row_cmd_t *row_cmd_buffer1;
 row_cmd_t *row_cmd_buffer2;
 row_cmd_t *dma_row_cmd_buffer;
 
-static bool swap_row_cmd_buffer_pending = false;
-static bool swap_frame_buffer_pending = false;
-
 #if BITPLANES == 10
 #if BALANCED_LIGHT_OUTPUT == true
 // Split sequence for 10 bitplanes
@@ -127,7 +124,7 @@ static uint32_t basis_factor = 6u;
 // L* = t * 100  (scale from normalised to 0..100)
 // If L* > 8:    Y = ((L* + 16) / 116)^3
 // If L* <= 8:   Y = L* / 903.3
-float cie1931_inverse(float t)
+static float cie1931_inverse(float t)
 {
     if (t <= 0.0f)
         return 0.0f;
@@ -211,12 +208,11 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
             compute_bcm_cycles(bp, brightness_fp, total_lit, total_dark);
 
             // Divide the time by the number of times this BP appears in the sequence
-            cmd->lit_cycles = split_factor == 1 ? total_lit : total_lit / split_factor;
-            cmd->dark_cycles = split_factor == 1 ? total_dark : total_dark / split_factor;
+            cmd->lit_cycles = split_factor == 1 ? total_lit : ((total_lit + split_factor / 2) / split_factor);
+            cmd->dark_cycles = split_factor == 1 ? total_dark : ((total_dark + split_factor / 2) / split_factor);
         }
     }
     row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
-    swap_row_cmd_buffer_pending = true;
 }
 
 /**
@@ -286,10 +282,9 @@ void setIntensity(float intensity, bool linear_brightness_control)
 
 #if FRAME_RATE
 // use only for testing or debugging
-static uint32_t frame_count = 0;
+static int32_t frame_count = 0;
 static uint32_t frame_freq_us = 0; // last measured period for N frames
 static absolute_time_t frame_time_start;
-#endif
 
 #define FRAME_MEASURE_INTERVAL 100
 
@@ -300,7 +295,6 @@ void row_ctrl_chan_handler()
         // Clear the interrupt request for DMA channel
         dma_channel_acknowledge_irq0(row_ctrl_chan);
 
-#if FRAME_RATE
         if (frame_count == 0)
         {
             frame_time_start = get_absolute_time();
@@ -315,22 +309,16 @@ void row_ctrl_chan_handler()
             frame_freq_us = 0; // clear until next measurement
         }
         frame_count++;
-#endif
-
-        if (swap_row_cmd_buffer_pending)
-        {
-            dma_row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
-            swap_row_cmd_buffer_pending = false;
-        }
     }
 }
 
-void setup_display_irq()
+void setup_frame_rate_irq()
 {
     dma_channel_set_irq0_enabled(row_ctrl_chan, true);
     irq_set_exclusive_handler(DMA_IRQ_0, row_ctrl_chan_handler);
     irq_set_enabled(DMA_IRQ_0, true);
 }
+#endif
 
 void read_chan_handler()
 {
@@ -361,7 +349,6 @@ void read_chan_handler()
 
         // Rebuild of frame_buffer complete - swap to accommodate for next update
         frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-        swap_frame_buffer_pending = true;
     }
 }
 
@@ -457,8 +444,10 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     configure_pio(inverted_stb);
     setup_dma_transfers();
     setup_bitplane_creation();
-    setup_display_irq();
     setup_bitplane_stream_irq();
+#if FRAME_RATE
+    setup_frame_rate_irq();
+#endif
     hub75_build_row_cmd_buffer(brightness_fp);
 }
 
@@ -476,9 +465,6 @@ void start_hub75_driver()
 
     dma_buffer = frame_buffer2;
     frame_buffer = frame_buffer1;
-
-    swap_row_cmd_buffer_pending = false;
-    swap_frame_buffer_pending = false;
 
     dma_channel_set_read_addr(row_ctrl_chan, &dma_row_cmd_buffer, false);
     dma_channel_set_read_addr(pixel_ctrl_chan, &dma_buffer, false);
@@ -550,7 +536,7 @@ static void configure_pio(bool inverted_stb)
             &pio_config.sm_read,
             &pio_config.offs_read))
     {
-        panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
+        panic("Failed to claim PIO SM for hub75_bitplane_setup_program\n");
     }
 
     hub75_bitplane_setup_program_init(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read);
