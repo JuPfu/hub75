@@ -287,6 +287,8 @@ The second DMA/PIO pipeline streams the bitplanes to the matrix panel.  Each row
 
 <img src="assets/definitive_hub75_dma_pio_1.svg">
 
+*Picture 4: Bitplane Creation Pipeline*
+
 #### Loading and Display of Pixel Data
 
 ToDo
@@ -308,18 +310,18 @@ Here some more relevant settings if you want to repeat the measurements and veri
 
 | System Clock | Basis Brightness | Refresh Rate for 10 Bitplanes |  Refresh Rate for 8 Bitplanes |
 |--------------|------------------|-------------------------------|-------------------------------|
-| 100 MHz      | 8                | ~281 Hz                       | ~588 Hz                       |
-| 150 MHz      | 8                | ~412 Hz                       | ~860 Hz                       |
-| 200 MHz      | 8                | ~536 Hz                       | ~1118 Hz                      |
-| 250 MHz      | 8                | ~655 Hz                       | ~1365 Hz                      |
-| 266 MHz      | 1                | ~1133 Hz                      | ~1442 Hz                      |
-| 266 MHz      | 2                | ~1133 Hz                      | ~1442 Hz                      |
-| 266 MHz      | 4                | ~1003 Hz                      | ~1442 Hz                      |
-| 266 MHz      | 8                | ~692 Hz                       | ~1442 Hz                      |
-| 266 MHz      | 16               | ~419 Hz                       | ~1172 Hz                      |
-| 266 MHz      | 32               | ~232 Hz                       | ~769 Hz                       |
-| 266 MHz      | 64               | ~121 Hz                       | ~446 Hz                       |
-| 266 MHz      | 128              | ~62 Hz                        | ~240 Hz                       |
+| 100 MHz      | 8                | ~271 Hz                       | ~519 Hz                       |
+| 150 MHz      | 8                | ~398 Hz                       | ~762 Hz                       |
+| 200 MHz      | 8                | ~519 Hz                       | ~993 Hz                       |
+| 250 MHz      | 8                | ~634 Hz                       | ~1216 Hz                      |
+| 266 MHz      | 1                | ~1009 Hz                      | ~1285 Hz                      |
+| 266 MHz      | 2                | ~1009 Hz                      | ~1285 Hz                      |
+| 266 MHz      | 4                | ~951 Hz                       | ~1285 Hz                      |
+| 266 MHz      | 8                | ~670 Hz                       | ~1285 Hz                      |
+| 266 MHz      | 16               | ~412 Hz                       | ~1121 Hz                      |
+| 266 MHz      | 32               | ~230 Hz                       | ~751 Hz                       |
+| 266 MHz      | 64               | ~121 Hz                       | ~441 Hz                       |
+| 266 MHz      | 128              | ~62 Hz                        | ~239 Hz                       |
 | 266 MHz      | 255              | ~31 Hz                        | ~124 Hz                       |
 
 

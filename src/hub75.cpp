@@ -293,7 +293,7 @@ static absolute_time_t frame_time_start;
 
 #define FRAME_MEASURE_INTERVAL 100
 
-void ctrl_chan_handler()
+void row_ctrl_chan_handler()
 {
     if (dma_channel_get_irq0_status(row_ctrl_chan))
     {
@@ -323,24 +323,12 @@ void ctrl_chan_handler()
             swap_row_cmd_buffer_pending = false;
         }
     }
-    else if (dma_channel_get_irq0_status(pixel_ctrl_chan))
-    {
-        // Clear the interrupt request for DMA channel
-        dma_channel_acknowledge_irq0(pixel_ctrl_chan);
-
-        if (swap_frame_buffer_pending)
-        {
-            dma_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
-            swap_frame_buffer_pending = false;
-        }
-    }
 }
 
 void setup_display_irq()
 {
     dma_channel_set_irq0_enabled(row_ctrl_chan, true);
-    dma_channel_set_irq0_enabled(pixel_ctrl_chan, true);
-    irq_set_exclusive_handler(DMA_IRQ_0, ctrl_chan_handler);
+    irq_set_exclusive_handler(DMA_IRQ_0, row_ctrl_chan_handler);
     irq_set_enabled(DMA_IRQ_0, true);
 }
 
