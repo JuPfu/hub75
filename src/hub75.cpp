@@ -213,7 +213,6 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
             // Divide the time by the number of times this BP appears in the sequence
             cmd->lit_cycles = split_factor == 1 ? total_lit : total_lit / split_factor;
             cmd->dark_cycles = split_factor == 1 ? total_dark : total_dark / split_factor;
-            if ( split_factor != 1) printf("SPLITFACTOR = %d\n", split_factor);
         }
     }
     row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
