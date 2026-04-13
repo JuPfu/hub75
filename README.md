@@ -365,9 +365,7 @@ Without Balanced Light Output, the BCM sequence processes bitplanes 0–9 in a s
 
 ```c
 // Standard BCM — 10 steps
-static const uint8_t BCM_SEQUENCE[] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9
-};
+static const uint8_t BCM_SEQUENCE[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 ```
 
 Enabling `BALANCED_LIGHT_OUTPUT=true` in `CMakeLists.txt` produces a 14-step sequence instead. Bitplane 9 (highest weight) is split into **4 segments**, bitplane 8 into **2 segments** — all other bitplanes appear once:
@@ -670,29 +668,25 @@ set(PICO_BOARD none CACHE STRING "Board type")
 # Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
 # Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
 target_compile_definitions(hub75 PRIVATE
-    PICO_RP2350A=0              # `PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller
-                                # - uncomment for RP235xB microcontroller only!
-    USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library
-                                # - any reference to pico_graphics is removed
+    PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
+    USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
     DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
     DATA_N_PINS=6               # number (count) of colour pins (usually 6)
-    ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D, E) GPIO pins
-    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board
-                                # (look at your panel's connector)
+    ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins
+    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board (look at your panels connector)
     CLK_PIN=41                  # GPIO pin for CLK
     STROBE_PIN=42               # GPIO pin for STROBE (LATCH)
     OEN_PIN=43                  # GPIO for OE pin
-    PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE: PANEL_GENERIC, PANEL_FM6126A or PANEL_RUL6024
-    INVERTED_STB=false          # set to true if the latch signal is inverted on your board
-    TEMPORAL_DITHERING=true     # experimental - switch on temporal dithering to improve colour depth
-                                # (currently 2 additional bits)
-    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce
-                                # state machine speed (values > 1.0 slow down the state machine)
-    BIT_DEPTH=8                 # number (count) of bit-planes used for BCM (Binary Code Modulation)
-                                # - valid values for BIT_DEPTH are 8 or 10
+    PANEL_TYPE=PANEL_RUL6024    # select PANEL_TYPE
+    INVERTED_STB=false          # inverted pin signal for OE (untested)
+    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+    BITPLANES=10                # number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
+    BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
+    SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
+    FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
 ```
 

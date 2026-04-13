@@ -18,10 +18,10 @@
 #include "cie.hpp"
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-alignas(4) uint8_t *frame_buffer; /// Pointer to < Interwoven image data for examples;
-uint8_t *frame_buffer1;           ///< Interwoven image data for examples;
-uint8_t *frame_buffer2;           ///< Interwoven image data for examples;
-uint8_t *dma_buffer;              ///< Interwoven image data for examples;
+alignas(32) uint8_t *frame_buffer; /// Pointer to < Interwoven image data for examples;
+uint8_t *frame_buffer1;            ///< Interwoven image data for examples;
+uint8_t *frame_buffer2;            ///< Interwoven image data for examples;
+uint8_t *dma_buffer;               ///< Interwoven image data for examples;
 
 static uint32_t *rgb_buffer;
 
@@ -55,7 +55,7 @@ static bool swap_frame_buffer_pending = false;
 // Split sequence for 10 bitplanes
 // We split BP 9 into 4 parts, BP 8 into 2 parts.
 static const uint8_t BCM_SEQUENCE[] = {
-    9, 0, 1, 2, 8, 3, 4, 9, 5, 6, 8, 7, 9, 9 // 14 steps instead of 10
+    9, 0, 1, 2, 8, 3, 4, 9, 5, 9, 6, 8, 7, 9 // 14 steps instead of 10
 };
 #else
 static const uint8_t BCM_SEQUENCE[] = {
@@ -67,7 +67,7 @@ static const uint8_t BCM_SEQUENCE[] = {
 // Split sequence for 8 bitplanes
 // We split BP 7 into 3 parts, BP 6 into 2 parts
 static const uint8_t BCM_SEQUENCE[] = {
-    7, 0, 1, 2, 6, 3, 4, 7, 5, 6, 7 // 11 steps instead of 8
+    7, 0, 1, 2, 6, 3, 7, 4, 6, 5, 7 // 11 steps instead of 8
 };
 #else
 static const uint8_t BCM_SEQUENCE[] = {
@@ -211,8 +211,9 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
             compute_bcm_cycles(bp, brightness_fp, total_lit, total_dark);
 
             // Divide the time by the number of times this BP appears in the sequence
-            cmd->lit_cycles = total_lit / split_factor;
-            cmd->dark_cycles = total_dark / split_factor;
+            cmd->lit_cycles = split_factor == 1 ? total_lit : total_lit / split_factor;
+            cmd->dark_cycles = split_factor == 1 ? total_dark : total_dark / split_factor;
+            if ( split_factor != 1) printf("SPLITFACTOR = %d\n", split_factor);
         }
     }
     row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
@@ -334,9 +335,6 @@ void ctrl_chan_handler()
             swap_frame_buffer_pending = false;
         }
     }
-
-    dma_channel_start(pixel_chan);
-    dma_channel_start(row_chan);
 }
 
 void setup_display_irq()
@@ -418,7 +416,8 @@ static void setup_bitplane_creation()
         &write_chan_config,
         nullptr,                                       // Write address set later
         &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
-        dma_encode_transfer_count(PIXELS >> 3),        // Total bytes to collect
+        dma_encode_transfer_count((PIXELS >> 1) >> 2), // Two colour informations per byte (xxr0g0b0r1b1g1) => (PIXELS >> 1)
+                                                       // 4 bytes put in a transfered word => ((PIXELS >> 1) >> 2)
         false                                          // Don't start yet
     );
 }
@@ -615,7 +614,9 @@ static void setup_dma_transfers()
 
     channel_config_set_dreq(&row_ctrl_chan_config, DREQ_FORCE);
 
-    channel_config_set_high_priority(&row_chan_config, true);
+    channel_config_set_high_priority(&row_ctrl_chan_config, true);
+
+    channel_config_set_chain_to(&row_ctrl_chan_config, row_chan);
 
     // When row_chan has finished a complete frame (each row in each bitplane) has been emitted.
     // The row_ctrl_chan resets the start address of row_chan to dma_row_cmd_buffer.
@@ -657,12 +658,16 @@ static void setup_dma_transfers()
 
     channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
 
+    channel_config_set_chain_to(&pixel_ctrl_chan_config, pixel_chan);
+
     // When pixel_chan has finished a complete frame (each row in each bitplane) has been emitted.
     // The pixel_ctrl_chan resets the start address of pixel_chan to dma_buffer.
     dma_channel_configure(pixel_ctrl_chan, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan].read_addr, dma_buffer, 1, false);
 
-    pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
-    pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, std::max(SM_CLOCKDIV_FACTOR, 1.0f));
+    constexpr float clkdiv = (SM_CLOCKDIV_FACTOR < 1.0f) ? 1.0f : SM_CLOCKDIV_FACTOR;
+
+    pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, clkdiv);
+    pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, clkdiv);
 }
 
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)

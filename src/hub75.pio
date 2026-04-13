@@ -193,10 +193,10 @@ dark_loop:
 .wrap_target
     ; --- PREPARATION ---
     ; Load the panel width (e.g., 64 or 128) from the Y register into X as a loop counter
-    mov x, y            side 0 ; CLK Low
+    mov x, y            side 0 ; CLK ↓
 
     ; Wait for a signal from the 'hub75_row' program to start shifting the next row
-    wait 1 irq 1        side 0 ; CLK Low
+    wait 1 irq 1        side 0 ; CLK ↓
 
 bitstream_loop:
     ; --- PIXEL DATA SHIFTING ---
