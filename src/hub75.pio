@@ -200,10 +200,12 @@ dark_loop:
 
 bitstream_loop:
     ; --- PIXEL DATA SHIFTING ---
-    ; Pull 8 bits (x, x, R0, G0, B0, R1, G1, B1) and apply to pins. 
-    ; Here we rely on 6 pins defined as output and therefore the 2 most significant pins to be ignored.
+    ; Pull 6 bits (R0, G0, B0, R1, G1, B1) and apply to pins. 
     ; [1] adds a small setup delay before the rising clock edge.
-    out pins, 8    [1]      side 0 ; CLK ↓
+    out pins, 6    [1]      side 0 ; CLK ↓
+
+    ; Discard the remaining 2 bits of the byte (padding) to trigger DMA auto-pull
+    out null, 2             side 0 ; CLK ↓
 
     ; Pulse the clock high to shift the data into the panel's shift registers
     nop            [3]      side 1 ; CLK ↑, [3] extends the hold time

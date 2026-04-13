@@ -67,7 +67,7 @@ target_compile_definitions(hub75 PRIVATE
     CLK_PIN=41                  # GPIO pin for CLK
     STROBE_PIN=42               # GPIO pin for STROBE (LATCH)
     OEN_PIN=43                  # GPIO for OE pin
-    PANEL_TYPE=PANEL_RUL6024    # select PANEL_TYPE
+    PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
     INVERTED_STB=false          # inverted pin signal for OE (untested)
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     BITPLANES=10                # number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
