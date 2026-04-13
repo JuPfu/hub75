@@ -1,7 +1,7 @@
 - [HUB75 DMA-Based Driver](#hub75-dma-based-driver)
   - [Documentation and References](#documentation-and-references)
   - [Hub75 Matrix Panel Driver Version 3.0](#hub75-matrix-panel-driver-version-30)
-    - [A Short Oversight](#a-short-oversight)
+    - [A Short Overview](#a-short-overview)
   - [Achievements of the Revised Driver](#achievements-of-the-revised-driver)
   - [Motivation](#motivation)
   - [Evolution of Pico HUB75 Drivers](#evolution-of-pico-hub75-drivers)
@@ -113,17 +113,15 @@ For details on Binary Coded Modulation (BCM), see **[LED Dimming Using Binary Co
 
 ⚠️ Documentation in progress ⚠️
 
-### A Short Oversight
+### A Short Overview
 
-A (nearly) complete rework of the DMA/PIO pipeline has been done. The Hub75 driver runs with almost no CPU involvement.
+A (nearly) complete rework of the DMA/PIO pipeline has been done. Once started, the HUB75 driver runs almost entirely in hardware — the CPU is barely involved.
 
-An interrupt handler is used to setup bitplanes on demand. After a call to update() or update_bgr() the bitplane slices are constructed heavily relying on DMA and PIO support.
+Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to the `frame_buffer`. After each bitplane has been built, the only CPU invocation takes place within a tiny interrupt handler to set up the next bitplane.
 
-Colour-data (pixels) from the pre-built bitplanes are now streamed to the matrix panel without any conversion.
+Those pre-built bitplanes in `frame_buffer` are streamed to the matrix panel without any transformation via a second DMA/PIO pipeline — no CPU involved.
 
-A second interrupt handler is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called. 
-
-This documentation will be revised in the near future.
+Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. The `row_cmd_buffer` holds pre-calculated lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front buffer continues to be consumed uninterrupted.
 
 ## Achievements of the Revised Driver
 
