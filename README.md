@@ -285,7 +285,7 @@ The second DMA/PIO pipeline streams the bitplanes to the matrix panel.  Each row
 
 #### RGB Pixel Data Transformation into Bitplane Slices
 
-<img src="assets/hub75_bitplane_pipeline_part_1.svg">
+<img src="assets/definitive_hub75_dma_pio_1.svg">
 
 #### Loading and Display of Pixel Data
 
