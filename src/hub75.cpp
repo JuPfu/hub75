@@ -47,6 +47,9 @@ row_cmd_t *row_cmd_buffer1;
 row_cmd_t *row_cmd_buffer2;
 row_cmd_t *dma_row_cmd_buffer;
 
+static bool swap_row_cmd_buffer_pending = false;
+static bool swap_frame_buffer_pending = false;
+
 #if BITPLANES == 10
 #if BALANCED_LIGHT_OUTPUT == true
 // Split sequence for 10 bitplanes
@@ -213,6 +216,7 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         }
     }
     row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
+    swap_row_cmd_buffer_pending = true;
 }
 
 /**
@@ -282,19 +286,21 @@ void setIntensity(float intensity, bool linear_brightness_control)
 
 #if FRAME_RATE
 // use only for testing or debugging
-static int32_t frame_count = 0;
+static uint32_t frame_count = 0;
 static uint32_t frame_freq_us = 0; // last measured period for N frames
 static absolute_time_t frame_time_start;
 
 #define FRAME_MEASURE_INTERVAL 100
+#endif
 
-void row_ctrl_chan_handler()
+void ctrl_chan_handler()
 {
     if (dma_channel_get_irq0_status(row_ctrl_chan))
     {
         // Clear the interrupt request for DMA channel
         dma_channel_acknowledge_irq0(row_ctrl_chan);
 
+#if FRAME_RATE
         if (frame_count == 0)
         {
             frame_time_start = get_absolute_time();
@@ -309,16 +315,34 @@ void row_ctrl_chan_handler()
             frame_freq_us = 0; // clear until next measurement
         }
         frame_count++;
+#endif
+
+        if (swap_row_cmd_buffer_pending)
+        {
+            dma_row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
+            swap_row_cmd_buffer_pending = false;
+        }
+    }
+    else if (dma_channel_get_irq0_status(pixel_ctrl_chan))
+    {
+        // Clear the interrupt request for DMA channel
+        dma_channel_acknowledge_irq0(pixel_ctrl_chan);
+
+        if (swap_frame_buffer_pending)
+        {
+            dma_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+            swap_frame_buffer_pending = false;
+        }
     }
 }
 
-void setup_frame_rate_irq()
+void setup_display_irq()
 {
     dma_channel_set_irq0_enabled(row_ctrl_chan, true);
-    irq_set_exclusive_handler(DMA_IRQ_0, row_ctrl_chan_handler);
+    dma_channel_set_irq0_enabled(pixel_ctrl_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, ctrl_chan_handler);
     irq_set_enabled(DMA_IRQ_0, true);
 }
-#endif
 
 void read_chan_handler()
 {
@@ -349,6 +373,7 @@ void read_chan_handler()
 
         // Rebuild of frame_buffer complete - swap to accommodate for next update
         frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+        swap_frame_buffer_pending = true;
     }
 }
 
@@ -444,10 +469,8 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     configure_pio(inverted_stb);
     setup_dma_transfers();
     setup_bitplane_creation();
+    setup_display_irq();
     setup_bitplane_stream_irq();
-#if FRAME_RATE
-    setup_frame_rate_irq();
-#endif
     hub75_build_row_cmd_buffer(brightness_fp);
 }
 
@@ -465,6 +488,9 @@ void start_hub75_driver()
 
     dma_buffer = frame_buffer2;
     frame_buffer = frame_buffer1;
+
+    swap_row_cmd_buffer_pending = false;
+    swap_frame_buffer_pending = false;
 
     dma_channel_set_read_addr(row_ctrl_chan, &dma_row_cmd_buffer, false);
     dma_channel_set_read_addr(pixel_ctrl_chan, &dma_buffer, false);
@@ -677,9 +703,8 @@ __attribute__((optimize("unroll-loops"))) void update(
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-    constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    constexpr size_t offset = pixels >> 1;
-    for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j)
+    constexpr size_t offset = PIXELS >> 1;
+    for (size_t fb_index = 0, j = 0; fb_index < PIXELS; fb_index += 2, ++j)
     {
         rgb_buffer[fb_index] = LUT_MAPPING(src[j]);
         rgb_buffer[fb_index + 1] = LUT_MAPPING(src[j + offset]);
@@ -769,9 +794,8 @@ __attribute__((optimize("unroll-loops"))) void update(
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
 #ifdef HUB75_MULTIPLEX_2_ROWS
-    constexpr size_t total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
     constexpr size_t offset = (PIXELS >> 1) * 3;
-    for (size_t fb_index = 0, j = 0; fb_index < total_pixels; j += 3, fb_index += 2)
+    for (size_t fb_index = 0, j = 0; fb_index < PIXELS; j += 3, fb_index += 2)
     {
         rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[j + 2], src[j + 1], src[j]);
         rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
