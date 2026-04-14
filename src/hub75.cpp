@@ -18,10 +18,10 @@
 #include "cie.hpp"
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-alignas(32) uint8_t *frame_buffer; /// Pointer to < Interwoven image data for examples;
-uint8_t *frame_buffer1;            ///< Interwoven image data for examples;
-uint8_t *frame_buffer2;            ///< Interwoven image data for examples;
-uint8_t *dma_buffer;               ///< Interwoven image data for examples;
+alignas(32) uint8_t *frame_buffer; ///< Back buffer — written by bitplane builder (read_chan_handler)
+uint8_t *frame_buffer1;            ///< Physical buffer A
+uint8_t *frame_buffer2;            ///< Physical buffer B
+uint8_t *dma_buffer;               ///< Front buffer — read by pixel_chan DMA → panel streamer
 
 static uint32_t *rgb_buffer;
 
@@ -86,13 +86,13 @@ static uint width;
 static uint height;
 
 // DMA channel numbers
-int row_chan;
-int row_ctrl_chan;
-int pixel_chan;
-int pixel_ctrl_chan;
+int row_chan = -1;
+int row_ctrl_chan = -1;
+int pixel_chan = -1;
+int pixel_ctrl_chan = -1;
 
-int read_chan;
-int write_chan;
+int read_chan = -1;
+int write_chan = -1;
 
 // PIO configuration structure for state machine numbers and corresponding program offsets
 static struct
@@ -202,17 +202,19 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         }
 #endif
 #endif
+        uint32_t total_lit, total_dark;
+        compute_bcm_cycles(bp, brightness_fp, total_lit, total_dark);
+
+        // Divide the time by the number of times this BP appears in the sequence
+        uint32_t lit_cycles = split_factor == 1 ? total_lit : ((total_lit + split_factor / 2) / split_factor);
+        uint32_t dark_cycles = split_factor == 1 ? total_dark : ((total_dark + split_factor / 2) / split_factor);
+
         for (uint32_t row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
         {
             row_cmd_t *cmd = &row_cmd_buffer[idx++];
             cmd->row_address = encode_row_address(row);
-
-            uint32_t total_lit, total_dark;
-            compute_bcm_cycles(bp, brightness_fp, total_lit, total_dark);
-
-            // Divide the time by the number of times this BP appears in the sequence
-            cmd->lit_cycles = split_factor == 1 ? total_lit : ((total_lit + split_factor / 2) / split_factor);
-            cmd->dark_cycles = split_factor == 1 ? total_dark : ((total_dark + split_factor / 2) / split_factor);
+            cmd->lit_cycles = lit_cycles;
+            cmd->dark_cycles = dark_cycles;
         }
     }
     swap_row_cmd_buffer_pending = true;
@@ -285,7 +287,7 @@ void setIntensity(float intensity, bool linear_brightness_control)
 
 #if FRAME_RATE
 // use only for testing or debugging
-static uint32_t frame_count = 0;
+static int frame_count = 0;
 static uint32_t frame_freq_us = 0; // last measured period for N frames
 static absolute_time_t frame_time_start;
 
