@@ -47,8 +47,8 @@ row_cmd_t *row_cmd_buffer1;
 row_cmd_t *row_cmd_buffer2;
 row_cmd_t *dma_row_cmd_buffer;
 
-static bool swap_row_cmd_buffer_pending = false;
-static bool swap_frame_buffer_pending = false;
+static volatile bool swap_row_cmd_buffer_pending = false;
+static volatile bool swap_frame_buffer_pending = false;
 
 #if BITPLANES == 10
 #if BALANCED_LIGHT_OUTPUT == true
@@ -215,7 +215,6 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
             cmd->dark_cycles = split_factor == 1 ? total_dark : ((total_dark + split_factor / 2) / split_factor);
         }
     }
-    row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
     swap_row_cmd_buffer_pending = true;
 }
 
@@ -319,7 +318,16 @@ void ctrl_chan_handler()
 
         if (swap_row_cmd_buffer_pending)
         {
-            dma_row_cmd_buffer = (row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
+            // dma_row_cmd_buffer → active front buffer (DMA reads from it).
+            // row_cmd_buffer → back buffer (modified by setBasisBrightness).
+            // Swap: the new back buffer becomes the new front buffer.
+            dma_row_cmd_buffer = row_cmd_buffer;
+
+            row_cmd_buffer = (dma_row_cmd_buffer == row_cmd_buffer1) ? row_cmd_buffer2 : row_cmd_buffer1;
+
+            // Reconfigure row_ctrl_chan with a new dma_row_cmd_buffer pointer
+            dma_channel_set_read_addr(row_ctrl_chan, &dma_row_cmd_buffer, false);
+
             swap_row_cmd_buffer_pending = false;
         }
     }
@@ -330,7 +338,16 @@ void ctrl_chan_handler()
 
         if (swap_frame_buffer_pending)
         {
-            dma_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+            // dma_buffer  → active front buffer (DMA streams from it)
+            // frame_buffer → back buffer (refilled by read_chan_handler)
+            // Swap: the new back buffer becomes the new front buffer.
+            dma_buffer = frame_buffer;
+
+            frame_buffer = (dma_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+
+            // Reconfigure pixel_ctrl_chan with a new dma_buffer pointer
+            dma_channel_set_read_addr(pixel_ctrl_chan, &dma_buffer, false);
+
             swap_frame_buffer_pending = false;
         }
     }
@@ -371,8 +388,10 @@ void read_chan_handler()
         uint shamt = BCM_SEQUENCE[bitplane];
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
-        // Rebuild of frame_buffer complete - swap to accommodate for next update
-        frame_buffer = (frame_buffer == frame_buffer1) ? frame_buffer2 : frame_buffer1;
+        // frame_buffer rebuild is complete.
+        // Signal to swap frame_buffer
+        // - to display new content of frame_buffer on matrix panel
+        // - to make new "back-buffer" available for writing
         swap_frame_buffer_pending = true;
     }
 }
