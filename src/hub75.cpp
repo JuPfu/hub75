@@ -55,11 +55,11 @@ static volatile bool swap_frame_buffer_pending = false;
 // Split sequence for 10 bitplanes
 // We split BP 9 into 4 parts, BP 8 into 2 parts.
 static const uint8_t BCM_SEQUENCE[] = {
-    9, 0, 1, 2, 8, 3, 4, 9, 5, 9, 6, 8, 7, 9 // 14 steps instead of 10
+    9, 0, 8, 1, 9, 2, 7, 3, 9, 4, 8, 5, 9, 6 // 14 steps instead of 10
 };
 #else
 static const uint8_t BCM_SEQUENCE[] = {
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9 // 10 steps
+    0, 9, 2, 7, 4, 5, 1, 8, 3, 6 // 10 steps
 };
 #endif
 #elif BITPLANES == 8
@@ -67,11 +67,11 @@ static const uint8_t BCM_SEQUENCE[] = {
 // Split sequence for 8 bitplanes
 // We split BP 7 into 3 parts, BP 6 into 2 parts
 static const uint8_t BCM_SEQUENCE[] = {
-    7, 0, 1, 2, 6, 3, 7, 4, 6, 5, 7 // 11 steps instead of 8
+    7, 0, 6, 1, 7, 2, 5, 3, 7, 4, 6 // 11 steps instead of 8
 };
 #else
 static const uint8_t BCM_SEQUENCE[] = {
-    0, 1, 2, 3, 4, 5, 6, 7 // 8 steps
+    0, 7, 2, 5, 1, 6, 3, 4 // 8 steps
 };
 #endif
 #endif
