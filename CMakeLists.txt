@@ -77,7 +77,7 @@ target_compile_definitions(hub75 PRIVATE
     BASE_LATCH_NS=80            # wait time in nano-seconds to stabilise latch
     BASE_ADDR_NS=120            # wait time in nano-seconds to stabilise row addressing
     BASE_OE_NS=40               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)
-   FRAME_RATE=true            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
+    FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
 
 # Generate PIO header
