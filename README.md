@@ -15,6 +15,7 @@
     - [Step-by-Step Breakdown](#step-by-step-breakdown)
   - [The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data)
     - [Overview of the Redesigned Alternative Approach](#overview-of-the-redesigned-alternative-approach)
+    - [High-Level Architectural View of HUB75 Pipeline](#high-level-architectural-view-of-hub75-pipeline)
     - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
       - [RGB Pixel Data Transformation into Bitplane Slices](#rgb-pixel-data-transformation-into-bitplane-slices)
       - [Loading and Display of Pixel Data](#loading-and-display-of-pixel-data)
@@ -272,6 +273,30 @@ Overall, performance has improved even further. In summary, the following factor
 The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provides any (significant) speedup.
 
 The revised driver requires slightly more memory resources to achieve the improved quality. I am using “defines” to disable certain (new) functionalities and thus make more memory available for applications.
+
+### High-Level Architectural View of HUB75 Pipeline
+
+```
+[Input 8-bit RGB]
+        ↓
+[CIE → 12-bit or 10-bit linear light]
+        ↓
+[Color Calibration (per channel)]
+        ↓
+[Temporal + Spatial Dithering → 10-bit]
+        ↓
+[Pixel Mapping / Layout Transform]
+        ↓
+[Bitplane Extraction (PIO-assisted)]
+        ↓
+[Double Buffered Frame Buffer]
+        ↓
+[DMA → PIO Stream]
+        ↓
+[Row Engine (OE / LAT / ADDR timing)]
+        ↓
+[Panel]
+```
 
 ### Step-by-Step Breakdown of DMA and PIO Cooperation
 
@@ -637,8 +662,11 @@ The table below lists every configurable preprocessor define, its **default valu
 | `INVERTED_STB` | `false` | Set to `true` if the latch (strobe) signal is inverted on your board. |
 | `TEMPORAL_DITHERING` | `false`  | Define to enable experimental temporal dithering for increased perceived colour depth (≈ 12 bits per channel). |
 | `SM_CLOCKDIV_FACTOR` | `1.0f` | PIO state machine clock divider factor. Values > 1.0 slow down the state machine. Useful to reduce ghosting or flickering on smaller panels. |
-| `BIT_DEPTH` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
+| `BITPLANES` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
+| `BALANCED_LIGHT_OUTPUT`| `true`|  Allthough it uses some more memory it improves effective refresh rate and really cuts down flicker. |
+| `SEPARATE_CIE_CHANNELS`| `true` |  Use separate CIE channels for improved colour representation - needs more memory. |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
+| `FRAME_RATE` | `false` | For testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production. |
 
 > ⚠️ Setting `SM_CLOCKDIV_FACTOR` in CMakeLists.txt implicitly enables the clock divider. If you do not set `SM_CLOCKDIV_FACTOR`, the state machine runs at full speed (equivalent to a factor of `1.0f`).
 
@@ -712,65 +740,107 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 ```cpp
 // hub75.hpp — default values (used when not overridden in CMakeLists.txt)
 
+#ifndef USE_PICO_GRAPHICS
+#define USE_PICO_GRAPHICS true
+#endif
+
+#if USE_PICO_GRAPHICS == true
+#include "libraries/pico_graphics/pico_graphics.hpp"
+#endif
+
+// Set MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT to the width and height of your matrix panel!
 #ifndef MATRIX_PANEL_WIDTH
-#define MATRIX_PANEL_WIDTH   64
+#define MATRIX_PANEL_WIDTH 64
 #endif
-
 #ifndef MATRIX_PANEL_HEIGHT
-#define MATRIX_PANEL_HEIGHT  64
+#define MATRIX_PANEL_HEIGHT 64
 #endif
 
-#ifndef DATA_BASE_PIN
-#define DATA_BASE_PIN        0
+// Wiring of the HUB75 matrix
+#ifndef DATA_BASE_PIN // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
+#define DATA_BASE_PIN 0
 #endif
-
 #ifndef DATA_N_PINS
-#define DATA_N_PINS          6
+#define DATA_N_PINS 6 // count of consecutive color pins usually 6
 #endif
-
 #ifndef ROWSEL_BASE_PIN
-#define ROWSEL_BASE_PIN      6
+#define ROWSEL_BASE_PIN 6 // start gpio pin of address pins
 #endif
-
 #ifndef ROWSEL_N_PINS
-#define ROWSEL_N_PINS        5
+#define ROWSEL_N_PINS 4 // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
-
 #ifndef CLK_PIN
-#define CLK_PIN              11
+#define CLK_PIN 11
 #endif
-
 #ifndef STROBE_PIN
-#define STROBE_PIN           12
+#define STROBE_PIN 12
 #endif
-
 #ifndef OEN_PIN
-#define OEN_PIN              13
+#define OEN_PIN 13
 #endif
 
+// Set your panel
+//
+// Example:
+// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
+//
+// #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
+// #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
+// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
+//
+// Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
+// Only define default if none of the mapping modes are already defined
+#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
+#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
+#endif
+
+// If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
+#define PANEL_GENERIC 0
+#define PANEL_FM6126A 1
+#define PANEL_RUL6024 2
+
+// set your panel type
+// e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set PANEL_TYPE to PANEL_RUL6024
 #ifndef PANEL_TYPE
-#define PANEL_TYPE           PANEL_GENERIC
+#define PANEL_TYPE PANEL_GENERIC
 #endif
 
 #ifndef INVERTED_STB
-#define INVERTED_STB         false
-#endif
-
-// TEMPORAL_DITHERING is experimental - development still in progress
-#ifndef TEMPORAL_DITHERING
-#define TEMPORAL_DITHERING   false
+#define INVERTED_STB false
 #endif
 
 #ifndef SM_CLOCKDIV_FACTOR
-#define SM_CLOCKDIV_FACTOR   1.0f
+// To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
+// For panels with height less or equal to 16 rows try a factor of 8.0f
+// For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
+// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+#define SM_CLOCKDIV_FACTOR 1.0f
 #endif
 
-#ifndef BIT_DEPTH
-#define BIT_DEPTH            10
+#ifndef SEPARATE_CIE_CHANNELS
+#define SEPARATE_CIE_CHANNELS false
 #endif
 
+#if SEPARATE_CIE_CHANNELS == false
+#define CIE_RED CIE
+#define CIE_GREEN CIE
+#define CIE_BLUE CIE
+#endif
+
+// Balanced Light Output
+// High-weight bit-planes are split into multiple smaller slices within the BCM sequence.
+// This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
+#ifndef BALANCED_LIGHT_OUTPUT
+#define BALANCED_LIGHT_OUTPUT true
+#endif
+
+// Used in hub75_demo.cpp
+// Start hub75 driver on core1 if HUB75_MULTICORE is set to true
+// Start hub75 driver on core0 if HUB75_MULTICORE is set to false
+// The hub75 driver has not much CPU load. Most of it task are handled by DMA and PIO.
+// Only the interupt handler oen_finished_handler is CPU bound.
 #ifndef HUB75_MULTICORE
-#define HUB75_MULTICORE      true
+#define HUB75_MULTICORE true
 #endif
 ```
 

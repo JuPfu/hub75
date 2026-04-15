@@ -36,47 +36,74 @@
     irq nowait 1        side 0b10   ; Kick off pixel streamer for the very first row
     
 .wrap_target
-    ; 1. SYNC: wait until pixel data for the current row has been fully shifted
-    wait 1 irq 0        side 0b10   ; Keep panel blanked (OEn=1) during wait
+    ; -------------------------------------------------------------------------
+    ; 1. SYNC: wait until pixel data fully shifted
+    ; -------------------------------------------------------------------------
+    wait 1 irq 0        side 0b10   ; OEn=1 (panel OFF)
 
-    ; 2. LATCH: transfer shift register contents into output latches
-    nop         [3]     side 0b11   ; Assert LATCH (STB=1)
+    ; -------------------------------------------------------------------------
+    ; 2. LATCH: clean pulse (HIGH + LOW) - freeze data
+    ; -------------------------------------------------------------------------
+    nop         [3]     side 0b11   ; STB=1, OE=1  (Latch HIGH)
+    nop         [3]     side 0b10   ; STB=0, OE=1  (Latch LOW)
 
-    ; Optional dead-time to reduce ghosting (panel-dependent)
-    mov x, y            side 0b10   ; Load wait cycles from Y register (init via C++)
-wait_loop1:
-    jmp x-- wait_loop1  side 0b10
+    ; -------------------------------------------------------------------------
+    ; 3. LATCH SETTLE: allow internal register stabilisation
+    ; -------------------------------------------------------------------------
+    mov x, y            side 0b10
+wait_latch_settle:
+    jmp x-- wait_latch_settle side 0b10
 
-    ; 3. PREFETCH: trigger pixel streamer for next row (loads data during BCM)
+    ; -------------------------------------------------------------------------
+    ; 4. PREFETCH next row data (parallel to blanking)
+    ; -------------------------------------------------------------------------
     irq nowait 1        side 0b10
 
-    ; 4. ADDRESSING: select row corresponding to latched data
+    ; -------------------------------------------------------------------------
+    ; 5. ADDRESSING: set row AFTER latch is fully stable
+    ; -------------------------------------------------------------------------
     out pins, 5         side 0b10   ; Output A–E row address
     out null, 27        side 0b10   ; Discard unused bits
 
-    ; 5. SETTLING: allow row decoder signals to stabilise
-    mov x, y            side 0b10   ; Load wait cycles from Y register (init via C++)
-wait_loop:
-    jmp x-- wait_loop   side 0b10
+    ; -------------------------------------------------------------------------
+    ; 6. LOAD t_addr - Stabilise row addressing
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b10   ; load t_addr into X register
+addr_wait:
+    jmp x-- addr_wait   side 0b10
 
-    ; 6. DISPLAY (BCM ON phase)
-    out x, 32           side 0b10   ; Load lit_cycles
+    ; -------------------------------------------------------------------------
+    ; 7. LOAD t_oe_guard - PRE-OE GUARD (prevents ghost flashes)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b10   ; load t_oe into X register
+oe_guard_wait:
+    jmp x-- oe_guard_wait side 0b10
+
+    ; -------------------------------------------------------------------------
+    ; 8. DISPLAY (BCM ON phase)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b10   ; load lit_cycles
 lit_loop:
-    jmp x-- lit_loop    side 0b00   ; OEn=0 → LEDs ON
+    jmp x-- lit_loop    side 0b00   ; OE=0 → LEDs ON
 
-    ; 7. BLANKING (BCM OFF phase)
-    out x, 32           side 0b10   ; Load dark_cycles
+    ; -------------------------------------------------------------------------
+    ; 9. BLANKING (BCM OFF phase)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b10   ; load dark_cycles
 dark_loop:
-    jmp x-- dark_loop   side 0b10   ; OEn=1 → LEDs OFF
+    jmp x-- dark_loop   side 0b10   ; OE=1 → LEDs OFF
+
 .wrap
 
 % c-sdk {
-    static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles)
+    static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch)
     {
         pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
         pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
+
         for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
             pio_gpio_init(pio, i);
+
         pio_gpio_init(pio, latch_base_pin);     // aka STROBE pin
         pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
 
@@ -85,12 +112,13 @@ dark_loop:
         sm_config_set_sideset_pins(&c, latch_base_pin); // STROBE pin and OEn pin
         sm_config_set_in_shift(&c, true, true, 32);
         sm_config_set_out_shift(&c, true, true, 32);
+
         pio_sm_init(pio, sm, offset, &c);
 
         // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-        // Load wait_cycles into Y-register
+        // Load wait_cycles into Y-register (t_latch)
         pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-        pio_sm_put(pio, sm, wait_cycles);
+        pio_sm_put(pio, sm, t_latch);
 
         pio_sm_set_enabled(pio, sm, true);
     }

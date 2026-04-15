@@ -29,7 +29,7 @@
 #define ROWSEL_BASE_PIN 6 // start gpio pin of address pins
 #endif
 #ifndef ROWSEL_N_PINS
-#define ROWSEL_N_PINS 4 // count of consecutive address pins - adapt to the number of address pins of your panel
+#define ROWSEL_N_PINS 5 // count of consecutive address pins - adapt to the number of address pins of your panel
 #endif
 #ifndef CLK_PIN
 #define CLK_PIN 11
@@ -96,6 +96,11 @@
 #define CIE_BLUE CIE
 #endif
 
+#ifndef BITPLANES
+#define BITPLANES 10 // default
+#endif
+
+
 // Balanced Light Output
 // High-weight bit-planes are split into multiple smaller slices within the BCM sequence.
 // This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
@@ -112,6 +117,24 @@
 #define HUB75_MULTICORE true
 #endif
 
+#ifndef BASE_LATCH_NS
+#define BASE_LATCH_NS 80
+#endif
+
+#ifndef BASE_ADDR_NS
+#define BASE_ADDR_NS 120
+#endif
+
+#ifndef BASE_OE_NS
+#define BASE_OE_NS 40
+#endif
+
+// Frame rate
+// Use only for testing or debugging
+#ifndef FRAME_RATE
+#define FRAME_RATE false
+#endif
+
 // --- modifications below this line might imply changes in source code ---
 
 constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
@@ -122,26 +145,15 @@ constexpr int PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 // At the moment only used for HUB75_P10_3535_16X32_4S panels
 #define SCAN_GROUPS (1 << ROWSEL_N_PINS)
 
-#if !defined(BITPLANES)
-#define BITPLANES 10 // default
-#endif
-
 #if BITPLANES != 8 && BITPLANES != 10
 #error "BITPLANES must be 8 or 10"
 #endif
 
 #define EXIT_FAILURE 1
 
-// Frame rate
-// Use only for testing or debugging
-#ifndef FRAME_RATE
-#define FRAME_RATE false
-#endif
-
 #if USE_PICO_GRAPHICS == true
 using namespace pimoroni;
 #endif
-
 namespace PanelConfig
 {
     constexpr uint32_t WIDTH = MATRIX_PANEL_WIDTH;
@@ -177,3 +189,4 @@ void update(PicoGraphics const *graphics);
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);
 void setIntensity(float intensity, bool linear_brightness_control);
+

@@ -37,10 +37,14 @@ static uint32_t *rgb_buffer;
 struct row_cmd_t
 {
     uint32_t row_address; ///< 5-bit row select; selects which pair of rows to drive
+    uint32_t t_addr;      ///< wait cycles for row address to stabilise (bitplane dependent)
+    uint32_t t_oe;        ///< wait cycles before OE enabled (bitplane dependent)
     uint32_t lit_cycles;  ///< OEn ON  duration for this bit plane, scaled by brightness
     uint32_t dark_cycles; ///< OEn OFF duration = full BCM period - lit_cycles
 
 } __attribute__((packed));
+
+constexpr uint32_t row_cmd_struct_members = sizeof(row_cmd_t)/sizeof(uint32_t);
 
 row_cmd_t *row_cmd_buffer;
 row_cmd_t *row_cmd_buffer1;
@@ -53,7 +57,7 @@ static volatile bool swap_frame_buffer_pending = false;
 #if BITPLANES == 10
 #if BALANCED_LIGHT_OUTPUT == true
 // Split sequence for 10 bitplanes
-// We split BP 9 into 4 parts, BP 8 into 2 parts.
+// Split BP 9 into 4 parts, BP 8 into 2 parts.
 static const uint8_t BCM_SEQUENCE[] = {
     9, 0, 8, 1, 9, 2, 7, 3, 9, 4, 8, 5, 9, 6 // 14 steps instead of 10
 };
@@ -65,7 +69,7 @@ static const uint8_t BCM_SEQUENCE[] = {
 #elif BITPLANES == 8
 #if BALANCED_LIGHT_OUTPUT == true
 // Split sequence for 8 bitplanes
-// We split BP 7 into 3 parts, BP 6 into 2 parts
+// Split BP 7 into 3 parts, BP 6 into 2 parts
 static const uint8_t BCM_SEQUENCE[] = {
     7, 0, 6, 1, 7, 2, 5, 3, 7, 4, 6 // 11 steps instead of 8
 };
@@ -84,6 +88,25 @@ static void setup_dma_transfers();
 // Width and height of the HUB75 LED matrix
 static uint width;
 static uint height;
+typedef struct
+{
+    // --- Physikalische Zeiten (Konfigurationsebene) ---
+    uint32_t latch_ns; // STB settle
+    uint32_t addr_ns;  // Address settle
+    uint32_t oe_ns;    // OE guard
+
+    // --- Derived PIO-cycles (Runtime) ---
+    uint16_t latch_cycles;
+    uint16_t addr_cycles;
+    uint16_t oe_cycles;
+
+    // --- System parameter (used for re-scaling) ---
+    float clk_sys_hz;
+    float clkdiv;
+
+} hub75_timing_config_t;
+
+hub75_timing_config_t hub75_timing_config;
 
 // DMA channel numbers
 int row_chan = -1;
@@ -169,6 +192,40 @@ static inline uint32_t encode_row_address(uint32_t row)
     return row & PanelConfig::ADDR_MASK;
 }
 
+static inline uint ns_to_pio_cycles(uint32_t ns, float clk_sys_hz, float clkdiv)
+{
+    float t_cycle_ns = (clkdiv / clk_sys_hz) * 1e9f;
+    return (uint)ceilf(ns / t_cycle_ns);
+}
+
+static inline void hub75_timing_recompute(hub75_timing_config_t *cfg)
+{
+    cfg->latch_cycles = ns_to_pio_cycles(cfg->latch_ns, cfg->clk_sys_hz, cfg->clkdiv);
+    cfg->addr_cycles = ns_to_pio_cycles(cfg->addr_ns, cfg->clk_sys_hz, cfg->clkdiv);
+    cfg->oe_cycles = ns_to_pio_cycles(cfg->oe_ns, cfg->clk_sys_hz, cfg->clkdiv);
+}
+
+void hub75_set_timing_ns(hub75_timing_config_t *cfg, uint32_t latch_ns,uint32_t addr_ns, uint32_t oe_ns)
+{
+    cfg->latch_ns = latch_ns;
+    cfg->addr_ns = addr_ns;
+    cfg->oe_ns = oe_ns;
+
+    hub75_timing_recompute(cfg);
+}
+
+void hub75_timing_init(hub75_timing_config_t *cfg, float clk_sys_hz, float clkdiv)
+{
+    cfg->latch_ns = BASE_LATCH_NS;
+    cfg->addr_ns = BASE_ADDR_NS;
+    cfg->oe_ns = BASE_OE_NS;
+
+    cfg->clk_sys_hz = clk_sys_hz;
+    cfg->clkdiv = clkdiv;
+
+    hub75_timing_recompute(cfg);
+}
+
 void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
 {
     uint32_t idx = 0;
@@ -213,6 +270,8 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
         {
             row_cmd_t *cmd = &row_cmd_buffer[idx++];
             cmd->row_address = encode_row_address(row);
+            cmd->t_addr = hub75_timing_config.addr_cycles + (bp >> 1); // very effective
+            cmd->t_oe = hub75_timing_config.oe_cycles + (bp >> 2);     // fine tuning
             cmd->lit_cycles = lit_cycles;
             cmd->dark_cycles = dark_cycles;
         }
@@ -478,6 +537,8 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
 
     rgb_buffer = new uint32_t[width * height]();
 
+    hub75_timing_init(&hub75_timing_config, clock_get_hz(clk_sys), (SM_CLOCKDIV_FACTOR < 1.0f) ? 1.0f : SM_CLOCKDIV_FACTOR);
+
     if (panel_type == PANEL_FM6126A)
     {
         FM6126A_setup();
@@ -488,11 +549,17 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     }
 
     configure_pio(inverted_stb);
+    printf("configure_pio\n");
     setup_dma_transfers();
+    printf("setup_dma_transfers\n");
     setup_bitplane_creation();
+    printf("setup_bitplane_creation\n");
     setup_display_irq();
+    printf("setup_display_irq\n");
     setup_bitplane_stream_irq();
+    printf("setup_bitplane_stream_irq\n");
     hub75_build_row_cmd_buffer(brightness_fp);
+    printf("hub75_build_row_cmd_buffer\n");
 }
 
 /**
@@ -566,15 +633,14 @@ static void configure_pio(bool inverted_stb)
         }
     }
 
-    // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    uint wait_cycles = clock_get_hz(clk_sys) / 4000000;
-
     hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, PanelConfig::SCAN_MODE_WIDTH);
 
+    // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
+    // base_latch_wait_cycles passed as parameter to hub75_row program
     if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles * (PanelConfig::ROWS_IN_PARALLEL >> 1));
+        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, hub75_timing_config.latch_cycles);
     else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, wait_cycles * (PanelConfig::ROWS_IN_PARALLEL >> 1));
+        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, hub75_timing_config.latch_cycles);
 
     // State machine for "parallelized" building of the bit-plane structure
     if (!pio_claim_free_sm_and_add_program(
@@ -622,7 +688,7 @@ static void setup_dma_transfers()
                           &row_chan_config,
                           &pio_config.row_pio->txf[pio_config.sm_row],
                           dma_row_cmd_buffer,
-                          dma_encode_transfer_count(bcm_sequence_length * PanelConfig::SCAN_DEPTH * 3),
+                          dma_encode_transfer_count(bcm_sequence_length * PanelConfig::SCAN_DEPTH * row_cmd_struct_members),
                           false);
 
     // row ctrl channel
