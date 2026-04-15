@@ -41,6 +41,10 @@
     ; -------------------------------------------------------------------------
     wait 1 irq 0        side 0b10   ; OEn=1 (panel OFF)
 
+    mov x, y            side 0b10
+latch_guard_wait:
+    jmp x-- latch_guard_wait side 0b10
+
     ; -------------------------------------------------------------------------
     ; 2. LATCH: clean pulse (HIGH + LOW) - freeze data
     ; -------------------------------------------------------------------------
@@ -137,47 +141,82 @@ dark_loop:
 ; Bit 0: LATCH (STB)
 ; Bit 1: OEn (active LOW: 0=ON, 1=OFF)
 
-    ; --- INITIALISATION ---
-    irq nowait 1        side 0b11   ; Trigger bitplane streamer
+    ; --- INITIALISATION (executed once at start-up) ---
+    irq nowait 1        side 0b10   ; Kick off pixel streamer for the very first row
     
 .wrap_target
-    ; 1. SYNC
-    wait 1 irq 0        side 0b11   ; Keep panel blanked
+    ; -------------------------------------------------------------------------
+    ; 1. SYNC: wait until pixel data fully shifted
+    ; -------------------------------------------------------------------------
+    wait 1 irq 0        side 0b11   ; OEn=1 (panel OFF)
 
-    ; 2. LATCH (explicit assert + deassert)
-    nop         [3]     side 0b10   ; STB=1 (assert)
-    nop         [3]     side 0b11   ; STB=0 (deassert)
+    mov x, y            side 0b11
+latch_guard_wait:
+    jmp x-- latch_guard_wait side 0b11
 
-    ; 3. PREFETCH
+    ; -------------------------------------------------------------------------
+    ; 2. LATCH: clean pulse (HIGH + LOW) - freeze data
+    ; -------------------------------------------------------------------------
+    nop         [3]     side 0b10   ; STB=1, OE=1  (Latch HIGH)
+    nop         [3]     side 0b11   ; STB=0, OE=1  (Latch LOW)
+
+    ; -------------------------------------------------------------------------
+    ; 3. LATCH SETTLE: allow internal register stabilisation
+    ; -------------------------------------------------------------------------
+    mov x, y            side 0b11
+wait_latch_settle:
+    jmp x-- wait_latch_settle side 0b11
+
+    ; -------------------------------------------------------------------------
+    ; 4. PREFETCH next row data (parallel to blanking)
+    ; -------------------------------------------------------------------------
     irq nowait 1        side 0b11
 
-    ; 4. ADDRESSING
-    out pins, 5         side 0b11
-    out null, 27        side 0b11
+    ; -------------------------------------------------------------------------
+    ; 5. ADDRESSING: set row AFTER latch is fully stable
+    ; -------------------------------------------------------------------------
+    out pins, 5         side 0b11   ; Output A–E row address
+    out null, 27        side 0b11   ; Discard unused bits
 
-    ; 5. SETTLING
-    mov x, y            side 0b11
-wait_loop:
-    jmp x-- wait_loop   side 0b11
+    ; -------------------------------------------------------------------------
+    ; 6. LOAD t_addr - Stabilise row addressing
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b11   ; load t_addr into X register
+addr_wait:
+    jmp x-- addr_wait   side 0b11
 
-    ; 6. DISPLAY (ON)
-    out x, 32           side 0b11
+    ; -------------------------------------------------------------------------
+    ; 7. LOAD t_oe_guard - PRE-OE GUARD (prevents ghost flashes)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b11   ; load t_oe into X register
+oe_guard_wait:
+    jmp x-- oe_guard_wait side 0b11
+
+    ; -------------------------------------------------------------------------
+    ; 8. DISPLAY (BCM ON phase)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b11   ; load lit_cycles
 lit_loop:
-    jmp x-- lit_loop    side 0b01   ; OEn=0 → LEDs ON
+    jmp x-- lit_loop    side 0b01   ; OE=0 → LEDs ON
 
-    ; 7. BLANKING (OFF)
-    out x, 32           side 0b11
+    ; -------------------------------------------------------------------------
+    ; 9. BLANKING (BCM OFF phase)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b11   ; load dark_cycles
 dark_loop:
-    jmp x-- dark_loop   side 0b11   ; OEn=1 → LEDs OFF
+    jmp x-- dark_loop   side 0b11   ; OE=1 → LEDs OFF
+
 .wrap
 
 % c-sdk {
-    static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint wait_cycles)
+    static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch)
     {
         pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
         pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
+
         for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
             pio_gpio_init(pio, i);
+            
         pio_gpio_init(pio, latch_base_pin);     // aka STROBE pin
         pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
 
@@ -186,12 +225,13 @@ dark_loop:
         sm_config_set_sideset_pins(&c, latch_base_pin); // STROBE pin and OEn pin
         sm_config_set_in_shift(&c, true, true, 32);
         sm_config_set_out_shift(&c, true, true, 32);
+
         pio_sm_init(pio, sm, offset, &c);
 
         // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
         // Load wait_cycles into Y-register
         pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-        pio_sm_put(pio, sm, wait_cycles);
+        pio_sm_put(pio, sm, t_latch);
 
         pio_sm_set_enabled(pio, sm, true);
     }

@@ -549,17 +549,11 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     }
 
     configure_pio(inverted_stb);
-    printf("configure_pio\n");
     setup_dma_transfers();
-    printf("setup_dma_transfers\n");
     setup_bitplane_creation();
-    printf("setup_bitplane_creation\n");
     setup_display_irq();
-    printf("setup_display_irq\n");
     setup_bitplane_stream_irq();
-    printf("setup_bitplane_stream_irq\n");
     hub75_build_row_cmd_buffer(brightness_fp);
-    printf("hub75_build_row_cmd_buffer\n");
 }
 
 /**

@@ -40,7 +40,7 @@
 //                               0：disable
 //                               1：enable
 //                      0b0
-#define R_TDM 0b1 << 9
+#define R_TDM 0b0 << 9
 //
 // R_UPCTRL     08:08            Cancellation circuit enable signal selection
 //                               0: Program control erasure (erasure at line break)
@@ -67,7 +67,7 @@
 //                               When there is no data, only pull-up is performed, and there is no pull-down path;
 //                               when there is data, pull-up and pull-down work at the same time.
 //                      0b1 ???
-#define R_UPCH 0b0 << 5
+#define R_UPCH 0b1 << 5
 //
 // R_EN_AM      04:04            Internal debugging use
 //                      0b1 ???
@@ -89,7 +89,7 @@
 //                               00：0ns
 //                               01：10ns
 //                               11: 20ns
-//                       0b00
+//                       0b01
 #define R_OE 0b01
 
 #define WREG2 R_OE_CH | R_TDM | R_UPCTRL | R_FALL_TIME | R_LATCH | R_UPCH | R_EN_AM | ROUT2 | R_CLK_SDO | R_OE

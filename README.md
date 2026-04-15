@@ -91,6 +91,8 @@
     - [3. Simplified DMA Structure](#3-simplified-dma-structure)
     - [4. Advanced Signal Integrity \& Anti-Ghosting](#4-advanced-signal-integrity--anti-ghosting)
     - [5. Efficient BCM with Split-Bitplanes](#5-efficient-bcm-with-split-bitplanes)
+  - [Boards](#boards)
+    - [Configuration](#configuration)
 
 # HUB75 DMA-Based Driver
 
@@ -1544,6 +1546,84 @@ The `hub75_row` program now includes specific hardware-level timing improvements
 * **Balanced Light Output:** High-weight bit-planes are split into multiple smaller slices within the BCM sequence. This increases the effective refresh rate and eliminates visible flicker, even at low intensity settings.
 * **Constant Frame Rate:** The sum of `lit_cycles` and `dark_cycles` is kept constant, ensuring a rock-solid refresh rate regardless of brightness levels.
 
+## Boards
+
+My hardware repository of matrix panels which I used to develop the library (and of which I know something about) are:
+
+1. P3QD-64x64-21 p3-64x64-2012-21A-1.0
+   Chips: RUC7258D FM6124DJ
+   
+   64x64 32S => 2 rows lit simultaneously
+   
+   plane wise BCM (Binary Coded Modulation)
+   
+   PANEL_TYPE PANEL_GENERIC
+
+2. P3-64x64-32S-V2.0 2310P3
+   
+   Chips: RUC7258D RUL6024
+   
+   64x64 32S => 2 rows lit simultaneously
+   
+   plane wise BCM (Binary Coded Modulation)
+   
+   PANEL_TYPE PANEL_RUL6024
+
+3. HUB75_P3_1415_16S_64X64_S31 QP3 Outdoor
+   
+   Chips: DP5125D
+   64x64 16S => 4 rows lit simultaneously
+   
+   plane wise BCM (Binary Coded Modulation)
+   
+   PANEL_TYPE PANEL_GENERIC
+   
+   plane wise BCM (Binary Coded Modulation)
+   
+   Separate frame_buffer algorithm
+
+   ### Configuration
+   
+   System-Clock 266 MHz
+
+   ```cmake
+    target_compile_definitions(hub75 PRIVATE
+    PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
+    USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
+    MATRIX_PANEL_WIDTH=64       # your matrix panel width
+    MATRIX_PANEL_HEIGHT=64      # your matrix panel height
+    DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+    DATA_N_PINS=6               # number (count) of colour pins (usually 6)
+    ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins
+    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board (look at your panels connector)
+    CLK_PIN=41                  # GPIO pin for CLK
+    STROBE_PIN=42               # GPIO pin for STROBE (LATCH)
+    OEN_PIN=43                  # GPIO for OE pin
+    PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
+    INVERTED_STB=false          # inverted pin signal for OE (untested)
+    SM_CLOCKDIV_FACTOR=2.75f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+    BITPLANES=10                # number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
+    BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
+    SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
+    HUB75_MULTICORE=true        # use core1 for the hub75 driver
+    BASE_LATCH_NS=100            # wait time in nano-seconds to stabilise latch
+    BASE_ADDR_NS=200            # wait time in nano-seconds to stabilise row addressing
+    BASE_OE_NS=60               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)
+    FRAME_RATE=true            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
+    )
+   ```
+
+4. P10-SMD-16x32-b HUB75_P10_3535_16X32_4S
+   
+   Chips: DP5020B
+   
+   16x32 4S => 4 rows lit simultaneously
+   
+   PANEL_TYPE PANEL_GENERIC
+   
+   line wise BCM
+   
+   Separate frame_buffer algorithm
 
 
 
