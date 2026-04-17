@@ -298,13 +298,13 @@ The revised driver requires slightly more memory resources to achieve the improv
         ↓
 [CIE → 12-bit or 10-bit linear light]
         ↓
-[Color Calibration (per channel)]
+[Color Correction Matrix (per channel)]
         ↓
-[Temporal + Spatial Dithering → 10-bit]
+[Temporal + Spatial Dithering → 10-bit]  (will be revived soon)
         ↓
 [Pixel Mapping / Layout Transform]
         ↓
-[Bitplane Extraction (PIO-assisted)]
+[Bitplane Extraction (DMA and PIO-assisted)]
         ↓
 [Double Buffered Frame Buffer]
         ↓
@@ -381,7 +381,7 @@ As already remarked - with increasing "Basis Brightness" the BCM component becom
 
 ## Conclusion for DMA and PIO based Approach
 
-By offloading tasks to **DMA and PIO**, the revised HUB75 driver achieves **higher performance**, **simpler interrupt handling**, and **better synchronization**. This approach significantly reduces CPU overhead while eliminating artifacts like **ghosting** at high clock speeds.
+By offloading tasks to **DMA and PIO** the definitive HUB75 driver achieves **higher performance**, **simpler interrupt handling**, and **better synchronization**. Especially splitting RGB data into bitplanes **on demand** in a separate **DMA and PIO** step has contributed a great deal to this. It also eased the implementation of **Balanced Light Output**.  Overall, this approach has significantly reduced CPU overhead while simultaneously minimizing artifacts such as **ghosting** at high clock speeds.
 
 If you're interested in optimizing **RGB matrix panel drivers**, this implementation serves as a valuable reference for efficient DMA-based rendering.
 
@@ -461,7 +461,7 @@ The full colour pipeline works in two consecutive stages, each handling a distin
 
 ```
  8-bit input  ┌─────────────────────────────────────────┐  10-bit output
- R, G, B ───▶ │  Stage 1: CIE LUT + per-channel CAP    │ ──▶ rv, gv, bv
+ R, G, B ───▶ │  Stage 1: CIE LUT + per-channel CAP     │ ──▶ rv, gv, bv
               │  (baked into CIE_RED/GREEN/BLUE)        │
               └─────────────────────────────────────────┘
                                    │
@@ -550,13 +550,13 @@ The CCM is implemented as two macros in `hub75.hpp`, inserted directly after the
 
 // CCM_APPLY operates in-place on three uint32_t locals rv, gv, bv.
 // All cross-terms for a channel are accumulated first, then clamped once.
-#define CCM_APPLY(rv, gv, bv)                                          \
+#define CCM_APPLY(rv, gv, bv)                                           \
     do {                                                                \
-        uint32_t _r = (rv) + ((gv) >> CCM_RG_SHIFT)                    \
+        uint32_t _r = (rv) + ((gv) >> CCM_RG_SHIFT)                     \
                            + ((bv) >> CCM_RB_SHIFT);                    \
-        uint32_t _g = (gv) + ((rv) >> CCM_GR_SHIFT)                    \
+        uint32_t _g = (gv) + ((rv) >> CCM_GR_SHIFT)                     \
                            + ((bv) >> CCM_GB_SHIFT);                    \
-        uint32_t _b = (bv) + ((rv) >> CCM_BR_SHIFT)                    \
+        uint32_t _b = (bv) + ((rv) >> CCM_BR_SHIFT)                     \
                            + ((gv) >> CCM_BG_SHIFT);                    \
         (rv) = CCM_CLAMP(_r);                                           \
         (gv) = CCM_CLAMP(_g);                                           \
