@@ -742,7 +742,7 @@ static void setup_dma_transfers()
 
     // When pixel_chan has finished a complete frame (each row in each bitplane) has been emitted.
     // The pixel_ctrl_chan resets the start address of pixel_chan to dma_buffer.
-    dma_channel_configure(pixel_ctrl_chan, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan].read_addr, dma_buffer, 1, false);
+    dma_channel_configure(pixel_ctrl_chan, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan].read_addr, dma_buffer, dma_encode_transfer_count(1), false);
 
     constexpr float clkdiv = (SM_CLOCKDIV_FACTOR < 1.0f) ? 1.0f : SM_CLOCKDIV_FACTOR;
 

@@ -29,6 +29,7 @@
 #include "fire_effect.hpp"
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
+#include "grey_scale.hpp"
 
 static int demo_index = 0; ///< Example selector
 
@@ -85,7 +86,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 6)
+    if (++demo_index > 7)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -153,6 +154,8 @@ int main()
 
     PixelFill pixelFill = PixelFill(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
 
+    GreyScaleStripes greyScaleStripes = GreyScaleStripes(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
     add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
@@ -217,6 +220,11 @@ int main()
             // Image data is in r8, g8, b8 format
             pixelFill.fill(0, (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) - 1);
             update(&pixelFill);
+        }
+        else if (demo_index == 7)
+        {
+            greyScaleStripes.drawStripes();
+            update(&greyScaleStripes);
         }
 
         // matrix panel brightness will vary
