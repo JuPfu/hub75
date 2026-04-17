@@ -29,7 +29,7 @@
 #include "fire_effect.hpp"
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
-#include "grey_scale.hpp"
+#include "grey_scale_stripes.hpp"
 
 static int demo_index = 0; ///< Example selector
 
