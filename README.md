@@ -18,7 +18,7 @@
     - [High-Level Architectural View of HUB75 Pipeline](#high-level-architectural-view-of-hub75-pipeline)
     - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
       - [RGB Pixel Data Transformation into Bitplane Slices](#rgb-pixel-data-transformation-into-bitplane-slices)
-      - [Loading and Display of Pixel Data](#loading-and-display-of-pixel-data)
+      - [Row-Addressing, Loading and Display of Pixel Data](#row-addressing-loading-and-display-of-pixel-data)
     - [Refresh Rate Performance](#refresh-rate-performance)
     - [Key Benefits of this Approach](#key-benefits-of-this-approach)
   - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
@@ -35,7 +35,7 @@
     - [The `cie.py` LUT Generator](#the-ciepy-lut-generator)
     - [Tuning Procedure](#tuning-procedure)
       - [Step 1 — Establish a baseline](#step-1--establish-a-baseline)
-      - [Step 2 — Generate a grey-ramp test image](#step-2--generate-a-grey-ramp-test-image)
+      - [Step 2 — Use a grey-ramp test image](#step-2--use-a-grey-ramp-test-image)
       - [Step 3 — Tune one term at a time](#step-3--tune-one-term-at-a-time)
       - [Step 4 — Verify with saturated primaries](#step-4--verify-with-saturated-primaries)
       - [Step 5 — Check with a real image](#step-5--check-with-a-real-image)
@@ -329,9 +329,11 @@ The second DMA/PIO pipeline streams the bitplanes to the matrix panel.  Each row
 
 *Picture 4: Bitplane Creation Pipeline*
 
-#### Loading and Display of Pixel Data
+#### Row-Addressing, Loading and Display of Pixel Data
 
-ToDo
+<img src="assets/definitive_hub75_dma_pio_2.svg">
+
+*Picture 5: Row-Addressing, Pixel Loading and BCM*
 
 ### Refresh Rate Performance
 
@@ -381,7 +383,7 @@ As already remarked - with increasing "Basis Brightness" the BCM component becom
 
 ## Conclusion for DMA and PIO based Approach
 
-By offloading tasks to **DMA and PIO** the definitive HUB75 driver achieves **higher performance**, **simpler interrupt handling**, and **better synchronization**. Especially splitting RGB data into bitplanes **on demand** in a separate **DMA and PIO** step has contributed a great deal to this. It also eased the implementation of **Balanced Light Output**.  Overall, this approach has significantly reduced CPU overhead while simultaneously minimizing artifacts such as **ghosting** at high clock speeds.
+By offloading tasks to **DMA and PIO** the definitive HUB75 driver achieves **higher performance**, **simpler interrupt handling**, and **better synchronization**. Especially splitting RGB data into bitplanes **on demand** in a separate **DMA and PIO** step has contributed a great deal to this improvement. This separate step also eased the implementation of **Balanced Light Output**. Overall, this approach has significantly reduced CPU overhead while simultaneously minimizing artifacts such as **ghosting** at high clock speeds.
 
 If you're interested in optimizing **RGB matrix panel drivers**, this implementation serves as a valuable reference for efficient DMA-based rendering.
 
@@ -408,6 +410,13 @@ Without Balanced Light Output, the BCM sequence processes bitplanes 0–9 in a s
 ```c
 // Standard BCM — 10 steps
 static const uint8_t BCM_SEQUENCE[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+```
+
+A first step towards **Balanced Light Output** is the reordering of the bitplanes as is done in the current implementation when `BALANCED_LIGHT_OUTPUT` is set to `false`. This already has an effect to mitigate flicker by mixing long and short ON-periods.
+
+```c
+// Reordered BCM — 10 steps
+static const uint8_t BCM_SEQUENCE[] = { 0, 9, 2, 7, 4, 5, 1, 8, 3, 6 };
 ```
 
 Enabling `BALANCED_LIGHT_OUTPUT=true` in `CMakeLists.txt` produces a 14-step sequence instead. Bitplane 9 (highest weight) is split into **4 segments**, bitplane 8 into **2 segments** — all other bitplanes appear once:
@@ -687,20 +696,20 @@ Colour calibration follows a strict order: white-balance first, cross-channel co
 
 Set all six CCM shifts to `31` in `CMakeLists.txt` (or omit them entirely — `31` is the default). Rebuild and flash. This confirms that the output is identical to the pre-CCM state and gives you a known reference point.
 
-#### Step 2 — Generate a grey-ramp test image
+#### Step 2 — Use a grey-ramp test image
 
-Add a temporary grey-ramp effect to `hub75_demo.cpp`:
+A grey-ramp effect has been added to `hub75_demo.cpp`:
 
 ```cpp
 // Diagnostic grey ramp — equal R, G, B at every luminance level.
 // On a perfectly calibrated panel this ramp appears neutral grey
 // from black to white with no colour tint at any brightness.
-for (int y = 0; y < MATRIX_PANEL_HEIGHT; ++y) {
-    uint8_t grey = static_cast<uint8_t>((y * 255) / (MATRIX_PANEL_HEIGHT - 1));
-    for (int x = 0; x < MATRIX_PANEL_WIDTH; ++x) {
-        graphics->set_pixel({x, y}, {grey, grey, grey});
+    ...
+    else if (demo_index == 7)
+    {
+        greyScaleStripes.drawStripes();
+        update(&greyScaleStripes);
     }
-}
 ```
 
 Observe the ramp carefully:
