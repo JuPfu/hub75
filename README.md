@@ -26,6 +26,21 @@
     - [Balanced Light Output](#balanced-light-output)
       - [Example: 10-bit color depth (`BITPLANES=10`)](#example-10-bit-color-depth-bitplanes10)
       - [Visual comparison](#visual-comparison)
+  - [Colour Correction Matrix](#colour-correction-matrix)
+    - [Overview](#overview-1)
+    - [Two-Stage Colour Pipeline](#two-stage-colour-pipeline)
+    - [Mathematical Model](#mathematical-model)
+    - [Implementation](#implementation)
+    - [Configuration via `CMakeLists.txt`](#configuration-via-cmakeliststxt)
+    - [The `cie.py` LUT Generator](#the-ciepy-lut-generator)
+    - [Tuning Procedure](#tuning-procedure)
+      - [Step 1 — Establish a baseline](#step-1--establish-a-baseline)
+      - [Step 2 — Generate a grey-ramp test image](#step-2--generate-a-grey-ramp-test-image)
+      - [Step 3 — Tune one term at a time](#step-3--tune-one-term-at-a-time)
+      - [Step 4 — Verify with saturated primaries](#step-4--verify-with-saturated-primaries)
+      - [Step 5 — Check with a real image](#step-5--check-with-a-real-image)
+      - [Step 6 — Final white-balance trim](#step-6--final-white-balance-trim)
+    - [Runtime Cost](#runtime-cost)
   - [Brightness Control](#brightness-control)
     - [API Functions](#api-functions)
     - [How it Works](#how-it-works)
@@ -42,8 +57,8 @@
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
   - [Allowed Deviations  ](#allowed-deviations--)
     - [Example: Custom Pin Mapping](#example-custom-pin-mapping)
-- [Configuration via CMakeLists.txt](#configuration-via-cmakeliststxt)
-  - [Overview](#overview-1)
+- [Configuration via CMakeLists.txt](#configuration-via-cmakeliststxt-1)
+  - [Overview](#overview-2)
   - [All Available Defines and Their Default Values](#all-available-defines-and-their-default-values)
   - [Full CMakeLists.txt Example](#full-cmakeliststxt-example)
   - [Notes on Default Values](#notes-on-default-values)
@@ -424,6 +439,310 @@ Balanced Light Output (14 steps):
  ↑               ↑          ↑         ↑        ↑        ↑
  MSB segments spread evenly across the frame → no flicker
 ```
+
+
+## Colour Correction Matrix
+
+### Overview
+
+HUB75 LED matrix panels do not reproduce colour faithfully out of the box. Two independent sources of error contribute to inaccurate colour:
+
+**1. Per-channel luminance non-linearity** — already corrected by the [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/) baked into `CIE_RED`, `CIE_GREEN`, and `CIE_BLUE`. The per-channel white-balance scaling factors `RED_CAP`, `GREEN_CAP`, and `BLUE_CAP` in `cie.py` handle the remaining per-channel gain difference.
+
+**2. Spectral cross-channel bleed** — *not* corrected by the CIE LUTs. Real LEDs emit light across a broader spectrum than their nominal colour. A red LED radiates slightly into the orange-green range; a green LED dominates perceived brightness. The result is that neutral grey (`R = G = B`) appears tinted, saturated colours look shifted, and skin tones are rendered incorrectly.
+
+A **Colour Correction Matrix (CCM)** addresses this second source of error by mixing a small, controlled fraction of each channel's CIE-corrected output into its neighbours. This is the same technique used in professional LED processors and ICC display profiles.
+
+---
+
+### Two-Stage Colour Pipeline
+
+The full colour pipeline works in two consecutive stages, each handling a distinct correction:
+
+```
+ 8-bit input  ┌─────────────────────────────────────────┐  10-bit output
+ R, G, B ───▶ │  Stage 1: CIE LUT + per-channel CAP    │ ──▶ rv, gv, bv
+              │  (baked into CIE_RED/GREEN/BLUE)        │
+              └─────────────────────────────────────────┘
+                                   │
+                                   ▼
+              ┌─────────────────────────────────────────┐  10-bit output
+              │  Stage 2: CCM cross-channel mixing      │ ──▶ rv′, gv′, bv′
+              │  (additive, integer shift arithmetic)   │
+              └─────────────────────────────────────────┘
+                                   │
+                                   ▼
+                        32-bit packed pixel word
+                        (rv′ << 20) | (gv′ << 10) | bv′
+```
+
+The two stages are **orthogonal**: the CIE LUT correction and the `RED_CAP` / `GREEN_CAP` / `BLUE_CAP` scaling factors in `cie.py` remain completely unchanged when CCM is enabled. CCM operates on the already CIE- and CAP-corrected 10-bit values.
+
+---
+
+### Mathematical Model
+
+The CCM adds cross-channel contributions using a superposition model:
+
+```
+r′ = clamp( rv  +  (gv >> CCM_RG_SHIFT)  +  (bv >> CCM_RB_SHIFT) )
+g′ = clamp( gv  +  (rv >> CCM_GR_SHIFT)  +  (bv >> CCM_GB_SHIFT) )
+b′ = clamp( bv  +  (rv >> CCM_BR_SHIFT)  +  (gv >> CCM_BG_SHIFT) )
+```
+
+Each coefficient is expressed as an integer **right-shift amount**, which avoids floating-point arithmetic entirely. The equivalent fractional contribution is:
+
+| Shift value | Added fraction | Typical use |
+|:-----------:|:--------------:|:------------|
+| `5`  | ≈ 3.1 % | Strong correction |
+| `6`  | ≈ 1.6 % | Moderate correction |
+| `7`  | ≈ 0.8 % | Fine correction |
+| `8`  | ≈ 0.4 % | Very fine correction |
+| `9`  | ≈ 0.2 % | Barely perceptible |
+| `31` | = 0.0 % | **Disabled** (identity, no bleed) |
+
+Setting a shift to `31` disables that cross-term completely — a shift of 31 on a 10-bit value always produces zero. All six cross-terms default to `31`, so CCM is **off by default** and introduces no change to the output unless explicitly configured.
+
+---
+
+### Implementation
+
+The CCM is implemented as two macros in `hub75.hpp`, inserted directly after the `SEPARATE_CIE_CHANNELS` preprocessor block:
+
+```cpp
+// ---------------------------------------------------------------------------
+// Colour Correction Matrix (CCM) — cross-channel mixing
+//
+// Applied after the CIE LUT lookup, on already CAP-scaled 10-bit values.
+// All six cross-terms default to 31 (= disabled, adds zero contribution).
+//
+// Shift reference:  5 → ~3.1%   6 → ~1.6%   7 → ~0.8%   31 → 0% (off)
+// ---------------------------------------------------------------------------
+
+#ifndef CCM_RG_SHIFT
+#define CCM_RG_SHIFT 31   // fraction of Green added into Red
+#endif
+#ifndef CCM_RB_SHIFT
+#define CCM_RB_SHIFT 31   // fraction of Blue  added into Red
+#endif
+#ifndef CCM_GR_SHIFT
+#define CCM_GR_SHIFT 31   // fraction of Red   added into Green
+#endif
+#ifndef CCM_GB_SHIFT
+#define CCM_GB_SHIFT 31   // fraction of Blue  added into Green
+#endif
+#ifndef CCM_BR_SHIFT
+#define CCM_BR_SHIFT 31   // fraction of Red   added into Blue
+#endif
+#ifndef CCM_BG_SHIFT
+#define CCM_BG_SHIFT 31   // fraction of Green added into Blue
+#endif
+
+#if BITPLANES == 10
+#define CCM_MAX_VAL 1023u
+#elif BITPLANES == 8
+#define CCM_MAX_VAL 255u
+#endif
+
+// Branchless saturation — the compiler generates a single USAT or CMP+MOV
+// on Cortex-M0+ and M33; no branching, no pipeline stall.
+#define CCM_CLAMP(val) ((val) > CCM_MAX_VAL ? CCM_MAX_VAL : (val))
+
+// CCM_APPLY operates in-place on three uint32_t locals rv, gv, bv.
+// All cross-terms for a channel are accumulated first, then clamped once.
+#define CCM_APPLY(rv, gv, bv)                                          \
+    do {                                                                \
+        uint32_t _r = (rv) + ((gv) >> CCM_RG_SHIFT)                    \
+                           + ((bv) >> CCM_RB_SHIFT);                    \
+        uint32_t _g = (gv) + ((rv) >> CCM_GR_SHIFT)                    \
+                           + ((bv) >> CCM_GB_SHIFT);                    \
+        uint32_t _b = (bv) + ((rv) >> CCM_BR_SHIFT)                    \
+                           + ((gv) >> CCM_BG_SHIFT);                    \
+        (rv) = CCM_CLAMP(_r);                                           \
+        (gv) = CCM_CLAMP(_g);                                           \
+        (bv) = CCM_CLAMP(_b);                                           \
+    } while (0)
+```
+
+`CCM_APPLY` is inserted as a single additional line in both `pack_lut_rgb` and `pack_lut_rgb_` in `hub75.cpp`, immediately before the packed 32-bit word is assembled:
+
+```cpp
+// Before (without CCM):
+static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
+    uint32_t rv = CIE_RED[r];
+    uint32_t gv = CIE_GREEN[g];
+    uint32_t bv = CIE_BLUE[b];
+    return (rv << 20u) | (gv << 10u) | bv;
+}
+
+// After (with CCM — one line added):
+static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
+    uint32_t rv = CIE_RED[r];
+    uint32_t gv = CIE_GREEN[g];
+    uint32_t bv = CIE_BLUE[b];
+    CCM_APPLY(rv, gv, bv);                        // ← only change
+    return (rv << 20u) | (gv << 10u) | bv;
+}
+```
+
+Apply the same one-line change to the `pack_lut_rgb(uint32_t colour)` overload.
+
+> ⚠️ `CCM_APPLY` must be called **exactly once** per pixel. Both `pack_lut_rgb` and `pack_lut_rgb_` must be updated consistently.
+
+---
+
+### Configuration via `CMakeLists.txt`
+
+CCM is configured exclusively through `target_compile_definitions` — no source file edits are required beyond the one-line change to `pack_lut_rgb_`.
+
+```cmake
+target_compile_definitions(hub75 PRIVATE
+    # ... existing defines ...
+    SEPARATE_CIE_CHANNELS=true   # required — CCM needs per-channel LUTs
+
+    # Colour Correction Matrix cross-terms.
+    # Omitting a define leaves it at the default of 31 (= disabled).
+    CCM_RG_SHIFT=6               # ~1.6% of Green added into Red
+    CCM_GB_SHIFT=7               # ~0.8% of Blue  added into Green
+    # CCM_RB_SHIFT=31            # disabled
+    # CCM_GR_SHIFT=31            # disabled
+    # CCM_BR_SHIFT=31            # disabled
+    # CCM_BG_SHIFT=31            # disabled
+)
+```
+
+> ⚠️ CCM requires `SEPARATE_CIE_CHANNELS=true`. With `SEPARATE_CIE_CHANNELS=false` all three channels share a single `CIE` table and cross-channel mixing has no meaningful effect.
+
+---
+
+### The `cie.py` LUT Generator
+
+`cie.py` generates `CIE_RED`, `CIE_GREEN`, and `CIE_BLUE` from the CIE 1931 lightness formula and writes them to stdout as C array initialisers, ready to be pasted into `cie.hpp`.
+
+The per-channel scaling factors `RED_CAP`, `GREEN_CAP`, `BLUE_CAP` handle the white-balance gain difference between the three LED colours. They are independent of the CCM cross-terms and remain unchanged when CCM is configured.
+
+```python
+from sys import stdout
+
+TABLE_SIZE = 256
+# Target resolution — must match BITPLANES in CMakeLists.txt
+# 10-bit: RESOLUTION = 1024  (values 0 .. 1023)
+#  8-bit: RESOLUTION =  256  (values 0 ..  255)
+RESOLUTION = 1024
+
+# Per-channel white-balance gain (0.0 – 1.0).
+# These scale the peak output of each channel independently.
+# Reduce a channel that appears too bright on your specific panel.
+# These factors are baked into the LUT at generation time and are
+# completely independent of the CCM cross-terms configured in CMakeLists.txt.
+#
+# Example values for a typical warm HUB75 panel:
+#   RED_CAP   = 0.988  — red LEDs slightly over-bright; pull back by 1.2%
+#   GREEN_CAP = 1.000  — green channel used as reference
+#   BLUE_CAP  = 1.000  — blue channel at full range
+RED_CAP   = 0.988
+GREEN_CAP = 1.00
+BLUE_CAP  = 1.00
+
+def cie1931(L):
+    """CIE 1931 lightness function, input L in [0.0, 1.0], output in [0.0, 1.0]."""
+    L *= 100.0
+    if L <= 8:
+        return ((L + 16.0) / 116.0 - 4.0 / 29.0) * 3.0 * (6.0 / 29.0) ** 2
+    else:
+        return ((L + 16.0) / 116.0) ** 3
+
+def generate_table(name, cap):
+    """Generate one CIE_<name>[256] C array scaled by cap and RESOLUTION."""
+    x = range(0, TABLE_SIZE)
+    y = [cie1931(float(L) / (TABLE_SIZE - 1)) * (RESOLUTION - 1) * cap
+         for L in x]
+    stdout.write(f'static const uint16_t CIE_{name}[{TABLE_SIZE}] = {{')
+    for i, L in enumerate(y):
+        if i % 16 == 0:
+            stdout.write('\n    ')
+        stdout.write('% 5d,' % round(L))
+    stdout.write('\n};\n\n')
+
+generate_table("RED",   RED_CAP)
+generate_table("GREEN", GREEN_CAP)
+generate_table("BLUE",  BLUE_CAP)
+```
+
+Run from the project root and redirect output directly into `cie.hpp`:
+
+```bash
+python3 utils/cie.py > common/cie_tables.hpp
+```
+
+After editing `RED_CAP`, `GREEN_CAP`, or `BLUE_CAP`, re-run `cie.py` and rebuild. The CCM shifts in `CMakeLists.txt` are unaffected and do not require a re-run of `cie.py`.
+
+---
+
+### Tuning Procedure
+
+Colour calibration follows a strict order: white-balance first, cross-channel correction second. Mixing the two steps produces confusing interactions.
+
+#### Step 1 — Establish a baseline
+
+Set all six CCM shifts to `31` in `CMakeLists.txt` (or omit them entirely — `31` is the default). Rebuild and flash. This confirms that the output is identical to the pre-CCM state and gives you a known reference point.
+
+#### Step 2 — Generate a grey-ramp test image
+
+Add a temporary grey-ramp effect to `hub75_demo.cpp`:
+
+```cpp
+// Diagnostic grey ramp — equal R, G, B at every luminance level.
+// On a perfectly calibrated panel this ramp appears neutral grey
+// from black to white with no colour tint at any brightness.
+for (int y = 0; y < MATRIX_PANEL_HEIGHT; ++y) {
+    uint8_t grey = static_cast<uint8_t>((y * 255) / (MATRIX_PANEL_HEIGHT - 1));
+    for (int x = 0; x < MATRIX_PANEL_WIDTH; ++x) {
+        graphics->set_pixel({x, y}, {grey, grey, grey});
+    }
+}
+```
+
+Observe the ramp carefully:
+
+| Visible tint | Likely cause | First term to try |
+|:-------------|:-------------|:------------------|
+| Warm / orange-red cast | Green leaking into Red | `CCM_RG_SHIFT=6` |
+| Cool / blue-green cast | Blue leaking into Green | `CCM_GB_SHIFT=7` |
+| Red cast in bright areas | Blue leaking into Red | `CCM_RB_SHIFT=7` |
+| Green cast overall | Red leaking into Green | `CCM_GR_SHIFT=7` |
+| Yellow cast | Both Red and Green too high | Reduce `RED_CAP` in `cie.py` first |
+
+#### Step 3 — Tune one term at a time
+
+Enable only the single most visible cross-term and rebuild. Never change more than one shift value per build-flash-observe cycle. The following starting values work well for most common indoor HUB75 panels:
+
+```cmake
+CCM_RG_SHIFT=6    # ~1.6% Green → Red  (most panels need this)
+CCM_GB_SHIFT=7    # ~0.8% Blue  → Green
+```
+
+Each increment of the shift value **halves** the contribution. Each decrement **doubles** it. A shift of `5` (≈ 3.1%) is usually already too strong and risks a visible tint in the opposite direction.
+
+#### Step 4 — Verify with saturated primaries
+
+Display solid full-brightness red (`255, 0, 0`), green (`0, 255, 0`), and blue (`0, 0, 255`) in turn. Each primary should appear as a pure, uncontaminated hue. Then display the additive secondaries — yellow (`255, 255, 0`), cyan (`0, 255, 255`), magenta (`255, 0, 255`) — and verify they look balanced.
+
+#### Step 5 — Check with a real image
+
+Use a photographic test image containing known neutral greys, skin tones, and saturated colours. The grey areas should remain neutral; skin tones should appear natural; saturated hues should not appear shifted relative to the original.
+
+#### Step 6 — Final white-balance trim
+
+If a residual gain imbalance remains after CCM is set (e.g. pure white still looks faintly warm), adjust `RED_CAP`, `GREEN_CAP`, or `BLUE_CAP` in `cie.py`, regenerate the LUT tables, and rebuild. Do not use CCM cross-terms to compensate for a simple gain imbalance — that is the job of the CAP factors.
+
+---
+
+### Runtime Cost
+
+`CCM_APPLY` consists of six integer right-shifts, six integer additions, and three saturating comparisons. On the RP2040 (Cortex-M0+) and RP2350 (Cortex-M33) this amounts to approximately 8–10 additional clock cycles per pixel, executed only during `update()` or `update_bgr()`.
+
+For a 64 × 64 panel at 266 MHz the total overhead per `update()` call is approximately **0.12 µs** — completely negligible compared to the DMA and PIO transfer time.
 
 ## Brightness Control
 
@@ -1624,6 +1943,5 @@ My hardware repository of matrix panels which I used to develop the library (and
    line wise BCM
    
    Separate frame_buffer algorithm
-
 
 
