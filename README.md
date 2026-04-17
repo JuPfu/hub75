@@ -473,7 +473,7 @@ The full colour pipeline works in two consecutive stages, each handling a distin
                                    │
                                    ▼
                         32-bit packed pixel word
-                        (rv′ << 20) | (gv′ << 10) | bv′
+                        (bv′ << 20) | (gv′ << 10) | rv′
 ```
 
 The two stages are **orthogonal**: the CIE LUT correction and the `RED_CAP` / `GREEN_CAP` / `BLUE_CAP` scaling factors in `cie.py` remain completely unchanged when CCM is enabled. CCM operates on the already CIE- and CAP-corrected 10-bit values.
@@ -572,7 +572,7 @@ static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
     uint32_t rv = CIE_RED[r];
     uint32_t gv = CIE_GREEN[g];
     uint32_t bv = CIE_BLUE[b];
-    return (rv << 20u) | (gv << 10u) | bv;
+    return (bv << 20u) | (gv << 10u) | rv;
 }
 
 // After (with CCM — one line added):
@@ -580,8 +580,8 @@ static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
     uint32_t rv = CIE_RED[r];
     uint32_t gv = CIE_GREEN[g];
     uint32_t bv = CIE_BLUE[b];
-    CCM_APPLY(rv, gv, bv);                        // ← only change
-    return (rv << 20u) | (gv << 10u) | bv;
+    CCM_APPLY(rv, gv, bv);
+    return (bv << 20u) | (gv << 10u) | rv;
 }
 ```
 
