@@ -44,7 +44,7 @@ struct row_cmd_t
 
 } __attribute__((packed));
 
-constexpr uint32_t row_cmd_struct_members = sizeof(row_cmd_t)/sizeof(uint32_t);
+constexpr uint32_t row_cmd_struct_members = sizeof(row_cmd_t) / sizeof(uint32_t);
 
 row_cmd_t *row_cmd_buffer;
 row_cmd_t *row_cmd_buffer1;
@@ -205,7 +205,7 @@ static inline void hub75_timing_recompute(hub75_timing_config_t *cfg)
     cfg->oe_cycles = ns_to_pio_cycles(cfg->oe_ns, cfg->clk_sys_hz, cfg->clkdiv);
 }
 
-void hub75_set_timing_ns(hub75_timing_config_t *cfg, uint32_t latch_ns,uint32_t addr_ns, uint32_t oe_ns)
+void hub75_set_timing_ns(hub75_timing_config_t *cfg, uint32_t latch_ns, uint32_t addr_ns, uint32_t oe_ns)
 {
     cfg->latch_ns = latch_ns;
     cfg->addr_ns = addr_ns;
@@ -751,21 +751,23 @@ static void setup_dma_transfers()
 }
 
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
-static inline uint32_t pack_lut_rgb(uint32_t color)
+static inline uint32_t pack_lut_rgb(uint32_t colour)
 {
-    // Standardize: Blue = High (20), Green = Mid (10), Red = Low (0)
-    uint32_t r = CIE_RED[(color >> 16) & 0xFF];  // R from source (bits 16-23)
-    uint32_t g = CIE_GREEN[(color >> 8) & 0xFF]; // G from source (bits 8-15)
-    uint32_t b = CIE_BLUE[color & 0xFF];         // B from source (bits 0-7)
-
-    return ((b & 0x3FF) << 20) | ((g & 0x3FF) << 10) | (r & 0x3FF);
+    uint32_t rv = CIE_RED[(colour >> 16u) & 0xFFu];
+    uint32_t gv = CIE_GREEN[(colour >> 8u) & 0xFFu];
+    uint32_t bv = CIE_BLUE[colour & 0xFFu];
+    CCM_APPLY(rv, gv, bv);
+    return (bv << 20u) | (gv << 10u) | rv;
 }
 
 // Helper: apply LUT and pack into 30-bit RGB (10 bits per channel)
-static inline uint32_t pack_lut_rgb_(uint32_t r, uint32_t g, uint32_t b)
+static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b)
 {
-    // Standardize: Blue = High (20), Green = Mid (10), Red = Low (0)
-    return (CIE_BLUE[b] << 20) | (CIE_GREEN[g] << 10) | CIE_RED[r];
+    uint32_t rv = CIE_RED[r];
+    uint32_t gv = CIE_GREEN[g];
+    uint32_t bv = CIE_BLUE[b];
+    CCM_APPLY(rv, gv, bv);
+    return (bv << 20u) | (gv << 10u) | rv;
 }
 
 #if USE_PICO_GRAPHICS == true

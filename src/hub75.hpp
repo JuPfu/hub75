@@ -96,10 +96,88 @@
 #define CIE_BLUE CIE
 #endif
 
+// ---------------------------------------------------------------------------
+// Color Correction Matrix (CCM) — Cross-channel mixing
+//
+// Applied AFTER the CIE LUT lookup, on already CAP-scaled 10-bit values.
+// The diagonal (RED_CAP, GREEN_CAP, BLUE_CAP) is already baked into the LUTs.
+// These cross-terms correct for LED spectral bleed between channels.
+//
+// Each coefficient is expressed as a right-shift amount (integer, no floats):
+//   shift=0  → add 100% of source channel (too much, don't use)
+//   shift=5  → add  3.1% of source channel
+//   shift=6  → add  1.6% of source channel
+//   shift=7  → add  0.8% of source channel
+//   shift=8  → add  0.4% of source channel
+//   shift=9  → add  0.2% of source channel  (barely perceptible)
+//   shift=31 → add  0%   (disabled / identity, use this to turn off a term)
+//
+// Neutral (identity) setting: all cross-shifts = 31 (adds nothing).
+// Typical starting point for warm LED panels:
+//   CCM_RG_SHIFT 6   — add ~1.6% of Green into Red   (warm tint correction)
+//   CCM_GB_SHIFT 7   — add ~0.8% of Blue into Green  (cool tint correction)
+//   CCM_BR_SHIFT 31  — Blue channel unchanged
+//
+// To disable CCM entirely: set all three shifts to 31.
+// ---------------------------------------------------------------------------
+
+#ifndef CCM_RG_SHIFT
+#define CCM_RG_SHIFT 31 // bits of Green added into Red output   (31 = off)
+#endif
+#ifndef CCM_RB_SHIFT
+#define CCM_RB_SHIFT 31 // bits of Blue  added into Red output   (31 = off)
+#endif
+#ifndef CCM_GR_SHIFT
+#define CCM_GR_SHIFT 31 // bits of Red   added into Green output (31 = off)
+#endif
+#ifndef CCM_GB_SHIFT
+#define CCM_GB_SHIFT 31 // bits of Blue  added into Green output (31 = off)
+#endif
+#ifndef CCM_BR_SHIFT
+#define CCM_BR_SHIFT 31 // bits of Red   added into Blue output  (31 = off)
+#endif
+#ifndef CCM_BG_SHIFT
+#define CCM_BG_SHIFT 31 // bits of Green added into Blue output  (31 = off)
+#endif
+
+// Maximum output value for clamping (depends on BITPLANES)
+#if BITPLANES == 10
+#define CCM_MAX_VAL 1023u
+#elif BITPLANES == 8
+#define CCM_MAX_VAL 255u
+#endif
+
+// CCM_CLAMP: saturate at CCM_MAX_VAL without branching
+// Uses the fact that if (a + b) overflows CCM_MAX_VAL, we cap to CCM_MAX_VAL.
+// Implemented as: min(a + b, CCM_MAX_VAL) via conditional expression.
+// On RP2040/RP2350 the compiler generates a single USAT or CMP+MOV — no branch.
+#define CCM_CLAMP(val) ((val) > CCM_MAX_VAL ? CCM_MAX_VAL : (val))
+
+// CCM_APPLY: full cross-channel mixing on already-LUT-mapped 10-bit values.
+// rv, gv, bv must be uint32_t locals holding the LUT output (0..CCM_MAX_VAL).
+// Result is written back into rv, gv, bv.
+//
+// The cross-terms are purely additive (superposition model):
+//   r_out = r + (g >> RG_SHIFT) + (b >> RB_SHIFT)
+//   g_out = g + (r >> GR_SHIFT) + (b >> GB_SHIFT)
+//   b_out = b + (r >> BR_SHIFT) + (g >> BG_SHIFT)
+//
+// Addition order: first combine all cross-terms per channel, then clamp once.
+// This avoids multiple clamp calls and is branch-prediction friendly.
+#define CCM_APPLY(rv, gv, bv)                                                 \
+    do                                                                        \
+    {                                                                         \
+        uint32_t _r = (rv) + ((gv) >> CCM_RG_SHIFT) + ((bv) >> CCM_RB_SHIFT); \
+        uint32_t _g = (gv) + ((rv) >> CCM_GR_SHIFT) + ((bv) >> CCM_GB_SHIFT); \
+        uint32_t _b = (bv) + ((rv) >> CCM_BR_SHIFT) + ((gv) >> CCM_BG_SHIFT); \
+        (rv) = CCM_CLAMP(_r);                                                 \
+        (gv) = CCM_CLAMP(_g);                                                 \
+        (bv) = CCM_CLAMP(_b);                                                 \
+    } while (0)
+
 #ifndef BITPLANES
 #define BITPLANES 10 // default
 #endif
-
 
 // Balanced Light Output
 // High-weight bit-planes are split into multiple smaller slices within the BCM sequence.
@@ -161,7 +239,7 @@ namespace PanelConfig
 
     // The number of address lines (A, B, C...) defines the multiplexing depth
     constexpr uint32_t ADDR_PINS = ROWSEL_N_PINS;
-    constexpr uint32_t ADDR_MASK =  (1 << ADDR_PINS) - 1;
+    constexpr uint32_t ADDR_MASK = (1 << ADDR_PINS) - 1;
 
     // How many unique binary addresses are sent to the panel
     // This is the value your DMA loop for 'row_cmd' should iterate over.
@@ -189,4 +267,3 @@ void update(PicoGraphics const *graphics);
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);
 void setIntensity(float intensity, bool linear_brightness_control);
-
