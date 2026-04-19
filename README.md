@@ -594,10 +594,6 @@ static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
 }
 ```
 
-Apply the same one-line change to the `pack_lut_rgb(uint32_t colour)` overload.
-
-> ⚠️ `CCM_APPLY` must be called **exactly once** per pixel. Both `pack_lut_rgb` and `pack_lut_rgb_` must be updated consistently.
-
 ---
 
 ### Configuration via `CMakeLists.txt`
