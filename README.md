@@ -274,29 +274,24 @@ The following diagram illustrates the interactions between **DMA channels** and 
 
 ### Overview of the Redesigned Alternative Approach
 
-A (nearly) complete rework of the DMA/PIO pipeline has been done. In doing so, I also removed some features, such as temporal dithering, and added new ones, such as Balanced Light Output and hopefully have correctly implemented **[board707´s](https://github.com/board707)** suggestion of parallel loading of data.
+A (nearly) complete rework of the DMA/PIO pipeline has been done. In this context, I removed some features, such as temporal dithering, and added new ones, such as **Balanced Light Output** and did implement **[board707´s](https://github.com/board707)** suggestion of parallel loading of data while BCM is running.
 
-In addition to **[Pimoroni’s anti-ghosting](https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf)**, a “cooling-off period” for the line decoder has been incorporated after the address is set. The matrix panels available to me show no ghosting, no flickering, and no glimmering of pixels at the edges of the matrix even in dark environments.
+In addition to **[Pimoroni’s anti-ghosting](https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf)**, a “cooling-off period” for the line decoder has been incorporated after the address is set. Precise timing values in nano-seconds can be specified via compile time definitions in CMakeLists.txt. This applies to the the wait time to stabilise latch, the wait time to stabilise row addressing, and pre-Oe guard wait time to prevent ghost flashes. The matrix panels available to me show no ghosting, no flickering, and no glimmering of pixels at the edges of the matrix even in dark environments.
 
-The output quality has improved due to the usage of Balanced Light Output (can be enabled or disabled via define). That is, bit planes with high weight are divided into several smaller segments within the BCM sequence. This increases the effective refresh rate and reduces flickering.
+The output quality has improved due to the usage of Balanced Light Output. That is, bit planes with high weight are divided into several smaller segments within the BCM sequence. This increases the effective refresh rate and reduces flickering.
 
-The DMA/PIO pipeline has been completely revised. The Hub75 driver runs with almost no CPU involvement. There is an interrupt handler that is called once per frame. This interrupt handler is responsible for double-buffering (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called.
+An interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. At the end of the update() and update_bgr() methods the bitplane slices are constructed heavily relying on DMA and PIO support. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient manner.
 
-A second interrupt handler is used to support the conversion of rgb pixel data into bitplane slices. An interrupt handler is used to setup bitplanes on demand. After a call to update() or update_bgr() the bitplane slices are constructed heavily relying on DMA and PIO support. This is in stark contrast to the previous version where this had been done on the fly for every frame. The result is a stream of bitplane slices pushed to the matrix panel in a highly efficient manner.
-
-Overall, performance has improved even further. In summary, the following factors are responsible for this:
-
-- First, loading of pixel data (bitplanes) and Binary Coded Modulation (BCM) are done in parallel as proposed by **[board707](https://github.com/board707)**
-- Second, pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel
-
-The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provides any (significant) speedup.
-
-The revised driver requires slightly more memory resources to achieve the improved quality. I am using “defines” to disable certain (new) functionalities and thus make more memory available for applications.
+Another interrupt handler is called once per frame. This interrupt handler is responsible for double-buffer administration (pointer switching) of the frame_buffer and double-buffering of the row_cmd_buffer. Both buffers are switched only when necessary. The row_cmd_buffer only when a brightness change has been made, and the frame_buffer when update or update_bgr is called.
 
 ### High-Level Architectural View of HUB75 Pipeline
 
 ```
-[Input 8-bit RGB]
+CPU part
+
+[Input 8-bit RGB via update(...) or update_bgr(...) method]
+        ↓
+[Double Buffered Frame Buffer]
         ↓
 [CIE → 12-bit or 10-bit linear light]
         ↓
@@ -304,11 +299,11 @@ The revised driver requires slightly more memory resources to achieve the improv
         ↓
 [Pixel Mapping / Layout Transform]
         ↓
-[Bitplane Extraction (DMA and PIO-assisted)]
+DMA & PIO part
+
+[Bitplane Extraction Engine (DMA- and PIO-based with a bitplane sequence optimised for the balanced light output strategy)]
         ↓
-[Double Buffered Frame Buffer]
-        ↓
-[Row Engine (OE / LAT / ADDR)] ← → [DMA → PIO Bitplane Stream using the Balanced Light Output strategy]
+[DMA → PIO Row Engine (OE / LAT / ADDR)] ← → [DMA → PIO Engine for bitplane row streaming]
         ↓
 [Matrix Panel]
 ```
@@ -367,7 +362,14 @@ Here some more relevant settings if you want to repeat the measurements and veri
 
 These results demonstrate stable operation and high-performance display rendering across a wide range of system clocks.
 
-As already remarked - with increasing "Basis Brightness" the BCM component becomes dominant. Even parallel loading of pixel data and the provision in a bit-plane structure no longer provides any (significant) speedup at high brightness values.
+Overall, performance has improved compared to the predecessor versions. In summary, the following factors are responsible for this:
+
+- pixel data are provided in a bitplane structure and only need to be streamed to the matrix panel
+- loading of pixel data (bitplanes) and Binary Coded Modulation (BCM) are done in parallel as proposed by **[board707](https://github.com/board707)**
+
+The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provides any (significant) speedup.
+
+The revised driver requires slightly more memory resources to achieve the improved quality. I am using “defines” to disable certain (new) functionalities and thus make more memory available for applications.
 
 ### Key Benefits of this Approach
 
