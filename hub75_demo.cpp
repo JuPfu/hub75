@@ -15,7 +15,9 @@
 #endif
 
 // Example images
-#if MATRIX_PANEL_HEIGHT == 64
+#if MATRIX_PANEL_WIDTH == 128
+#include "taylor_swift_128x64.h"
+#elif MATRIX_PANEL_HEIGHT == 64
 #include "taylor_swift_64x64.h"
 #else
 #include "matreshka_32x16.h"
@@ -86,9 +88,9 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 7)
+    if (++demo_index > 2)
     {
-        demo_index = 0; // Cycle through all examples
+        demo_index = 2; // Cycle through all examples
     }
     return true;
 }
@@ -193,9 +195,11 @@ int main()
         {
             // Taylor Swift - image data is in b8, g8, r8 format
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-#if MATRIX_PANEL_HEIGHT == 64
-            update_bgr(taylor_swift_64x64);
-#else
+#if MATRIX_PANEL_WIDTH == 128 && MATRIX_PANEL_HEIGHT == 64
+            update_bgr(taylor_swift_128x64);
+#elif MATRIX_PANEL_HEIGHT == 64 && MATRIX_PANEL_WIDTH == 64
+            update_bgr(taylor_swift_64x64); 
+#elif MATRIX_PANEL_HEIGHT == 16 && MATRIX_PANEL_WIDTH == 32
             update_bgr(matreshka_32x16);
 #endif
         }
@@ -227,7 +231,7 @@ int main()
             update(&greyScaleStripes);
         }
 
-        // matrix panel brightness will vary
+        // matrix panel brightness will vary when you uncomment the following api call
         // setIntensity(intensity);
 
         // Update intensity for next loop
