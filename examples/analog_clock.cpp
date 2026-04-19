@@ -92,10 +92,10 @@ public:
             set_pen(clock_digits);
 
 #if MATRIX_PANEL_WIDTH > 32
-            text("12", Point(l / 2 - 7, 1), false, 0.5f, 0.0, false);
-            text("3", Point(l - 8, l / 2 - 7), false, 0.5f, 0.0, false);
-            text("6", Point(l / 2 - 2, l - 14), false, 0.5f, 0.0, false);
-            text("9", Point(1, l / 2 - 7), false, 0.5f, 0.0, false);
+            text("12", Point(w / 2 - 7, 1), false, 0.5f, 0.0, false);
+            text("3", Point(w / 2 + r - 8, h / 2 - 7), false, 0.5f, 0.0, false);
+            text("6", Point(w / 2 - 3, l - 14), false, 0.5f, 0.0, false);
+            text("9", Point(w / 2 - r + 4, h / 2 - 7), false, 0.5f, 0.0, false);
 #endif
 
             for (auto i = 0; i < 12; i++)

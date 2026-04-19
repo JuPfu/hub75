@@ -15,10 +15,6 @@ public:
         : PicoGraphics_PenRGB888(width, height, nullptr), width(width), height(height)
     {
         heat = new float[width * height](); // Allocate memory and zero-initialize
-        if (width > height)
-        {
-            landscape = false;
-        }
     }
 
     ~FireEffect()
