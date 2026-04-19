@@ -135,11 +135,11 @@ For details on Binary Coded Modulation (BCM), see **[LED Dimming Using Binary Co
 
 A (nearly) complete rework of the DMA/PIO pipeline has been done. Once started, the HUB75 driver runs almost entirely in hardware — the CPU is barely involved.
 
-Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to the `frame_buffer`. After each bitplane has been built, the only CPU invocation takes place within a tiny interrupt handler to set up the next bitplane.
+The two step process can be outlined as follows:
 
-Those pre-built bitplanes in `frame_buffer` are streamed to the matrix panel without any transformation via a second DMA/PIO pipeline — no CPU involved.
+1. Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to the `frame_buffer`. After each bitplane has been built, the only CPU invocation takes place within a tiny interrupt handler which modifies the PIO program **hub75_bitplane_setup** for the next bitplane. The bitplanes are created in a sequence which implements the balanced light output strategy.
 
-Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. The `row_cmd_buffer` holds pre-calculated lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front buffer continues to be consumed uninterrupted.
+2. The pre-built bitplanes in `frame_buffer` are then streamed to the matrix panel without any transformation via a second DMA/PIO pipeline. Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. Swapping is done in a small interrupt handler. The `row_cmd_buffer` holds lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front buffer continues to be consumed uninterrupted.
 
 ## Achievements of the Revised Driver
 
@@ -148,25 +148,27 @@ The modifications to the Pimoroni HUB75 driver result in the following improveme
 - **Offloading Work**: Moves processing from the CPU to DMA and PIO co-processors.
 - **Performance Boost**: Implements self-paced, interlinked DMA and PIO processes.
 - **Eliminates Synchronization Delays**: No need for `hub75_wait_tx_stall`, removing blocking synchronization.
-- **Optimized Interrupt Handling**: Reduces code complexity in the interrupt handler.
+- **Optimized Interrupt Handling**: Reduces code complexity in the interrupt handlers.
 
-These enhancements lead to significant performance improvements. In tests up to a **250 MHz system clock**, no ghost images were observed.
+These enhancements lead to significant performance improvements.
 
 ---
 
 ## Motivation
 
-As part of a private project, I sought to gain deeper knowledge of the Raspberry Pi Pico microcontroller. I highly recommend **[Raspberry Pi Pico Lectures 2022 by Hunter Adams](https://youtu.be/CAMTBzPd-WI?feature=shared)**—they provide excellent insights!
-
+As part of a private project, I sought to gain deeper knowledge of the Raspberry Pi Pico microcontroller.
+I highly recommend **[Raspberry Pi Pico Lectures 2022 by Hunter Adams](https://youtu.be/CAMTBzPd-WI?feature=shared)**—they provide excellent insights!
 If you are specifically interested in **PIO (Programmable Input/Output)**, start with [Lecture 14: Introducing PIO](https://youtu.be/BVdaw56Ln8s?feature=shared) and [Lecture 15: PIO Overview and Examples](https://youtu.be/wet9CYpKZOQ).
 
-Inspired by Adams' discussion on **[DMA](https://youtu.be/TGjUHChO1kM?feature=shared&t=1475) and PIO co-processors**, I optimized the HUB75 driver as a self-assigned challenge.
+Inspired by Adams' discussion on **[DMA](https://youtu.be/TGjUHChO1kM?feature=shared&t=1475) and PIO co-processors**, I choose to optimise the Hub75 driver as a self-assigned challenge.
 
 😊 **[Raspberry Pi Pico Lectures 2025 by Hunter Adams](https://youtu.be/a4uLrfqHZQU?feature=shared")** is available now!
 
 ---
 
 ## Evolution of Pico HUB75 Drivers
+
+You can skip straight to [The Definitive Hub75 Driver Solution](https://github.com/JuPfu/hub75#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data) if the evolution of the driver is not your thing.
 
 ### Raspberry Pi Pico HUB75 Example
 
@@ -300,19 +302,15 @@ The revised driver requires slightly more memory resources to achieve the improv
         ↓
 [Color Correction Matrix (per channel)]
         ↓
-[Temporal + Spatial Dithering → 10-bit]  (will be revived soon)
-        ↓
 [Pixel Mapping / Layout Transform]
         ↓
 [Bitplane Extraction (DMA and PIO-assisted)]
         ↓
 [Double Buffered Frame Buffer]
         ↓
-[DMA → PIO Stream]
+[Row Engine (OE / LAT / ADDR)] ← → [DMA → PIO Bitplane Stream using the Balanced Light Output strategy]
         ↓
-[Row Engine (OE / LAT / ADDR timing)]
-        ↓
-[Panel]
+[Matrix Panel]
 ```
 
 ### Step-by-Step Breakdown of DMA and PIO Cooperation
