@@ -619,65 +619,17 @@ target_compile_definitions(hub75 PRIVATE
 
 ### The `cie.py` LUT Generator
 
-`cie.py` generates `CIE_RED`, `CIE_GREEN`, and `CIE_BLUE` from the CIE 1931 lightness formula and writes them to stdout as C array initialisers, ready to be pasted into `cie.hpp`.
+`cie.py` generates `cie.hpp`.
 
 The per-channel scaling factors `RED_CAP`, `GREEN_CAP`, `BLUE_CAP` handle the white-balance gain difference between the three LED colours. They are independent of the CCM cross-terms and remain unchanged when CCM is configured.
-
-```python
-from sys import stdout
-
-TABLE_SIZE = 256
-# Target resolution — must match BITPLANES in CMakeLists.txt
-# 10-bit: RESOLUTION = 1024  (values 0 .. 1023)
-#  8-bit: RESOLUTION =  256  (values 0 ..  255)
-RESOLUTION = 1024
-
-# Per-channel white-balance gain (0.0 – 1.0).
-# These scale the peak output of each channel independently.
-# Reduce a channel that appears too bright on your specific panel.
-# These factors are baked into the LUT at generation time and are
-# completely independent of the CCM cross-terms configured in CMakeLists.txt.
-#
-# Example values for a typical warm HUB75 panel:
-#   RED_CAP   = 0.988  — red LEDs slightly over-bright; pull back by 1.2%
-#   GREEN_CAP = 1.000  — green channel used as reference
-#   BLUE_CAP  = 1.000  — blue channel at full range
-RED_CAP   = 0.988
-GREEN_CAP = 1.00
-BLUE_CAP  = 1.00
-
-def cie1931(L):
-    """CIE 1931 lightness function, input L in [0.0, 1.0], output in [0.0, 1.0]."""
-    L *= 100.0
-    if L <= 8:
-        return ((L + 16.0) / 116.0 - 4.0 / 29.0) * 3.0 * (6.0 / 29.0) ** 2
-    else:
-        return ((L + 16.0) / 116.0) ** 3
-
-def generate_table(name, cap):
-    """Generate one CIE_<name>[256] C array scaled by cap and RESOLUTION."""
-    x = range(0, TABLE_SIZE)
-    y = [cie1931(float(L) / (TABLE_SIZE - 1)) * (RESOLUTION - 1) * cap
-         for L in x]
-    stdout.write(f'static const uint16_t CIE_{name}[{TABLE_SIZE}] = {{')
-    for i, L in enumerate(y):
-        if i % 16 == 0:
-            stdout.write('\n    ')
-        stdout.write('% 5d,' % round(L))
-    stdout.write('\n};\n\n')
-
-generate_table("RED",   RED_CAP)
-generate_table("GREEN", GREEN_CAP)
-generate_table("BLUE",  BLUE_CAP)
-```
 
 Run from the project root and redirect output directly into `cie.hpp`:
 
 ```bash
-python3 utils/cie.py > common/cie_tables.hpp
+python3 utils/cie.py > cie.hpp
 ```
 
-After editing `RED_CAP`, `GREEN_CAP`, or `BLUE_CAP`, re-run `cie.py` and rebuild. The CCM shifts in `CMakeLists.txt` are unaffected and do not require a re-run of `cie.py`.
+The CCM shifts in `CMakeLists.txt` are unaffected and do not require a re-run of `cie.py`.
 
 ---
 
