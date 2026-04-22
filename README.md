@@ -76,7 +76,6 @@
     - [How to choose](#how-to-choose)
   - [Step 5 — Strobe Polarity (`INVERTED_STB`)](#step-5--strobe-polarity-inverted_stb)
   - [Step 6 — State Machine Clock Divider (`SM_CLOCKDIV`)](#step-6--state-machine-clock-divider-sm_clockdiv)
-  - [Step 8 — Temporal Dithering (Optional)](#step-8--temporal-dithering-optional)
     - [Pixel Mapping](#pixel-mapping)
       - [How Pixel Mapping Works (General Idea)](#how-pixel-mapping-works-general-idea)
     - [Practical Notes](#practical-notes-1)
@@ -97,8 +96,6 @@
   - [6. Colors Look Wrong or Are Too Dim / Too Bright](#6-colors-look-wrong-or-are-too-dim--too-bright)
     - [Check](#check-1)
     - [How to verify](#how-to-verify)
-  - [7. Problems While Using TEMPORAL\_DITHERING](#7-problems-while-using-temporal_dithering)
-    - [If you see:](#if-you-see)
   - [8. When Nothing Makes Sense Anymore 😄](#8-when-nothing-makes-sense-anymore-)
   - [Major Architectural Overhaul: Decoupled DMA \& PIO Pipeline](#major-architectural-overhaul-decoupled-dma--pio-pipeline)
     - [1. Canonical Mapping Stage (`update()` / `update_bgr()`)](#1-canonical-mapping-stage-update--update_bgr)
@@ -137,9 +134,9 @@ A (nearly) complete rework of the DMA/PIO pipeline has been done. Once started, 
 
 The two step process can be outlined as follows:
 
-1. Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to the `frame_buffer`. After each bitplane has been built, the only CPU invocation takes place within a tiny interrupt handler which modifies the PIO program **hub75_bitplane_setup** for the next bitplane. The bitplanes are created in a sequence which implements the balanced light output strategy.
+1. Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to `frame_buffer`. After a bitplane has been built, a CPU invocation takes place within a tiny interrupt handler which modifies the PIO program **hub75_bitplane_setup** for the next bitplane. The bitplanes are created in a sequence which implements the balanced light output strategy.
 
-2. The pre-built bitplanes in `frame_buffer` are then streamed to the matrix panel without any transformation via a second DMA/PIO pipeline. Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. Swapping is done in a small interrupt handler. The `row_cmd_buffer` holds lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front buffer continues to be consumed uninterrupted.
+2. The pre-built bitplanes in `frame_buffer` are streamed to the matrix panel via a second DMA/PIO pipeline. Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. Swapping is done in a small interrupt handler. The `row_cmd_buffer` holds lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front brightness buffer continues to be consumed uninterrupted.
 
 ## Achievements of the Revised Driver
 
@@ -287,7 +284,7 @@ Another interrupt handler is called once per frame. This interrupt handler is re
 ### High-Level Architectural View of HUB75 Pipeline
 
 ```
-CPU part
+CPU part - usually done in 60Hz or 100Hz frequency
 
 [Input 8-bit RGB via update(...) or update_bgr(...) method]
         ↓
@@ -299,7 +296,7 @@ CPU part
         ↓
 [Pixel Mapping / Layout Transform]
         ↓
-DMA & PIO part
+DMA & PIO part - usually runs at much higher frequency than the CPU part
 
 [Bitplane Extraction Engine (DMA- and PIO-based with a bitplane sequence optimised for the balanced light output strategy)]
         ↓
@@ -801,7 +798,7 @@ This corresponds to the same brightness as earlier driver revisions without adju
 
 ## Demo Effects
 
-⚠️ The examples contained in hub75_lvgl.cpp have been tested with a Raspberry Pi Pico 2 microcontroller (RP2350). For a RP2040 processor you might have to comment out some demo effects due to minor memory capabilities. Ask if you need support 🙂.
+⚠️ The examples contained in hub75_demo.cpp have been tested with a Raspberry Pi Pico 2 microcontroller (RP2350). For a RP2040 processor you might have to comment out some demo effects due to minor memory capabilities. Ask if you need support 🙂.
 
 ## How to Use This Project in VSCode
 
@@ -986,11 +983,15 @@ The table below lists every configurable preprocessor define, its **default valu
 | `OEN_PIN` | `13` | GPIO pin for the output enable signal (OE). |
 | `PANEL_TYPE` | `PANEL_GENERIC` | Driver IC initialisation type. Valid values: `PANEL_GENERIC`, `PANEL_FM6126A`, `PANEL_RUL6024`. |
 | `INVERTED_STB` | `false` | Set to `true` if the latch (strobe) signal is inverted on your board. |
-| `TEMPORAL_DITHERING` | `false`  | Define to enable experimental temporal dithering for increased perceived colour depth (≈ 12 bits per channel). |
 | `SM_CLOCKDIV_FACTOR` | `1.0f` | PIO state machine clock divider factor. Values > 1.0 slow down the state machine. Useful to reduce ghosting or flickering on smaller panels. |
 | `BITPLANES` | `10` | Number of bit-planes used for BCM (Binary Code Modulation). Valid values: `8` or `10`. |
 | `BALANCED_LIGHT_OUTPUT`| `true`|  Allthough it uses some more memory it improves effective refresh rate and really cuts down flicker. |
 | `SEPARATE_CIE_CHANNELS`| `true` |  Use separate CIE channels for improved colour representation - needs more memory. |
+| `CCM_RG_SHIFT` | `6` | CCM Cross-channel mixing - mix ~1.6% green into the red channel. |
+| `CCM_GB_SHIFT`| `7` |  CCM Cross-channel mixing - mix ~0.8% blue into the green channel. |
+| `BASE_LATCH_NS` | `80` | Wait time in nano-seconds to stabilise latch. |
+| `BASE_ADDR_NS` | `120` | Wait time in nano-seconds to stabilise row addressing. |
+| `BASE_OE_NS` | `40` | Pre-Oe guard wait time in nano-seconds (prevents ghost flashes). |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
 | `FRAME_RATE` | `false` | For testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production. |
 
@@ -1446,39 +1447,6 @@ Some panels benefit from a slower clock to reduce:
 
 ---
 
-## Step 8 — Temporal Dithering (Optional)
-
-> ⚠️ TEMPORAL_DITHERING is experimental - development is still in progress!
-
-To activate TEMPORAL_DITHERING switch from 
-
-```cpp
-#define TEMPORAL_DITHERING false
-```
-
-to
-
-```cpp
-#define TEMPORAL_DITHERING true
-```
-
-
-**Use it if:**
-
-* you want smoother gradients
-* you accept slightly higher CPU usage
-
-**Do not use it if:**
-
-* you need maximum refresh stability
-* you are debugging mapping issues
-
-> This feature is experimental!
-
----
-
-
-
 ### Pixel Mapping
 
 Each panel type has it's own pixel mapping. 
@@ -1788,26 +1756,6 @@ If the panel contains an FM6126A or RUL6024 chip and is not initialized correctl
 
 ---
 
-## 7. Problems While Using TEMPORAL_DITHERING
-
-Temporal dithering increases perceived color depth but also increases complexity.
-
-### If you see:
-
-* flicker
-* unstable brightness
-* strange artifacts
-
-Disable it first:
-
-```cpp
-#define TEMPORAL_DITHERING false
-```
-
-> ⚠️ Always debug **mapping and scan issues first**, then enable temporal dithering later.
-
----
-
 ## 8. When Nothing Makes Sense Anymore 😄
 
 Follow this **minimal recovery procedure**:
@@ -1817,7 +1765,6 @@ Follow this **minimal recovery procedure**:
    ```cpp
    #define HUB75_MULTIPLEX_2_ROWS
    #define PANEL_TYPE PANEL_GENERIC
-   #define TEMPORAL_DITHERING false
    ```
 
 2. Verify:
