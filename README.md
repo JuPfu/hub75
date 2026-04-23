@@ -1,7 +1,6 @@
 - [HUB75 DMA-Based Driver](#hub75-dma-based-driver)
   - [Documentation and References](#documentation-and-references)
   - [Hub75 Matrix Panel Driver Version 3.0](#hub75-matrix-panel-driver-version-30)
-    - [A Short Overview](#a-short-overview)
   - [Achievements at a Glance](#achievements-at-a-glance)
     - [Version 2 — DMA/PIO Pipeline](#version-2--dmapio-pipeline)
     - [Version 3.0 — Colour Fidelity \& Signal Integrity](#version-30--colour-fidelity--signal-integrity)
@@ -78,13 +77,16 @@
       - [Panel with 64×64 height and width, 1/32 scan (-32S-), 5 Address lines (A, B, C, D, E) -\> (2 rows lit)](#panel-with-6464-height-and-width-132-scan--32s--5-address-lines-a-b-c-d-e---2-rows-lit)
       - [Panel with 32×64 height and width, 1/16 scan (-16S-), 4 Address lines (A, B, C, D) -\> (2 rows lit)](#panel-with-3264-height-and-width-116-scan--16s--4-address-lines-a-b-c-d---2-rows-lit)
   - [Step 3 — Panel Pixel Mapping Type](#step-3--panel-pixel-mapping-type)
-    - [How to Configure](#how-to-configure)
+    - [Configuration Examples](#configuration-examples)
   - [Step 4 — Panel Driver Chip Type](#step-4--panel-driver-chip-type)
     - [How to choose](#how-to-choose)
   - [Step 5 — Strobe Polarity (`INVERTED_STB`)](#step-5--strobe-polarity-inverted_stb)
   - [Step 6 — State Machine Clock Divider (`SM_CLOCKDIV`)](#step-6--state-machine-clock-divider-sm_clockdiv)
     - [Pixel Mapping](#pixel-mapping)
       - [How Pixel Mapping Works (General Idea)](#how-pixel-mapping-works-general-idea)
+      - [`HUB75_MULTIPLEX_2_ROWS` Mapping](#hub75_multiplex_2_rows-mapping)
+      - [`HUB75_P10_3535_16X32_4S` Mapping](#hub75_p10_3535_16x32_4s-mapping)
+      - [`HUB75_P3_1415_16S_64X64_S31` Mapping](#hub75_p3_1415_16s_64x64_s31-mapping)
     - [Practical Notes](#practical-notes-1)
 - [Troubleshooting](#troubleshooting)
   - [1. Panel Stays Completely Dark](#1-panel-stays-completely-dark)
@@ -103,9 +105,9 @@
   - [6. Colors Look Wrong or Are Too Dim / Too Bright](#6-colors-look-wrong-or-are-too-dim--too-bright)
     - [Check](#check-1)
     - [How to verify](#how-to-verify)
-  - [8. When Nothing Makes Sense Anymore 😄](#8-when-nothing-makes-sense-anymore-)
+  - [7. When Nothing Makes Sense Anymore 😄](#7-when-nothing-makes-sense-anymore-)
   - [Boards](#boards)
-    - [Configuration](#configuration)
+      - [Configuration](#configuration)
 
 # HUB75 DMA-Based Driver
 
@@ -127,17 +129,7 @@ For details on Binary Coded Modulation (BCM), see **[LED Dimming Using Binary Co
 
 ## Hub75 Matrix Panel Driver Version 3.0
 
-⚠️ Documentation in progress ⚠️
-
-### A Short Overview
-
-A (nearly) complete rework of the DMA/PIO pipeline has been done. Once started, the HUB75 driver runs almost entirely in hardware — the CPU is barely involved.
-
-The two step process can be outlined as follows:
-
-1. Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to `frame_buffer`. After a bitplane has been built, a CPU invocation takes place within a tiny interrupt handler which modifies the PIO program **hub75_bitplane_setup** to adjust for the next bitplane to work on. The bitplanes are created in a sequence which implements the balanced light output strategy.
-
-2. The pre-built bitplanes in `frame_buffer` are streamed to the matrix panel via a second DMA/PIO pipeline. Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. Swapping is done in a small interrupt handler. The `row_cmd_buffer` holds lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front brightness buffer continues to be consumed uninterrupted.
+Version 3.0 is a near-complete rework of the DMA/PIO pipeline. Once started, the driver runs almost entirely in hardware — the CPU is barely involved. Two independent DMA/PIO stages handle all the work: one constructs BCM bitplanes on demand whenever `update()` or `update_bgr()` is called; the other streams the pre-built bitplanes to the panel autonomously and continuously. For the full architectural detail see [The Definitive Hub75 Driver Solution](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data).
 
 ## Achievements at a Glance
 
@@ -510,6 +502,7 @@ Balanced Light Output (14 steps):
  MSB segments spread evenly across the frame → no flicker
 ```
 
+Balanced Light Output improves the *temporal* distribution of light. The next section addresses *spectral* accuracy — correcting the colour cross-channel bleed that makes neutral grey appear tinted on real panels.
 
 ## Colour Correction Matrix
 
@@ -812,7 +805,21 @@ This corresponds to the same brightness as earlier driver revisions without adju
 
 ## Demo Effects
 
-⚠️ The examples contained in hub75_demo.cpp have been tested with a Raspberry Pi Pico 2 microcontroller (RP2350). For a RP2040 processor you might have to comment out some demo effects due to minor memory capabilities. Ask if you need support 🙂.
+The demo effects in `hub75_demo.cpp` are included to exercise the driver and showcase colour fidelity. They cycle automatically; press the button to advance to the next effect.
+
+| # | Effect | Purpose |
+|---|--------|---------|
+| 0–1 | Static 64×64 images | Verify colour accuracy and panel mapping on the reference panel size |
+| 2 | Bouncing balls with text | Tests real-time animation; text position is hard-coded for 64×64 |
+| 3 | Fire effect | Demonstrates per-pixel colour blending at high refresh rates |
+| 4 | Rotator | Geometric transformation test |
+| 5 | Colour gradient / plasma | Full-spectrum colour coverage |
+| 6 | Brightness ramp | Verifies smooth brightness control across the full `setIntensity()` range |
+| 7 | Grey-scale ramp | **Calibration tool** — equal R, G, B at every luminance step. Use this with the [CCM Tuning Procedure](#tuning-procedure) to eliminate colour tints |
+
+> ⚠️ Effects 0–1 and the bouncing-balls text overlay are hard-coded for **64×64** panels. On other panel sizes you will see partial or scrambled output for those effects; the remaining effects adapt to any panel geometry.
+
+> ⚠️ The demo has been tested on a **Raspberry Pi Pico 2 (RP2350)**. On a RP2040 you may need to comment out some effects due to tighter memory constraints. Open an issue if you need help.
 
 ## How to Use This Project in VSCode
 
@@ -868,30 +875,19 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 
 ## Next Steps
 
-- **Add another chained DMA channel** to further reduce calls to the oen_finished_handler, trading memory for reduced CPU load.
+The core driver pipeline is stable. Possible future directions include:
 
-- **Investigate removing the hub75_data_rgb888_set_shift method**, potentially achieving a completely DMA- and PIO-based solution with no CPU involvement.
+- **Additional panel mappings** — contributions for panels with unusual internal wiring (e.g. serpentine, split-scan) are welcome.
+- **Further interrupt reduction** — an extra chained DMA channel could eliminate the remaining once-per-frame CPU interrupt entirely, trading a small amount of RAM for zero CPU involvement.
+- **RP2040 memory optimisations** — the `SEPARATE_CIE_CHANNELS`, `BALANCED_LIGHT_OUTPUT`, and `BITPLANES` defines already allow memory/quality trade-offs; further tuning for constrained targets is an open area.
 
-For any questions or discussions, feel free to contribute or open an issue!
+For questions, bug reports, or feature discussions, feel free to open an issue on [GitHub](https://github.com/JuPfu/hub75).
 
 # Prerequisites for the Hub75 Driver
 
-This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **128x64, 64×32, 32×32, 32x16**, or other HUB75-compatible panels by configuring c preprocessor defines in file hub75.hpp.
+This driver is designed for a **64×64 LED matrix panel**. It can be adapted for **128x64, 64×32, 32×32, 32x16**, or other HUB75-compatible panels by configuring C preprocessor defines in `CMakeLists.txt` (or directly in `hub75.hpp`).
 
-The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks** and **STROBE_PIN** must be immediately followed by **OEN_PIN**.
-
-The default implementation looks like this (see hub75.cpp). An example of a valid alternative pin defintion is shown in [Allowed Deviations](#allowed_deviations_anchor)
-
-   ```cpp
-   // Default wiring of HUB75 matrix to RP2350
-   #define DATA_BASE_PIN    0   // first color data pin
-   #define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
-   #define ROWSEL_BASE_PIN  6   // first row-select (address) pin
-   #define ROWSEL_N_PINS    5   // number of row-select pins (A0–A4)
-   #define CLK_PIN          11  // clock
-   #define STROBE_PIN       12  // latch (LAT)
-   #define OEN_PIN          13  // output enable (OE)
-   ```
+The PIO implementation requires that **data pins (colours)** and **row-select pins** must be in **consecutive GPIO blocks** and **STROBE_PIN** must be immediately followed by **OEN_PIN**. Default pin assignments and an alternative example are shown in [Wiring Details](#wiring-details) below.
 
 ## Wiring Details
 
@@ -1021,9 +1017,9 @@ The table below lists every configurable preprocessor define, its **default valu
 
 ## Full CMakeLists.txt Example
 
-The following example shows a complete `target_compile_definitions` block for a **RP2350B** microcontroller using GPIO pins 30–43. 
+The block below shows a complete `target_compile_definitions` for a **RP2350B** using GPIO pins 30–43. For real-world board configurations (including the RP2350B with a 64×64 outdoor panel) see the [Boards](#boards) section.
 
-Make sure to uncomment the following lines in CMakeLists.txt for a RP2350 microcontroller without a board.
+For a bare RP2350 without a board, uncomment these two lines **before** `include(pico_sdk_import.cmake)`:
 
 ```cmake
 set(PICO_PLATFORM rp2350)
@@ -1218,20 +1214,9 @@ These values determine the memory usage of the frame buffer.
 
 ### Wiring
 
-The physical wiring is essentially identical for most HUB75 panels. In file **hub75.hpp** the `ROWSEL_N_PINS` definition must be adapted to the number of address lines of your board. 
+The physical wiring is essentially identical for most HUB75 panels. The only value that commonly needs changing is `ROWSEL_N_PINS` — it must match the number of address lines (A, B, C, …) printed on your panel's connector. See [Wiring Details](#wiring-details) for the full pin table and [Allowed Deviations](#allowed-deviations--) for a custom-pin example.
 
-   ```cpp
-   // Default wiring of HUB75 matrix to RP2350
-   #define DATA_BASE_PIN    0   // first color data pin
-   #define DATA_N_PINS      6   // number of color data pins (R0,G0,B0,R1,G1,B1)
-   #define ROWSEL_BASE_PIN  6   // first row-select (address) pin
-   #define ROWSEL_N_PINS    5   // ADAPT TO THE NUMBER OF ROW-SELECT ADDRESS PINS ON YOUR PANEL
-   #define CLK_PIN          11  // clock
-   #define STROBE_PIN       12  // latch (LAT)
-   #define OEN_PIN          13  // output enable (OE)
-   ```
-
-The value in **ROWSEL_N_PINS** defines the number of address lines defined as output pins. These output pins receive the address information of the current row that is to be updated. Internally, this value is passed to the PIO state machine to control how many address bits are output per row. It might help to have a look at the configuration examples below if the documentation is to vague or unclear with respect to this topic.
+> 💡 `ROWSEL_N_PINS` controls how many address bits the PIO state machine outputs per row. If this value is wrong, no rows will be selected correctly. The configuration examples in [Step 2](#step-2--scan-rate-and-rows-lit-simultaneously) show how to derive the correct value from your panel's scan specification.
 
 ## Step 2 — Scan Rate and Rows Lit Simultaneously
 
@@ -1306,11 +1291,9 @@ If unsure:
 
 ---
 
-### How to Configure
+### Configuration Examples
 
-All configuration (C pre-processor defines) must be done in **hub75.hpp**.
-
-In your build, define the scan rate that matches your panel. 
+The examples below cover the most common panel types. For each one, only `MATRIX_PANEL_WIDTH`, `MATRIX_PANEL_HEIGHT`, the mapping define, and `ROWSEL_N_PINS` need to be set — everything else falls back to the defaults. Prefer setting these via `CMakeLists.txt` rather than editing `hub75.hpp` directly.
 
 ```cpp
 // Example for a 64×64 panel (1/32 scan) - 2 rows lit simultaneously
@@ -1350,15 +1333,8 @@ In your build, define the scan rate that matches your panel.
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
-// 
-#define SM_CLOCKDIV 1
-#if SM_CLOCKDIV != 0
-// To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
-// For panels with height less or equal to 16 rows try a factor of 8.0f
-// For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+// If ghosting or flicker occurs, try increasing SM_CLOCKDIV_FACTOR (see Step 6)
 #define SM_CLOCKDIV_FACTOR 1.0f
-#endif
 
 
 // Example for a 32×16 panel (1/4 scan) - 4 rows lit simultaneously
@@ -1369,15 +1345,8 @@ In your build, define the scan rate that matches your panel.
 // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
 // That is 4 equals 2 to the power of 2 -> we need 2 row select pins  
 #define ROWSEL_N_PINS 2
-
-#define SM_CLOCKDIV 1
-#if SM_CLOCKDIV != 0
-// To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
-// For panels with height less or equal to 16 rows try a factor of 8.0f
-// For panels with height less or equal to 32 rows try a factor of 2.0f or 4.0f
-// Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
+// If ghosting or flicker occurs, try increasing SM_CLOCKDIV_FACTOR (see Step 6)
 #define SM_CLOCKDIV_FACTOR 1.0f
-#endif
 ``` 
 
 Note that the panel name usually does not encode the internal pixel wiring or the driver IC type.
@@ -1490,7 +1459,7 @@ Each mapping below describes how pixels from the linear source buffer (`src`)
 are reordered into the panel's shift buffer (`frame_buffer`).
 
 
-***HUB75_MULTIPLEX_2_ROWS Mapping***
+#### `HUB75_MULTIPLEX_2_ROWS` Mapping
 
 Generic hub75 led matrix panels with 2 rows lit simultaneously.
 
@@ -1508,11 +1477,11 @@ Pixels from the source-data (**src**) are copied in alternating sequence (first 
    }
 ```
 
-***HUB75_P10_3535_16X32_4S Mapping***
+#### `HUB75_P10_3535_16X32_4S` Mapping
 
-Outdoor led matrix panel with 16 rows and 32 pixels per row. 4 rows lit simultaneously. So only two address lines needed to address a quarter of rows (0, 1, 2, 3). This is also mirrored in the available address lines (A, B) on the matrix panel board.
+Outdoor LED matrix panel with 16 rows and 32 pixels per row. 4 rows are lit simultaneously, requiring only 2 address lines (A, B) to select a quarter of rows (0–3).
 
-**ToDo** Describe pixel mapping in detail!
+The mapping works by iterating over column pairs. For each pair the selector bit `PAIR_HALF_BIT` determines which vertical quarter the source pixels come from: when clear, pixels from the upper and lower first-half quarters are used; when set, pixels from the upper and lower second-half quarters. The `GROUP_ROW_OFFSET` advances the source pointer at the end of each scan-group row.
 
 ```c
    int line = 0;
@@ -1575,7 +1544,7 @@ Outdoor led matrix panel with 16 rows and 32 pixels per row. 4 rows lit simultan
    }
 ```
 
-***HUB75_P3_1415_16S_64X64_S31 Mapping***
+#### `HUB75_P3_1415_16S_64X64_S31` Mapping
 
 Outdoor led matrix panel with 64 rows and each row has 64 pixels. 16S means 64 / 16 = 4 rows lit simultaneously. Four address lines (A, B, C, D) are available on the led matrix panel board, which confirms this calculation.
 
@@ -1775,7 +1744,7 @@ If the panel contains an FM6126A or RUL6024 chip and is not initialized correctl
 
 ---
 
-## 8. When Nothing Makes Sense Anymore 😄
+## 7. When Nothing Makes Sense Anymore 😄
 
 Follow this **minimal recovery procedure**:
 
@@ -1832,11 +1801,9 @@ My hardware repository of matrix panels which I used to develop the library (and
    
    PANEL_TYPE PANEL_GENERIC
    
-   plane wise BCM (Binary Coded Modulation)
-   
    Separate frame_buffer algorithm
 
-   ### Configuration
+   #### Configuration
    
    System-Clock 266 MHz
 
@@ -1878,5 +1845,3 @@ My hardware repository of matrix panels which I used to develop the library (and
    line wise BCM
    
    Separate frame_buffer algorithm
-
-
