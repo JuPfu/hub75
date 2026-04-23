@@ -312,7 +312,7 @@ CPU part - usually done in 60Hz or 100Hz frequency
         ↓
 [Double Buffered Frame Buffer]
         ↓
-[CIE → 12-bit or 10-bit linear light]
+[CIE → 10-bit or 8-bit linear light]
         ↓
 [Color Correction Matrix (per channel)]
         ↓
