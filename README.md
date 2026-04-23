@@ -2,7 +2,9 @@
   - [Documentation and References](#documentation-and-references)
   - [Hub75 Matrix Panel Driver Version 3.0](#hub75-matrix-panel-driver-version-30)
     - [A Short Overview](#a-short-overview)
-  - [Achievements of the Revised Driver](#achievements-of-the-revised-driver)
+  - [Achievements at a Glance](#achievements-at-a-glance)
+    - [Version 2 — DMA/PIO Pipeline](#version-2--dmapio-pipeline)
+    - [Version 3.0 — Colour Fidelity \& Signal Integrity](#version-30--colour-fidelity--signal-integrity)
   - [Motivation](#motivation)
   - [Evolution of Pico HUB75 Drivers](#evolution-of-pico-hub75-drivers)
     - [Raspberry Pi Pico HUB75 Example](#raspberry-pi-pico-hub75-example)
@@ -16,6 +18,11 @@
   - [The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data)
     - [Overview of the Redesigned Alternative Approach](#overview-of-the-redesigned-alternative-approach)
     - [High-Level Architectural View of HUB75 Pipeline](#high-level-architectural-view-of-hub75-pipeline)
+    - [1. Canonical Mapping Stage (`update()` / `update_bgr()`)](#1-canonical-mapping-stage-update--update_bgr)
+    - [2. The New Hardware Pipeline](#2-the-new-hardware-pipeline)
+    - [3. Simplified DMA Structure](#3-simplified-dma-structure)
+    - [4. Advanced Signal Integrity \& Anti-Ghosting](#4-advanced-signal-integrity--anti-ghosting)
+    - [5. Efficient BCM with Split-Bitplanes](#5-efficient-bcm-with-split-bitplanes)
     - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
       - [RGB Pixel Data Transformation into Bitplane Slices](#rgb-pixel-data-transformation-into-bitplane-slices)
       - [Row-Addressing, Loading and Display of Pixel Data](#row-addressing-loading-and-display-of-pixel-data)
@@ -97,12 +104,6 @@
     - [Check](#check-1)
     - [How to verify](#how-to-verify)
   - [8. When Nothing Makes Sense Anymore 😄](#8-when-nothing-makes-sense-anymore-)
-  - [Major Architectural Overhaul: Decoupled DMA \& PIO Pipeline](#major-architectural-overhaul-decoupled-dma--pio-pipeline)
-    - [1. Canonical Mapping Stage (`update()` / `update_bgr()`)](#1-canonical-mapping-stage-update--update_bgr)
-    - [2. The New Hardware Pipeline](#2-the-new-hardware-pipeline)
-    - [3. Simplified DMA Structure](#3-simplified-dma-structure)
-    - [4. Advanced Signal Integrity \& Anti-Ghosting](#4-advanced-signal-integrity--anti-ghosting)
-    - [5. Efficient BCM with Split-Bitplanes](#5-efficient-bcm-with-split-bitplanes)
   - [Boards](#boards)
     - [Configuration](#configuration)
 
@@ -134,20 +135,49 @@ A (nearly) complete rework of the DMA/PIO pipeline has been done. Once started, 
 
 The two step process can be outlined as follows:
 
-1. Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to `frame_buffer`. After a bitplane has been built, a CPU invocation takes place within a tiny interrupt handler which modifies the PIO program **hub75_bitplane_setup** for the next bitplane. The bitplanes are created in a sequence which implements the balanced light output strategy.
+1. Following a call to `update()` or `update_bgr()`, a combination of DMA and PIO processing breaks down the RGB pixel data (`rgb_buffer`) into BCM bitplanes and writes them to `frame_buffer`. After a bitplane has been built, a CPU invocation takes place within a tiny interrupt handler which modifies the PIO program **hub75_bitplane_setup** to adjust for the next bitplane to work on. The bitplanes are created in a sequence which implements the balanced light output strategy.
 
 2. The pre-built bitplanes in `frame_buffer` are streamed to the matrix panel via a second DMA/PIO pipeline. Double-buffering is used for both `frame_buffer` and `row_cmd_buffer` to ensure clean, tear-free updates. The `frame_buffer` is swapped after a call to `update()` or `update_bgr()`. Swapping is done in a small interrupt handler. The `row_cmd_buffer` holds lit and dark cycle durations for BCM timing and is fed directly into the `hub75_row` PIO program as DMA input. It is recalculated every time a brightness change occurs, while the front brightness buffer continues to be consumed uninterrupted.
 
-## Achievements of the Revised Driver
+## Achievements at a Glance
 
-The modifications to the Pimoroni HUB75 driver result in the following improvements:
+### Version 2 — DMA/PIO Pipeline
 
-- **Offloading Work**: Moves processing from the CPU to DMA and PIO co-processors.
-- **Performance Boost**: Implements self-paced, interlinked DMA and PIO processes.
-- **Eliminates Synchronization Delays**: No need for `hub75_wait_tx_stall`, removing blocking synchronization.
-- **Optimized Interrupt Handling**: Reduces code complexity in the interrupt handlers.
+Improvements over the Pimoroni driver:
 
-These enhancements lead to significant performance improvements.
+- **CPU Offloading** — Processing moved from the CPU to DMA and PIO co-processors.
+- **Self-paced Pipeline** — Interlinked DMA and PIO processes run without CPU supervision.
+- **No Blocking Synchronization** — `hub75_wait_tx_stall` eliminated entirely.
+- **Reduced Interrupt Complexity** — Lighter, leaner interrupt handlers.
+
+### Version 3.0 — Colour Fidelity & Signal Integrity
+
+Building on the DMA/PIO foundation, Version 3.0 adds:
+
+- **On-demand Bitplane Construction** — RGB pixel data is decomposed into BCM bitplanes
+  by a dedicated DMA/PIO stage, triggered only on `update()` / `update_bgr()`.
+  Streaming to the panel runs fully autonomously in the background.
+- **Balanced Light Output** — High-weight bitplanes are split into multiple shorter segments,
+  spreading illumination evenly across the frame. Effective refresh rate increases significantly;
+  visible flicker is eliminated even at low brightness.
+- **Per-channel CIE 1931 Correction** — Separate `CIE_RED`, `CIE_GREEN`, `CIE_BLUE` lookup
+  tables (generated by `cie.py`) map 8-bit input to 10-bit perceptually linear output,
+  with per-channel white-balance scaling via `RED_CAP` / `GREEN_CAP` / `BLUE_CAP`.
+- **Colour Correction Matrix (CCM)** — Six integer-shift cross-terms correct spectral bleed
+  between channels. Zero floating-point cost; off by default (`shift = 31`).
+- **Anti-ghosting & Settling Delays** — Configurable nano-second timing guards
+  (`BASE_LATCH_NS`, `BASE_ADDR_NS`, `BASE_OE_NS`) around latch, address, and OE transitions
+  eliminate ghosting and edge glimmer at high clock speeds.
+- **Double-buffering for both frame and command buffers** — Tear-free updates; the
+  `row_cmd_buffer` is only swapped when brightness actually changes.
+- **`cie.py` generates the full `cie.hpp`** — The LUT generator now emits the complete
+  header file including all `#if SEPARATE_CIE_CHANNELS` / `#if BITPLANES` preprocessor
+  guards. Run once, redirect to file, done:
+```bash
+  python3 utils/cie.py > cie.hpp
+```
+
+Together these enhancements deliver a display pipeline that is faster, more visually accurate, and almost entirely autonomous — leaving the CPU free for application logic.
 
 ---
 
@@ -304,6 +334,40 @@ DMA & PIO part - usually runs at much higher frequency than the CPU part
         ↓
 [Matrix Panel]
 ```
+
+The driver has transitioned from a CPU-intensive real-time mapping approach to a structured, three-stage hardware pipeline. This change significantly reduces CPU overhead.
+
+### 1. Canonical Mapping Stage (`update()` / `update_bgr()`)
+* **Panel-Specific Normalization:** All panel-specific quirks (scan-mode, physical row mapping, and ZigZag patterns) are handled during the initial copy to `rgb_buffer`.
+* **Standardized Format:** The buffer is organized into a "canonical" 32-bit RGB format, allowing the subsequent PIO stages to remain generic and extremely fast.
+
+### 2. The New Hardware Pipeline
+The data flow is now managed by three specialized PIO programs working in concert:
+
+| Component | Role | Mechanism |
+| :--- | :--- | :--- |
+| **`hub75_bitplane_setup`** | **Bit-Slicing** | Converts the canonical `rgb_buffer` into the bit-plane structured `frame_buffer`. |
+| **`hub75_bitplane_stream`** | **Data Feeding** | Streams the prepared bit-planes to the panel's shift registers. |
+| **`hub75_row`** | **Timing & Logic** | The "Master" State-Machine (SM). Handles Row Addressing (A-E), BCM timing, and Latch (STB) signals. |
+
+### 3. Simplified DMA Structure
+The DMA logic has been streamlined. Instead of complex per-row interrupts, the system now uses **DMA Chaining**:
+* **Autonomous Frames:** DMA channels now loop through all bit-planes and rows automatically.
+* **Minimal CPU Interrupts:** The Interrupt Handler is now only called **once per frame**. 
+  
+  It handles:
+    1. **Double-Buffering:** Swapping `frame_buffer` and `row_cmd_buffer` only when a full frame is complete.
+    2. **Runtime Updates:** Activating new BCM cycles if brightness was changed via the API.
+
+### 4. Advanced Signal Integrity & Anti-Ghosting
+The `hub75_row` program now includes specific hardware-level timing improvements:
+* **Anti-Ghosting Wait Cycles:** A configurable `wait_loop` is executed after the Latch (STB) signal but before enabling the next row. This ensures the LEDs from the previous row have fully discharged, eliminating the "shadow" or "ghost" effect common in high-speed multiplexing.
+* **Settling Buffers:** Added precise timing padding around the Address (A-E) and Strobe transitions to account for cable capacitance and level-shifter propagation delays.
+* **Hardware Synchronization:** `hub75_row` and `hub75_bitplane_stream` are hardware-locked via PIO IRQ flags, ensuring that row switching never occurs while data is still being shifted.
+
+### 5. Efficient BCM with Split-Bitplanes
+* **Balanced Light Output:** High-weight bit-planes are split into multiple smaller slices within the BCM sequence. This increases the effective refresh rate and eliminates visible flicker, even at low intensity settings.
+* **Constant Frame Rate:** The sum of `lit_cycles` and `dark_cycles` is kept constant, ensuring a rock-solid refresh rate regardless of brightness levels.
 
 ### Step-by-Step Breakdown of DMA and PIO Cooperation
 
@@ -619,11 +683,9 @@ target_compile_definitions(hub75 PRIVATE
 
 ### The `cie.py` LUT Generator
 
-`cie.py` generates `cie.hpp`.
+`cie.py` generates the complete `cie.hpp` header, including all `#if SEPARATE_CIE_CHANNELS` and `#if BITPLANES` preprocessor branches for both 8-bit and 10-bit colour depth. The per-channel scaling factors `RED_CAP`, `GREEN_CAP`, `BLUE_CAP` handle white-balance gain differences between the three LED colours independently of the CCM cross-terms.
 
-The per-channel scaling factors `RED_CAP`, `GREEN_CAP`, `BLUE_CAP` handle the white-balance gain difference between the three LED colours. They are independent of the CCM cross-terms and remain unchanged when CCM is configured.
-
-Run from the project root and redirect output directly into `cie.hpp`:
+Regenerate after any change to the CAP values:
 
 ```bash
 python3 utils/cie.py > cie.hpp
@@ -1737,42 +1799,6 @@ Follow this **minimal recovery procedure**:
 4. Change **one parameter at a time**
 
 ---
-
-## Major Architectural Overhaul: Decoupled DMA & PIO Pipeline
-
-The driver has transitioned from a CPU-intensive real-time mapping approach to a structured, three-stage hardware pipeline. This change significantly reduces CPU overhead and provides native support for complex panel layouts (S31, ZigZag, etc.).
-
-### 1. Canonical Mapping Stage (`update()` / `update_bgr()`)
-* **Panel-Specific Normalization:** All panel-specific quirks (scan-mode, physical row mapping, and ZigZag patterns) are handled during the initial copy to `rgb_buffer`.
-* **Standardized Format:** The buffer is organized into a "canonical" 32-bit RGB format, allowing the subsequent PIO stages to remain generic and extremely fast.
-
-### 2. The New Hardware Pipeline
-The data flow is now managed by three specialized PIO programs working in concert:
-
-| Component | Role | Mechanism |
-| :--- | :--- | :--- |
-| **`hub75_bitplane_setup`** | **Bit-Slicing** | Converts the canonical `rgb_buffer` into the bit-plane structured `frame_buffer`. |
-| **`hub75_bitplane_stream`** | **Data Feeding** | Streams the prepared bit-planes to the panel's shift registers. |
-| **`hub75_row`** | **Timing & Logic** | The "Master" SM. Handles Row Addressing (A-E), BCM timing, and Latch (STB) signals. |
-
-
-
-### 3. Simplified DMA Structure
-The DMA logic has been streamlined. Instead of complex per-row interrupts, the system now uses **DMA Chaining**:
-* **Autonomous Frames:** DMA channels now loop through all bit-planes and rows automatically.
-* **Minimal CPU Interrupts:** The Interrupt Handler is now only called **once per frame**. It handles:
-    1. **Double-Buffering:** Swapping `frame_buffer` and `row_cmd_buffer` only when a full frame is complete.
-    2. **Runtime Updates:** Activating new BCM cycles if brightness was changed via the API.
-
-### 4. Advanced Signal Integrity & Anti-Ghosting
-The `hub75_row` program now includes specific hardware-level timing improvements:
-* **Anti-Ghosting Wait Cycles:** A configurable `wait_loop` is executed after the Latch (STB) signal but before enabling the next row. This ensures the LEDs from the previous row have fully discharged, eliminating the "shadow" or "ghost" effect common in high-speed multiplexing.
-* **Settling Buffers:** Added precise timing padding around the Address (A-E) and Strobe transitions to account for cable capacitance and level-shifter propagation delays.
-* **Hardware Synchronization:** `hub75_row` and `hub75_bitplane_stream` are hardware-locked via PIO IRQ flags, ensuring that row switching never occurs while data is still being shifted.
-
-### 5. Efficient BCM with Split-Bitplanes
-* **Balanced Light Output:** High-weight bit-planes are split into multiple smaller slices within the BCM sequence. This increases the effective refresh rate and eliminates visible flicker, even at low intensity settings.
-* **Constant Frame Rate:** The sum of `lit_cycles` and `dark_cycles` is kept constant, ensuring a rock-solid refresh rate regardless of brightness levels.
 
 ## Boards
 
