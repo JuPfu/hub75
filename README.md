@@ -878,7 +878,6 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 The core driver pipeline is stable. Possible future directions include:
 
 - **Additional panel mappings** — contributions for panels with unusual internal wiring (e.g. serpentine, split-scan) are welcome.
-- **Further interrupt reduction** — an extra chained DMA channel could eliminate the remaining once-per-frame CPU interrupt entirely, trading a small amount of RAM for zero CPU involvement.
 - **RP2040 memory optimisations** — the `SEPARATE_CIE_CHANNELS`, `BALANCED_LIGHT_OUTPUT`, and `BITPLANES` defines already allow memory/quality trade-offs; further tuning for constrained targets is an open area.
 
 For questions, bug reports, or feature discussions, feel free to open an issue on [GitHub](https://github.com/JuPfu/hub75).
