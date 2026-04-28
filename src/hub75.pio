@@ -322,7 +322,6 @@ bitstream_loop:
 ;
 ; Uses self-modifying code:
 ;   - `pull` instructions may be patched to `out null, n`
-;   - Enables dynamic bit-plane selection (shift amount)
 ;
 .program hub75_bitplane_setup
 .define BITPLANES 10         ; Alias - valid for 10 and for 8 BITPLANES!
@@ -334,11 +333,9 @@ public shift0:               ; Pixel Red0 Green0 Blue0 (8 or 10 bit format)
                              ; pre-shift left to current bitplane n if n nonzero
                              ; else no pre-shift necessary
     in osr, 1                ; shift right into ISR register first OSR bit: Red0
-public out_red0:
     out null, BITPLANES      ; shift to green bit
 
     in osr, 1                ; shift right into ISR register first OSR bit:  Green0 RED0
-public out_green0:
     out null, BITPLANES      ; shift to blue bit
 
     in osr, 1                ; shift right into ISR register first OSR bit: Blue0 Green0 RED0
@@ -350,11 +347,9 @@ public out_green0:
 public shift1:               ; Pixel Red1 Green1 Blue1 (8 or 10 bit format)
     pull                     ; Instruction gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
     in osr, 1                ; shift right into ISR register first OSR bit:  Red1 Blue0 Green0 RED0
-public out_red1:
     out null, BITPLANES      ; shift to green bit
 
     in osr, 1                ; shift right into ISR register first OSR bit: Green1 Red1 Blue0 Green0 RED0
-public out_green1:
     out null, BITPLANES      ; shift to blue bit
 
     in osr, 1                ; shift right into ISR register first OSR bit: Blue1 Green1 Red1 Blue0 Green0 RED0
