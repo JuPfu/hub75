@@ -80,9 +80,6 @@ static const uint8_t BCM_SEQUENCE[] = {
 #endif
 #endif
 
-static_assert(MATRIX_PANEL_HEIGHT == 2 * PanelConfig::SCAN_DEPTH, "Scan mode does not fit matrix panel height");
-static_assert(TOTAL_PIXELS == matrix_panel_pixels * HORIZONTAL_CHAIN * VERTICAL_CHAIN, "Number of total pixels inconsistent with pixels of single panel multiplied by chained panels");
-
 constexpr uint8_t bcm_sequence_length = sizeof(BCM_SEQUENCE) / sizeof(uint8_t);
 
 static void configure_pio(bool);
@@ -783,7 +780,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-#if VERTICAL_CHAIN == 1 && HORIZONTAL_CHAIN == 1
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // Einzelne Chain-Row: einfaches Interleaving ohne U-Wende
     constexpr size_t offset = TOTAL_PIXELS >> 1;
     for (size_t fb_index = 0, j = 0; fb_index < TOTAL_PIXELS; fb_index += 2, ++j)
@@ -818,22 +815,22 @@ __attribute__((optimize("unroll-loops"))) void update(
     size_t fb_index = 0;
     for (int i = 0; i < PanelConfig::SCAN_DEPTH; i++)
     {
-        for (int v = 0; v < VERTICAL_CHAIN; v++)
+        for (int v = 0; v < CHAIN_COLS; v++)
         {
-            bool reverse = (v & 1);
+            const bool reverse = (v & 1);
 
-            for (int h = 0; h < HORIZONTAL_CHAIN; h++)
+            for (int h = 0; h < CHAIN_ROWS; h++)
             {
                 if (reverse)
                 {
                     // Odd serpentine panel row (180° rotated)
-                    size_t vo = (v + 1) * HORIZONTAL_CHAIN * matrix_panel_pixels;
+                    size_t vo = (v + 1) * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = vo - h * MATRIX_PANEL_WIDTH - i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH;
+                    size_t ho_base = vo - h * MATRIX_PANEL_WIDTH - i * CHAIN_ROWS * MATRIX_PANEL_WIDTH;
 
                     // Rotated 180 degrees
                     size_t ho1 = ho_base;
-                    size_t ho2 = ho_base - (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH);
+                    size_t ho2 = ho_base - PanelConfig::stride_to_paired_row;
 
                     for (int j = 1; j <= MATRIX_PANEL_WIDTH; j++)
                     {
@@ -845,12 +842,12 @@ __attribute__((optimize("unroll-loops"))) void update(
                 else
                 {
                     // Even row
-                    size_t vo = v * HORIZONTAL_CHAIN * matrix_panel_pixels;
+                    size_t vo = v * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = vo + h * MATRIX_PANEL_WIDTH + i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH;
+                    size_t ho_base = vo + h * MATRIX_PANEL_WIDTH + i * CHAIN_ROWS * MATRIX_PANEL_WIDTH;
 
                     size_t ho1 = ho_base;
-                    size_t ho2 = ho_base + (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH);
+                    size_t ho2 = ho_base + PanelConfig::stride_to_paired_row;
 
                     for (int j = 0; j < MATRIX_PANEL_WIDTH; j++)
                     {
@@ -862,7 +859,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             }
         }
     }
-#endif // VERTICAL_CHAIN
+#endif // CHAIN_COLS
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
@@ -948,7 +945,7 @@ __attribute__((optimize("unroll-loops"))) void update(
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
 #ifdef HUB75_MULTIPLEX_2_ROWS
-#if VERTICAL_CHAIN == 1 && HORIZONTAL_CHAIN == 1
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     constexpr size_t offset = (TOTAL_PIXELS >> 1) * 3;
     for (size_t fb_index = 0, j = 0; fb_index < TOTAL_PIXELS; j += 3, fb_index += 2)
     {
@@ -982,22 +979,22 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     size_t fb_index = 0;
     for (int i = 0; i < PanelConfig::SCAN_DEPTH; i++)
     {
-        for (int v = 0; v < VERTICAL_CHAIN; v++)
+        for (int v = 0; v < CHAIN_COLS; v++)
         {
-            bool reverse = (v & 1);
+            const bool reverse = (v & 1);
 
-            for (int h = 0; h < HORIZONTAL_CHAIN; h++)
+            for (int h = 0; h < CHAIN_ROWS; h++)
             {
                 if (reverse)
                 {
                     // Odd serpentine panel row (180° rotated)
-                    size_t vo = (v + 1) * HORIZONTAL_CHAIN * matrix_panel_pixels;
+                    size_t vo = (v + 1) * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = (vo - h * MATRIX_PANEL_WIDTH - i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH) * 3;
+                    size_t ho_base = (vo - h * MATRIX_PANEL_WIDTH - i * CHAIN_ROWS * MATRIX_PANEL_WIDTH) * 3;
 
                     // Rotated 180 degrees
                     size_t ho1 = ho_base;
-                    size_t ho2 = ho_base - (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH * 3);
+                    size_t ho2 = ho_base - (PanelConfig::stride_to_paired_row * 3);
 
                     for (size_t j = 3; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
@@ -1009,12 +1006,12 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                 else
                 {
                     // Even row
-                    size_t vo = v * HORIZONTAL_CHAIN * matrix_panel_pixels;
+                    size_t vo = v * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = (vo + h * MATRIX_PANEL_WIDTH + i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH) * 3;
+                    size_t ho_base = (vo + h * MATRIX_PANEL_WIDTH + i * CHAIN_ROWS * MATRIX_PANEL_WIDTH) * 3;
 
                     size_t ho1 = ho_base;
-                    size_t ho2 = ho_base + (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH * 3);
+                    size_t ho2 = ho_base + (PanelConfig::stride_to_paired_row * 3);
 
                     for (size_t j = 0; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
                     {

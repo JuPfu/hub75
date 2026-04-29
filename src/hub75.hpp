@@ -11,7 +11,7 @@
 // See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel
 
 // Set MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT to the width and height of a SINGLE matrix panel.
-// For chained panels, use HORIZONTAL_CHAIN and VERTICAL_CHAIN to describe the arrangement.
+// For chained panels, use CHAIN_ROWS and CHAIN_COLS to describe the arrangement.
 #ifndef MATRIX_PANEL_WIDTH
 #define MATRIX_PANEL_WIDTH 64
 #endif
@@ -21,10 +21,12 @@
 
 // --- Panel chaining ---
 //
-// HORIZONTAL_CHAIN: number of panels chained left-to-right in a single chain row.
-// VERTICAL_CHAIN:   number of chain rows stacked vertically (U-type / serpentine).
+// CHAIN_ROWS: number of panels chained left-to-right in a single chain row.
+// CHAIN_COLS:   number of chain rows stacked vertically (U-type / serpentine).
 //
-// Panels are driven in a full serpentine pattern:
+// Currently only serpentine (U-turn) chained topologies are supported.
+// Arbitrary panel rotations or non-serpentine cable layouts are not supported.
+//
 //   Chain row 0: left → right
 //   Chain row 1: right → left  (U-turn)
 //   Chain row 2: left → right
@@ -33,25 +35,25 @@
 // The signal input connector is always on the LEFT panel of chain row 0.
 //
 // Examples:
-//   Single panel:         HORIZONTAL_CHAIN=1, VERTICAL_CHAIN=1  (or omit both)
-//   2 panels side-by-side: HORIZONTAL_CHAIN=2, VERTICAL_CHAIN=1
-//   2×4 serpentine array:  HORIZONTAL_CHAIN=2, VERTICAL_CHAIN=4
+//   Single panel:         CHAIN_ROWS=1, CHAIN_COLS=1  (or omit both)
+//   2 panels side-by-side: CHAIN_ROWS=2, CHAIN_COLS=1
+//   2×4 serpentine array:  CHAIN_ROWS=2, CHAIN_COLS=4
 //
-// When only HORIZONTAL_CHAIN > 1 and VERTICAL_CHAIN=1, there is no serpentine
+// When only CHAIN_ROWS > 1 and CHAIN_COLS=1, there is no serpentine
 // reversal — data flows straight through all panels left-to-right.
 //
 // MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT always describe ONE physical panel.
 // The total virtual display dimensions are derived automatically (see DISPLAY_WIDTH / DISPLAY_HEIGHT below).
 //
-#ifndef HORIZONTAL_CHAIN
-#define HORIZONTAL_CHAIN 1
+#ifndef CHAIN_ROWS
+#define CHAIN_ROWS 1
 #endif
-#ifndef VERTICAL_CHAIN
-#define VERTICAL_CHAIN 1
+#ifndef CHAIN_COLS
+#define CHAIN_COLS 1
 #endif
 
-static_assert(HORIZONTAL_CHAIN >= 1, "HORIZONTAL_CHAIN must be >= 1");
-static_assert(VERTICAL_CHAIN   >= 1, "VERTICAL_CHAIN must be >= 1");
+static_assert(CHAIN_ROWS >= 1, "CHAIN_ROWS must be >= 1");
+static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 
 // Wiring of the HUB75 matrix
 #ifndef DATA_BASE_PIN // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
@@ -253,10 +255,10 @@ static_assert(VERTICAL_CHAIN   >= 1, "VERTICAL_CHAIN must be >= 1");
 constexpr uint32_t matrix_panel_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 
 // Total virtual display dimensions (derived — do not set manually)
-constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH  * HORIZONTAL_CHAIN;
-constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * VERTICAL_CHAIN;
+constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_ROWS;
+constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_COLS;
 
-constexpr int TOTAL_PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT * HORIZONTAL_CHAIN * VERTICAL_CHAIN;
+constexpr size_t TOTAL_PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT * CHAIN_ROWS * CHAIN_COLS;
 
 #define LUT_MAPPING(COLOUR) pack_lut_rgb(COLOUR)
 #define LUT_MAPPING_RGB(R, G, B) pack_lut_rgb_(R, G, B)
@@ -295,9 +297,9 @@ namespace PanelConfig
     // Matrix panel with scan-mode 4 -> (MATRIX_PANEL_WIDTH >> 1) * 4
     // Used in hub75_bitplane_stream as value of Y-register
     // Each OUT instruction writes color information for 2 pixels: r0g0b0 and r1b1g1
-    constexpr uint32_t SCAN_MODE_WIDTH = ((MATRIX_PANEL_WIDTH * HORIZONTAL_CHAIN * VERTICAL_CHAIN) >> 1u) * ROWS_IN_PARALLEL;
+    constexpr uint32_t SCAN_MODE_WIDTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
-    constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * HORIZONTAL_CHAIN * SCAN_DEPTH;
+    constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * SCAN_DEPTH;
 }
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
@@ -310,3 +312,10 @@ void update(PicoGraphics const *graphics);
 void setBasisBrightness(uint8_t factor);
 void setIntensity(float intensity);
 void setIntensity(float intensity, bool linear_brightness_control);
+
+#if defined(HUB75_MULTIPLEX_2_ROWS)
+static_assert(MATRIX_PANEL_HEIGHT == 2 * PanelConfig::SCAN_DEPTH, "HUB75_MULTIPLEX_2_ROWS requires two-row multiplexing");
+#endif
+static_assert(TOTAL_PIXELS == matrix_panel_pixels * CHAIN_ROWS * CHAIN_COLS, "Number of total pixels inconsistent with pixels of single panel multiplied by chained panels");
+static_assert(DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
+static_assert(PanelConfig::ROWS_IN_PARALLEL == 2, "Chained mapping currently implemented only for standard HUB75 two-row panels");
