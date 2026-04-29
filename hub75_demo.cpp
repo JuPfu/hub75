@@ -15,9 +15,9 @@
 #endif
 
 // Example images
-#if MATRIX_PANEL_WIDTH == 128
+#if (MATRIX_PANEL_WIDTH * HORIZONTAL_CHAIN) == 128 && (MATRIX_PANEL_HEIGHT * VERTICAL_CHAIN) == 64
 #include "taylor_swift_128x64.h"
-#elif MATRIX_PANEL_HEIGHT == 64
+#elif (MATRIX_PANEL_WIDTH * HORIZONTAL_CHAIN) == 64 && (MATRIX_PANEL_HEIGHT * VERTICAL_CHAIN) == 64
 #include "taylor_swift_64x64.h"
 #else
 #include "matreshka_32x16.h"
@@ -88,9 +88,9 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 2)
+    if (++demo_index > 7)
     {
-        demo_index = 2; // Cycle through all examples
+        demo_index = 0; // Cycle through all examples
     }
     return true;
 }
@@ -102,7 +102,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver(DISPLAY_WIDTH, DISPLAY_HEIGHT, PANEL_TYPE, INVERTED_STB);
     start_hub75_driver();
 
     // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
@@ -129,7 +129,7 @@ void initialize()
     multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 #else
     // Run hub75 on core0 - the Hub75 driver is doing its job here
-    create_hub75_driver(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver(DISPLAY_WIDTH, DISPLAY_HEIGHT, PANEL_TYPE, INVERTED_STB);
     start_hub75_driver();
 #endif
 }
@@ -141,22 +141,22 @@ int main()
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality
-    BouncingBalls bouncingBalls(10, MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    BouncingBalls bouncingBalls(10, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     // Create rotating antialiased line using pico_graphics functionality
-    Rotator rotator(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    Rotator rotator(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     // Create analog clock using pico_graphics functionality
-    AnalogClock analogClock(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    AnalogClock analogClock(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     // Create fire effect using pico_graphics functionality
-    FireEffect fireEffect = FireEffect(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    FireEffect fireEffect = FireEffect(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    PixelFill pixelFill = PixelFill(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    PixelFill pixelFill = PixelFill(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    GreyScaleStripes greyScaleStripes = GreyScaleStripes(MATRIX_PANEL_WIDTH, MATRIX_PANEL_HEIGHT);
+    GreyScaleStripes greyScaleStripes = GreyScaleStripes(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
@@ -195,11 +195,11 @@ int main()
         {
             // Taylor Swift - image data is in b8, g8, r8 format
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-#if MATRIX_PANEL_WIDTH == 128 && MATRIX_PANEL_HEIGHT == 64
+#if (MATRIX_PANEL_WIDTH * HORIZONTAL_CHAIN) == 128 && (MATRIX_PANEL_HEIGHT * VERTICAL_CHAIN) == 64
             update_bgr(taylor_swift_128x64);
-#elif MATRIX_PANEL_HEIGHT == 64 && MATRIX_PANEL_WIDTH == 64
-            update_bgr(taylor_swift_64x64); 
-#elif MATRIX_PANEL_HEIGHT == 16 && MATRIX_PANEL_WIDTH == 32
+#elif (MATRIX_PANEL_WIDTH * HORIZONTAL_CHAIN) == 64 && (MATRIX_PANEL_HEIGHT * VERTICAL_CHAIN) == 64
+            update_bgr(taylor_swift_64x64);
+#else
             update_bgr(matreshka_32x16);
 #endif
         }
@@ -222,7 +222,7 @@ int main()
         else if (demo_index == 6)
         {
             // Image data is in r8, g8, b8 format
-            pixelFill.fill(0, (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) - 1);
+            pixelFill.fill();
             update(&pixelFill);
         }
         else if (demo_index == 7)

@@ -28,11 +28,11 @@ public:
 
     void drawStripes()
     {
-        // Graustufen-Streifen über das gesamte Panel
-        for (int y = 0; y < MATRIX_PANEL_HEIGHT; ++y)
+        // grey stripes in different shades all over the panel
+        for (int y = 0; y < h; ++y)
         {
-            uint32_t grey = (uint8_t)((y * 255) / (MATRIX_PANEL_HEIGHT - 1));
-            for (int x = 0; x < MATRIX_PANEL_WIDTH; ++x)
+            uint32_t grey = (uint8_t)((y * 255) / (h - 1));
+            for (int x = 0; x < w; ++x)
             {
                 drawPixel(x, y, (grey << 16) | (grey << 8) | grey);
             }

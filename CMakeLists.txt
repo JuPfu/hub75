@@ -60,6 +60,8 @@ target_compile_definitions(hub75 PRIVATE
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
+    HORIZONTAL_CHAIN=1          # number of panels chained left-to-right in a single chain row
+    VERTICAL_CHAIN=1            # number of chain rows stacked vertically (U-type / serpentine)
     DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
     DATA_N_PINS=6               # number (count) of colour pins (usually 6)
     ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins

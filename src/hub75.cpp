@@ -80,14 +80,14 @@ static const uint8_t BCM_SEQUENCE[] = {
 #endif
 #endif
 
+static_assert(MATRIX_PANEL_HEIGHT == 2 * PanelConfig::SCAN_DEPTH, "Scan mode does not fit matrix panel height");
+static_assert(TOTAL_PIXELS == matrix_panel_pixels * HORIZONTAL_CHAIN * VERTICAL_CHAIN, "Number of total pixels inconsistent with pixels of single panel multiplied by chained panels");
+
 constexpr uint8_t bcm_sequence_length = sizeof(BCM_SEQUENCE) / sizeof(uint8_t);
 
 static void configure_pio(bool);
 static void setup_dma_transfers();
 
-// Width and height of the HUB75 LED matrix
-static uint width;
-static uint height;
 typedef struct
 {
     // --- Physikalische Zeiten (Konfigurationsebene) ---
@@ -435,7 +435,7 @@ void read_chan_handler()
         hub75_bitplane_setup_set_shift(pio_config.pio_read, pio_config.sm_read, pio_config.offs_read, shamt);
 
         // Prepare DMA channels for building next bitplane
-        uint8_t *plane_dst = frame_buffer + (bitplane * (PIXELS >> 1));
+        uint8_t *plane_dst = frame_buffer + (bitplane * (TOTAL_PIXELS >> 1));
         dma_channel_set_write_addr(write_chan, plane_dst, false);
         dma_channel_set_read_addr(read_chan, rgb_buffer, false);
         dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
@@ -476,7 +476,7 @@ static void setup_bitplane_creation()
         &read_chan_config,
         &pio_config.pio_read->txf[pio_config.sm_read], // Write to PIO TX FIFO
         nullptr,                                       // Read address set later
-        dma_encode_transfer_count(PIXELS),             // Total pixel (pairs) to process
+        dma_encode_transfer_count(TOTAL_PIXELS),       // Total pixel (pairs) to process
         false                                          // Don't start yet
     );
 
@@ -493,11 +493,11 @@ static void setup_bitplane_creation()
     dma_channel_configure(
         write_chan,
         &write_chan_config,
-        nullptr,                                       // Write address set later
-        &pio_config.pio_read->rxf[pio_config.sm_read], // Read from PIO RX FIFO
-        dma_encode_transfer_count((PIXELS >> 1) >> 2), // Two colour informations per byte (xxr0g0b0r1b1g1) => (PIXELS >> 1)
-                                                       // 4 bytes put in a transfered word => ((PIXELS >> 1) >> 2)
-        false                                          // Don't start yet
+        nullptr,                                             // Write address set later
+        &pio_config.pio_read->rxf[pio_config.sm_read],       // Read from PIO RX FIFO
+        dma_encode_transfer_count((TOTAL_PIXELS >> 1) >> 2), // Two colour informations per byte (xxr0g0b0r1b1g1) => (TOTAL_PIXELS >> 1)
+                                                             // 4 bytes put in a transfered word => ((TOTAL_PIXELS >> 1) >> 2)
+        false                                                // Don't start yet
     );
 }
 
@@ -520,11 +520,8 @@ void setup_bitplane_stream_irq()
  */
 void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inverted_stb = INVERTED_STB)
 {
-    width = w;
-    height = h;
-
-    frame_buffer1 = new uint8_t[(PIXELS >> 1) * bcm_sequence_length];
-    frame_buffer2 = new uint8_t[(PIXELS >> 1) * bcm_sequence_length];
+    frame_buffer1 = new uint8_t[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
+    frame_buffer2 = new uint8_t[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
 
     dma_buffer = frame_buffer1;
     frame_buffer = frame_buffer2;
@@ -535,7 +532,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     dma_row_cmd_buffer = row_cmd_buffer1;
     row_cmd_buffer = row_cmd_buffer2;
 
-    rgb_buffer = new uint32_t[width * height]();
+    rgb_buffer = new uint32_t[TOTAL_PIXELS]();
 
     hub75_timing_init(&hub75_timing_config, clock_get_hz(clk_sys), (SM_CLOCKDIV_FACTOR < 1.0f) ? 1.0f : SM_CLOCKDIV_FACTOR);
 
@@ -724,7 +721,7 @@ static void setup_dma_transfers()
                           &pixel_chan_config,
                           &pio_config.data_pio->txf[pio_config.sm_data],
                           dma_buffer,
-                          dma_encode_transfer_count((PIXELS >> 1) * bcm_sequence_length),
+                          dma_encode_transfer_count((TOTAL_PIXELS >> 1) * bcm_sequence_length),
                           false);
 
     // pixel ctrl channel
@@ -786,12 +783,86 @@ __attribute__((optimize("unroll-loops"))) void update(
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75_MULTIPLEX_2_ROWS)
-    constexpr size_t offset = PIXELS >> 1;
-    for (size_t fb_index = 0, j = 0; fb_index < PIXELS; fb_index += 2, ++j)
+#if VERTICAL_CHAIN == 1 && HORIZONTAL_CHAIN == 1
+    // Einzelne Chain-Row: einfaches Interleaving ohne U-Wende
+    constexpr size_t offset = TOTAL_PIXELS >> 1;
+    for (size_t fb_index = 0, j = 0; fb_index < TOTAL_PIXELS; fb_index += 2, ++j)
     {
         rgb_buffer[fb_index] = LUT_MAPPING(src[j]);
         rgb_buffer[fb_index + 1] = LUT_MAPPING(src[j + offset]);
     }
+#else
+    // U-Type Serpentine Chaining
+    // Example:
+    //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
+    //
+    //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
+    //
+    //    This results in a long matrix panel with 192 columns and 32 rows.
+    //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
+    //
+    //                       0 -> 1 U-turn to panel 2
+    //                            |
+    //                            v
+    //    U-turn to panel 4  3 <- 2
+    //                       |
+    //                       v
+    //                       4 -> 5
+    //
+    //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
+    //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
+    //    panel 5 below panel 2.
+    //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
+    //
+
+    size_t fb_index = 0;
+    for (int i = 0; i < PanelConfig::SCAN_DEPTH; i++)
+    {
+        for (int v = 0; v < VERTICAL_CHAIN; v++)
+        {
+            bool reverse = (v & 1);
+
+            for (int h = 0; h < HORIZONTAL_CHAIN; h++)
+            {
+                if (reverse)
+                {
+                    // Odd serpentine panel row (180° rotated)
+                    size_t vo = (v + 1) * HORIZONTAL_CHAIN * matrix_panel_pixels;
+
+                    size_t ho_base = vo - h * MATRIX_PANEL_WIDTH - i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH;
+
+                    // Rotated 180 degrees
+                    size_t ho1 = ho_base;
+                    size_t ho2 = ho_base - (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH);
+
+                    for (int j = 1; j <= MATRIX_PANEL_WIDTH; j++)
+                    {
+                        rgb_buffer[fb_index] = LUT_MAPPING(src[ho1 - j]);
+                        rgb_buffer[fb_index + 1] = LUT_MAPPING(src[ho2 - j]);
+                        fb_index += 2;
+                    }
+                }
+                else
+                {
+                    // Even row
+                    size_t vo = v * HORIZONTAL_CHAIN * matrix_panel_pixels;
+
+                    size_t ho_base = vo + h * MATRIX_PANEL_WIDTH + i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH;
+
+                    size_t ho1 = ho_base;
+                    size_t ho2 = ho_base + (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH);
+
+                    for (int j = 0; j < MATRIX_PANEL_WIDTH; j++)
+                    {
+                        rgb_buffer[fb_index] = LUT_MAPPING(src[ho1 + j]);
+                        rgb_buffer[fb_index + 1] = LUT_MAPPING(src[ho2 + j]);
+                        fb_index += 2;
+                    }
+                }
+            }
+        }
+    }
+#endif // VERTICAL_CHAIN
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
@@ -877,12 +948,85 @@ __attribute__((optimize("unroll-loops"))) void update(
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
 #ifdef HUB75_MULTIPLEX_2_ROWS
-    constexpr size_t offset = (PIXELS >> 1) * 3;
-    for (size_t fb_index = 0, j = 0; fb_index < PIXELS; j += 3, fb_index += 2)
+#if VERTICAL_CHAIN == 1 && HORIZONTAL_CHAIN == 1
+    constexpr size_t offset = (TOTAL_PIXELS >> 1) * 3;
+    for (size_t fb_index = 0, j = 0; fb_index < TOTAL_PIXELS; j += 3, fb_index += 2)
     {
         rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[j + 2], src[j + 1], src[j]);
         rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
     }
+#else
+    // U-Type Serpentine Chaining
+    // Example:
+    //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
+    //
+    //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
+    //
+    //    This results in a long matrix panel with 192 columns and 32 rows.
+    //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
+    //
+    //                       0 -> 1 U-turn to panel 2
+    //                            |
+    //                            v
+    //    U-turn to panel 4  3 <- 2
+    //                       |
+    //                       v
+    //                       4 -> 5
+    //
+    //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
+    //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
+    //    panel 5 below panel 2.
+    //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
+    //
+
+    size_t fb_index = 0;
+    for (int i = 0; i < PanelConfig::SCAN_DEPTH; i++)
+    {
+        for (int v = 0; v < VERTICAL_CHAIN; v++)
+        {
+            bool reverse = (v & 1);
+
+            for (int h = 0; h < HORIZONTAL_CHAIN; h++)
+            {
+                if (reverse)
+                {
+                    // Odd serpentine panel row (180° rotated)
+                    size_t vo = (v + 1) * HORIZONTAL_CHAIN * matrix_panel_pixels;
+
+                    size_t ho_base = (vo - h * MATRIX_PANEL_WIDTH - i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH) * 3;
+
+                    // Rotated 180 degrees
+                    size_t ho1 = ho_base;
+                    size_t ho2 = ho_base - (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH * 3);
+
+                    for (size_t j = 3; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
+                    {
+                        rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[ho1 - j - 2], src[ho1 - j - 1], src[ho1 - j]);
+                        rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[ho2 - j - 2], src[ho2 - j - 1], src[ho2 + j]);
+                        fb_index += 2;
+                    }
+                }
+                else
+                {
+                    // Even row
+                    size_t vo = v * HORIZONTAL_CHAIN * matrix_panel_pixels;
+
+                    size_t ho_base = (vo + h * MATRIX_PANEL_WIDTH + i * HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH) * 3;
+
+                    size_t ho1 = ho_base;
+                    size_t ho2 = ho_base + (HORIZONTAL_CHAIN * MATRIX_PANEL_WIDTH * PanelConfig::SCAN_DEPTH * 3);
+
+                    for (size_t j = 0; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
+                    {
+                        rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[ho1 + j + 2], src[ho1 + j + 1], src[ho1 + j]);
+                        rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[ho2 + j + 2], src[ho2 + j + 1], src[ho2 + j]);
+                        fb_index += 2;
+                    }
+                }
+            }
+        }
+    }
+#endif
 #elif defined HUB75_P10_3535_16X32_4S
     int line = 0;
     int counter = 0;
