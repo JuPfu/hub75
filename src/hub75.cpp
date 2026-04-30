@@ -815,18 +815,18 @@ __attribute__((optimize("unroll-loops"))) void update(
     size_t fb_index = 0;
     for (int i = 0; i < PanelConfig::SCAN_DEPTH; i++)
     {
-        for (int v = 0; v < CHAIN_COLS; v++)
+        for (int v = 0; v < CHAIN_ROWS; v++) // v: panel row (vertical chain)
         {
             const bool reverse = (v & 1);
 
-            for (int h = 0; h < CHAIN_ROWS; h++)
+            for (int h = 0; h < CHAIN_COLS; h++) // h: panel column (horizontal chain)
             {
                 if (reverse)
                 {
                     // Odd serpentine panel row (180° rotated)
                     size_t vo = (v + 1) * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = vo - h * MATRIX_PANEL_WIDTH - i * CHAIN_ROWS * MATRIX_PANEL_WIDTH;
+                    size_t ho_base = vo - h * MATRIX_PANEL_WIDTH - i * PanelConfig::stride_row;
 
                     // Rotated 180 degrees
                     size_t ho1 = ho_base;
@@ -844,7 +844,7 @@ __attribute__((optimize("unroll-loops"))) void update(
                     // Even row
                     size_t vo = v * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = vo + h * MATRIX_PANEL_WIDTH + i * CHAIN_ROWS * MATRIX_PANEL_WIDTH;
+                    size_t ho_base = vo + h * MATRIX_PANEL_WIDTH + i * PanelConfig::stride_row;
 
                     size_t ho1 = ho_base;
                     size_t ho2 = ho_base + PanelConfig::stride_to_paired_row;
@@ -979,18 +979,18 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     size_t fb_index = 0;
     for (int i = 0; i < PanelConfig::SCAN_DEPTH; i++)
     {
-        for (int v = 0; v < CHAIN_COLS; v++)
+        for (int v = 0; v < CHAIN_ROWS; v++) // v: panel row (vertical chain)
         {
             const bool reverse = (v & 1);
 
-            for (int h = 0; h < CHAIN_ROWS; h++)
+            for (int h = 0; h < CHAIN_COLS; h++) // h: panel column (horizontal chain)
             {
                 if (reverse)
                 {
                     // Odd serpentine panel row (180° rotated)
                     size_t vo = (v + 1) * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = (vo - h * MATRIX_PANEL_WIDTH - i * CHAIN_ROWS * MATRIX_PANEL_WIDTH) * 3;
+                    size_t ho_base = (vo - h * MATRIX_PANEL_WIDTH - i * PanelConfig::stride_row) * 3;
 
                     // Rotated 180 degrees
                     size_t ho1 = ho_base;
@@ -999,7 +999,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                     for (size_t j = 3; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
                         rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[ho1 - j - 2], src[ho1 - j - 1], src[ho1 - j]);
-                        rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[ho2 - j - 2], src[ho2 - j - 1], src[ho2 + j]);
+                        rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[ho2 - j - 2], src[ho2 - j - 1], src[ho2 - j]);
                         fb_index += 2;
                     }
                 }
@@ -1008,12 +1008,12 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                     // Even row
                     size_t vo = v * CHAIN_ROWS * matrix_panel_pixels;
 
-                    size_t ho_base = (vo + h * MATRIX_PANEL_WIDTH + i * CHAIN_ROWS * MATRIX_PANEL_WIDTH) * 3;
+                    size_t ho_base = (vo + h * MATRIX_PANEL_WIDTH + i * PanelConfig::stride_row) * 3;
 
                     size_t ho1 = ho_base;
                     size_t ho2 = ho_base + (PanelConfig::stride_to_paired_row * 3);
 
-                    for (size_t j = 0; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
+                    for (size_t j = 0; j < MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
                         rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[ho1 + j + 2], src[ho1 + j + 1], src[ho1 + j]);
                         rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[ho2 + j + 2], src[ho2 + j + 1], src[ho2 + j]);

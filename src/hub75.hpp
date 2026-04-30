@@ -92,7 +92,7 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 //
 // #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
-#define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
+// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
 //
 // Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
 // Only define default if none of the mapping modes are already defined
@@ -302,6 +302,7 @@ namespace PanelConfig
     // Each OUT instruction writes color information for 2 pixels r0g0b0 and r1b1g1, therefore term  ">> 1u"
     constexpr uint32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
+    constexpr uint32_t stride_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS;
     constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
 }
 
