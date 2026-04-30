@@ -293,7 +293,7 @@ namespace PanelConfig
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
 
     // SCAN_MODE_WIDTH: line width depending on ROWS_IN_PARALLEL (scan-mode)
-    constexpr uint32_t SCAN_MODE_WIDTH = (MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) * ROWS_IN_PARALLEL;
+    constexpr uint32_t SCAN_MODE_WIDTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1) * ROWS_IN_PARALLEL;
 
     // BITPLANE_STREAM_LENGTH: number of bytes streamed for each row (including paired rows) in a bitplane
     // Used in hub75_bitplane_stream as value of Y-register
