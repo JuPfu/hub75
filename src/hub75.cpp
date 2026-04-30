@@ -893,7 +893,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     }
 #elif defined HUB75_P3_1415_16S_64X64_S31
     constexpr uint total_pixels = TOTAL_PIXELS;
-    constexpr uint line_offset = PanelConfig::SCAN_MODE_WIDTH;
+    constexpr uint line_offset = PanelConfig::LINE_OFFSET;
 
     constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
 
@@ -1058,7 +1058,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     }
 #elif defined HUB75_P3_1415_16S_64X64_S31
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    constexpr uint line_width = PanelConfig::SCAN_MODE_WIDTH;
+    constexpr uint line_width = PanelConfig::LINE_OFFSET;
 
     constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
 

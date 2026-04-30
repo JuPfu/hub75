@@ -292,12 +292,14 @@ namespace PanelConfig
     // For standard panels, this is usually 2.
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
 
-    // SCAN_MODE_WIDTH: line width depending on ROWS_IN_PARALLEL (scan-mode)
-    constexpr uint32_t SCAN_MODE_WIDTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1) * ROWS_IN_PARALLEL;
+    // HUB75_P3_1415_16S_64X64_S31
+    // LINE_OFFSET: line offset depending on ROWS_IN_PARALLEL (scan-mode)
+    // Two paired lines handled together, therefore term ">> 1u"
+    constexpr uint32_t LINE_OFFSET = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
     // BITPLANE_STREAM_LENGTH: number of bytes streamed for each row (including paired rows) in a bitplane
     // Used in hub75_bitplane_stream as value of Y-register
-    // Each OUT instruction writes color information for 2 pixels r0g0b0 and r1b1g1, therefore term  "">> 1u"
+    // Each OUT instruction writes color information for 2 pixels r0g0b0 and r1b1g1, therefore term  ">> 1u"
     constexpr uint32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
     constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
