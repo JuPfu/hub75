@@ -255,8 +255,8 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 constexpr uint32_t matrix_panel_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
 
 // Total virtual display dimensions (derived — do not set manually)
-constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_ROWS;
-constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_COLS;
+constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_COLS;
+constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
 
 constexpr size_t TOTAL_PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT * CHAIN_ROWS * CHAIN_COLS;
 
