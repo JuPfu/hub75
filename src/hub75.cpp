@@ -621,7 +621,7 @@ static void configure_pio(bool inverted_stb)
         }
     }
 
-    hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, PanelConfig::SCAN_MODE_WIDTH);
+    hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, PanelConfig::BITPLANE_STREAM_LENGTH);
 
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     // base_latch_wait_cycles passed as parameter to hub75_row program
@@ -892,7 +892,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         }
     }
 #elif defined HUB75_P3_1415_16S_64X64_S31
-    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    constexpr uint total_pixels = TOTAL_PIXELS;
     constexpr uint line_offset = PanelConfig::SCAN_MODE_WIDTH;
 
     constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
@@ -909,7 +909,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
-    while (line < (height >> 2))
+    while (line < (PanelConfig::HEIGHT >> 2))
     {
         dst[0] = LUT_MAPPING(src[quarter2++]);
         dst[1] = LUT_MAPPING(src[quarter4++]);
@@ -919,7 +919,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         dst += 2;
 
         // End of logical row
-        if (++p >= width)
+        if (++p >= PanelConfig::WIDTH)
         {
             p = 0;
             line++;
@@ -1074,7 +1074,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
 
     // Each iteration processes 4 physical rows (2 scan-row pairs)
-    while (line < (height >> 2))
+    while (line < (PanelConfig::HEIGHT >> 2))
     {
         dst[0] = LUT_MAPPING_RGB(src[quarter2 + 2], src[quarter2 + 1], src[quarter2]);
         quarter2 += 3;
@@ -1089,7 +1089,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         p++;
 
         // End of logical row
-        if (p == width)
+        if (p == PanelConfig::WIDTH)
         {
             p = 0;
             line++;

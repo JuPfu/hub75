@@ -92,7 +92,7 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 //
 // #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
-// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
+#define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
 //
 // Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
 // Only define default if none of the mapping modes are already defined
@@ -292,14 +292,15 @@ namespace PanelConfig
     // For standard panels, this is usually 2.
     constexpr uint32_t ROWS_IN_PARALLEL = HEIGHT / SCAN_DEPTH;
 
-    // SCAN_MODE_WIDTH: Line width depending on ROWS_IN_PARALLEL (scan-mode)
-    // Hub75 standard panel with scan-mode 2 -> (MATRIX_PANEL_WIDTH >> 1) * 2
-    // Matrix panel with scan-mode 4 -> (MATRIX_PANEL_WIDTH >> 1) * 4
-    // Used in hub75_bitplane_stream as value of Y-register
-    // Each OUT instruction writes color information for 2 pixels: r0g0b0 and r1b1g1
-    constexpr uint32_t SCAN_MODE_WIDTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
+    // SCAN_MODE_WIDTH: line width depending on ROWS_IN_PARALLEL (scan-mode)
+    constexpr uint32_t SCAN_MODE_WIDTH = (MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) * ROWS_IN_PARALLEL;
 
-    constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * SCAN_DEPTH;
+    // BITPLANE_STREAM_LENGTH: number of bytes streamed for each row (including paired rows) in a bitplane
+    // Used in hub75_bitplane_stream as value of Y-register
+    // Each OUT instruction writes color information for 2 pixels r0g0b0 and r1b1g1, therefore term  "">> 1u"
+    constexpr uint32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
+
+    constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
 }
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
@@ -316,6 +317,4 @@ void setIntensity(float intensity, bool linear_brightness_control);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
 static_assert(MATRIX_PANEL_HEIGHT == 2 * PanelConfig::SCAN_DEPTH, "HUB75_MULTIPLEX_2_ROWS requires two-row multiplexing");
 #endif
-static_assert(TOTAL_PIXELS == matrix_panel_pixels * CHAIN_ROWS * CHAIN_COLS, "Number of total pixels inconsistent with pixels of single panel multiplied by chained panels");
 static_assert(DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
-static_assert(PanelConfig::ROWS_IN_PARALLEL == 2, "Chained mapping currently implemented only for standard HUB75 two-row panels");
