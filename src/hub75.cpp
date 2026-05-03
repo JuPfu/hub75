@@ -1008,7 +1008,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     {
         for (int v = 0; v < CHAIN_ROWS; v++) // v: panel in row (vertical chain)
         {
-            const bool reverse = (v & 1);
+            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
 
             for (int h = 0; h < CHAIN_COLS; h++) // h: panel in column (horizontal chain)
             {
@@ -1121,7 +1121,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     {
         for (int v = 0; v < CHAIN_ROWS; v++) // v: panel in row (vertical chain)
         {
-            const bool reverse = (v & 1);
+            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
 
             for (int h = 0; h < CHAIN_COLS; h++) // h: panel in column (horizontal chain)
             {
@@ -1232,7 +1232,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     {
         for (int v = 0; v < CHAIN_ROWS; v++) // v: panel row (vertical chain)
         {
-            const bool reverse = (v & 1);
+            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
 
             for (int h = 0; h < CHAIN_COLS; h++) // h: panel column (horizontal chain)
             {
@@ -1372,7 +1372,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     {
         for (int v = 0; v < CHAIN_ROWS; v++) // v: panel row (vertical chain)
         {
-            const bool reverse = (v & 1);
+            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
 
             for (int h = 0; h < CHAIN_COLS; h++) // h: panel column (horizontal chain)
             {

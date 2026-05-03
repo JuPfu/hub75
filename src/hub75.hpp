@@ -45,6 +45,11 @@
 // MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT always describe ONE physical panel.
 // The total virtual display dimensions are derived automatically (see DISPLAY_WIDTH / DISPLAY_HEIGHT below).
 //
+
+#ifndef CHAIN_MODE
+#define CHAIN_MODE CHAIN_MODE_SERPENTINE
+#endif
+
 #ifndef CHAIN_ROWS
 #define CHAIN_ROWS 1
 #endif
@@ -305,6 +310,12 @@ namespace PanelConfig
     constexpr uint32_t stride_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS;
     constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
 }
+
+enum Hub75ChainMode
+{
+    CHAIN_MODE_SERPENTINE,
+    CHAIN_MODE_RASTER
+};
 
 void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
 void start_hub75_driver();

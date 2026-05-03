@@ -50,6 +50,9 @@ set(PANEL_GENERIC 0)
 set(PANEL_FM6126A 1)
 set(PANEL_RUL6024 2)
 
+set(CHAIN_MODE_SERPENTINE 0)
+set(CHAIN_MODE_RASTER 1)
+
 # No need to modify preprocessor defines in hub75.cpp - instead set their values here.
 #
 # Example:
@@ -60,6 +63,7 @@ target_compile_definitions(hub75 PRIVATE
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
+    CHAIN_MODE=CHAIN_MODE_SERPENTINE #
     CHAIN_COLS=1                # number of panels chained left-to-right in a single chain row (columns)
     CHAIN_ROWS=1                # number of chain rows stacked vertically (rows)
     DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
