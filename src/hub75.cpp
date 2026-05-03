@@ -1240,7 +1240,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                 // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
                 // Output parameters
                 // row_offset: row offset
-                size_t row_offset = map_pixel(row, v, h, reverse);
+                uint32_t row_offset = map_pixel(row, v, h, reverse);
 
                 if (reverse)
                 {
@@ -1380,7 +1380,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                 // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
                 // Output parameters
                 // row_offset: row offset
-                size_t row_offset = map_pixel(row, v, h, reverse);
+                uint32_t row_offset = map_pixel(row, v, h, reverse);
 
                 if (reverse)
                 {
