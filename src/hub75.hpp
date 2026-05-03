@@ -90,14 +90,14 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
 //
-// #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
+// #define HUB75                       // default - two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
 // #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
 //
-// Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
+// Default to HUB75 if no multiplexing mode is defined
 // Only define default if none of the mapping modes are already defined
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
-#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
+#if !defined(HUB75) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
+#define HUB75 // two or four rows lit simultaneously
 #endif
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
