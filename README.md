@@ -52,6 +52,17 @@
     - [How it Works](#how-it-works)
     - [Default Settings](#default-settings)
     - [Practical Notes](#practical-notes)
+  - [Chained Panels](#chained-panels)
+    - [Topology Overview](#topology-overview)
+    - [Configuration Parameters](#configuration-parameters)
+      - [Chain Modes](#chain-modes)
+    - [CMakeLists.txt Example](#cmakeliststxt-example)
+    - [Source Buffer Layout](#source-buffer-layout)
+    - [How Serpentine Reversal Works Internally](#how-serpentine-reversal-works-internally)
+    - [Single-Panel Optimisation](#single-panel-optimisation)
+    - [Supported Panel Types and Chaining](#supported-panel-types-and-chaining)
+    - [Memory Considerations](#memory-considerations)
+    - [Quick-Reference: Common Configurations](#quick-reference-common-configurations)
   - [Demo Effects](#demo-effects)
   - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
   - [Next Steps](#next-steps)
@@ -802,6 +813,183 @@ This corresponds to the same brightness as earlier driver revisions without adju
 - For indoor use, values between 4–8 are usually sufficient.
 - For dimmer environments, you can keep the baseline factor low (e.g. 4) and rely on setIntensity() for smooth runtime control.
 - Both functions are non-blocking and can be called during normal operation.
+
+## Chained Panels
+
+The driver supports driving multiple HUB75 panels connected in series from a single Raspberry Pi Pico.
+Panels are arranged in a **serpentine (U-turn) topology**: data flows left-to-right through the first
+chain row, then reverses and flows right-to-left through the second chain row, and so on.
+The signal input connector is always on the **left panel of chain row 0**.
+
+---
+
+### Topology Overview
+
+Panels are described by a two-dimensional grid:
+
+- **`CHAIN_COLS`** — number of panels chained left-to-right within a single chain row (horizontal extent).
+- **`CHAIN_ROWS`** — number of chain rows stacked vertically (vertical extent).
+
+The diagram below shows a `CHAIN_COLS=3`, `CHAIN_ROWS=2` arrangement (six panels total):
+
+```
+Signal IN
+    │
+    ▼
+┌───────┐   ┌───────┐   ┌───────┐
+│  0,0  │──▶│  0,1  │──▶│  0,2  │   chain row 0  (left → right)
+└───────┘   └───────┘   └───────┘
+                                │
+                        U-turn  ▼
+┌───────┐   ┌───────┐   ┌───────┐
+│  1,0  │◀──│  1,1  │◀──│  1,2  │   chain row 1  (right → left)
+└───────┘   └───────┘   └───────┘
+```
+
+> **Physical wiring is unchanged.** The serpentine reversal is handled in software by the pixel mapping
+> stage (`update()` / `update_bgr()`): panels on odd-numbered chain rows automatically receive their
+> content rotated 180° so that the image appears upright on the display.
+
+---
+
+### Configuration Parameters
+
+All chaining parameters are set via `CMakeLists.txt` as compile-time definitions.
+`MATRIX_PANEL_WIDTH` and `MATRIX_PANEL_HEIGHT` always describe **one physical panel**.
+The total virtual display dimensions are derived automatically.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `MATRIX_PANEL_WIDTH` | `64` | Width of a single physical panel in pixels |
+| `MATRIX_PANEL_HEIGHT` | `64` | Height of a single physical panel in pixels |
+| `CHAIN_COLS` | `1` | Number of panels per chain row (horizontal) |
+| `CHAIN_ROWS` | `1` | Number of chain rows stacked vertically |
+| `CHAIN_MODE` | `CHAIN_MODE_SERPENTINE` | Topology: `CHAIN_MODE_SERPENTINE` or `CHAIN_MODE_RASTER` |
+
+The derived display dimensions are computed at compile time:
+
+```cpp
+constexpr uint32_t DISPLAY_WIDTH  = MATRIX_PANEL_WIDTH  * CHAIN_COLS;
+constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
+```
+
+#### Chain Modes
+
+| Mode | Description |
+|---|---|
+| `CHAIN_MODE_SERPENTINE` | Odd chain rows are reversed 180° (U-turn topology, default) |
+| `CHAIN_MODE_RASTER` | All panels in the same orientation; no reversal applied |
+
+Use `CHAIN_MODE_RASTER` only if your physical cable layout already compensates for direction changes
+(non-standard wiring).
+
+---
+
+### CMakeLists.txt Example
+
+The example below configures a **2×3 array** of 64×64 panels (total virtual display: 192×128 pixels):
+
+```cmake
+target_compile_definitions(hub75 PRIVATE
+    MATRIX_PANEL_WIDTH=64         # width of one physical panel
+    MATRIX_PANEL_HEIGHT=64        # height of one physical panel
+    CHAIN_COLS=3                  # 3 panels side-by-side per chain row
+    CHAIN_ROWS=2                  # 2 chain rows stacked vertically
+    CHAIN_MODE=CHAIN_MODE_SERPENTINE  # serpentine / U-turn topology (default)
+)
+```
+
+This yields `DISPLAY_WIDTH=192` and `DISPLAY_HEIGHT=128`.
+Your application draws into a framebuffer of exactly that size; the driver handles all panel
+addressing and serpentine reordering transparently.
+
+---
+
+### Source Buffer Layout
+
+The `update()` and `update_bgr()` functions expect a flat source buffer whose pixels are laid out
+in **row-major order** across the full virtual display:
+
+```
+pixel(x, y) = src[y * DISPLAY_WIDTH + x]          // update()     — RGB888 packed
+pixel(x, y) = src[(y * DISPLAY_WIDTH + x) * 3]    // update_bgr() — BGR888 byte triplets
+```
+
+The driver internally translates this linear layout into the correct per-panel, per-row addressing
+required by the HUB75 protocol, including the 180° rotation for reversed panels in serpentine mode.
+
+---
+
+### How Serpentine Reversal Works Internally
+
+During the pixel mapping stage, each panel is identified by its position `(v, h)` where `v` is the
+chain row index and `h` is the column index within that row.
+
+For every scan row the driver iterates over all panels:
+
+```cpp
+for (int v = 0; v < CHAIN_ROWS; ++v)
+{
+    const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
+
+    for (int h = 0; h < CHAIN_COLS; ++h)
+    {
+        // panels on odd chain rows (v = 1, 3, …) receive rotated content
+    }
+}
+```
+
+When `reverse` is `true`, pixel coordinates within the panel are mirrored both horizontally and
+vertically, which is equivalent to a 180° software rotation. This compensates for the physical
+cable U-turn without requiring any change to the panel wiring.
+
+---
+
+### Single-Panel Optimisation
+
+When `CHAIN_COLS == 1 && CHAIN_ROWS == 1`, the compiler selects a dedicated single-panel fast path
+that skips all chain-related loop overhead. No special configuration is required; the optimisation
+is applied automatically at compile time via preprocessor guards.
+
+---
+
+### Supported Panel Types and Chaining
+
+All three supported panel mapping modes work with chained configurations:
+
+| Panel type define | Chain support |
+|---|---|
+| `HUB75` (default) | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
+| `HUB75_P10_3535_16X32_4S` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
+| `HUB75_P3_1415_16S_64X64_S31` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
+
+---
+
+### Memory Considerations
+
+Memory requirements scale linearly with the total number of panels:
+
+```
+TOTAL_PIXELS = MATRIX_PANEL_WIDTH × MATRIX_PANEL_HEIGHT × CHAIN_ROWS × CHAIN_COLS
+```
+
+Each additional panel increases the size of the `rgb_buffer`, the `frame_buffer` (all bitplanes),
+and the `row_cmd_buffer` proportionally. For large arrays on the RP2040 (264 KB SRAM), verify that
+total buffer allocation fits within available memory before enabling `BALANCED_LIGHT_OUTPUT=true`
+and/or `SEPARATE_CIE_CHANNELS=true`, as both options increase memory usage further.
+
+---
+
+### Quick-Reference: Common Configurations
+
+| Array | `CHAIN_COLS` | `CHAIN_ROWS` | `DISPLAY_WIDTH` | `DISPLAY_HEIGHT` |
+|---|---|---|---|---|
+| Single 64×64 panel | `1` | `1` | 64 | 64 |
+| Two panels side-by-side | `2` | `1` | 128 | 64 |
+| Four panels (2×2) | `2` | `2` | 128 | 128 |
+| Six panels (3×2) | `3` | `2` | 192 | 128 |
+| Eight panels (4×2) | `4` | `2` | 256 | 128 |
+
 
 ## Demo Effects
 
