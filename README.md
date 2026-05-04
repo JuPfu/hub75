@@ -1171,6 +1171,9 @@ The table below lists every configurable preprocessor define, its **default valu
 | `USE_PICO_GRAPHICS` | `true` | Set to `false` if hub75 is used as a pure library without pico_graphics. Removes any dependency on pico_graphics. |
 | `MATRIX_PANEL_WIDTH` | `64` | Physical width of the LED matrix panel in pixels. |
 | `MATRIX_PANEL_HEIGHT` | `64` | Physical height of the LED matrix panel in pixels. |
+| `CHAIN_MODE` | `CHAIN_MODE_SERPENTINE` | Set chain-mode - default is serpentine (U-Turn with compensation for 180° rotation). |
+| `CHAIN_COLS` | `1` | Number of panels chained left-to-right in a single chain row (columns). |
+| `CHAIN_ROWS` | `1` | Number of chain rows stacked vertically (rows). |
 | `DATA_BASE_PIN` | `0` | First GPIO pin in the consecutive colour data block (R0). |
 | `DATA_N_PINS` | `6` | Number of colour data pins (always 6 for standard HUB75: R0, G0, B0, R1, G1, B1). |
 | `ROWSEL_BASE_PIN` | `6` | First GPIO pin in the consecutive row-select (address) block (A0). |
@@ -1224,6 +1227,9 @@ target_compile_definitions(hub75 PRIVATE
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
+    CHAIN_MODE=CHAIN_MODE_SERPENTINE # set chain-mode - default is serpentine (U-Turn with compensation for 180° rotation)
+    CHAIN_COLS=1                # number of panels chained left-to-right in a single chain row (columns)
+    CHAIN_ROWS=1                # number of chain rows stacked vertically (rows)
     DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
     DATA_N_PINS=6               # number (count) of colour pins (usually 6)
     ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins
