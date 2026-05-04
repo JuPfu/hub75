@@ -950,6 +950,23 @@ inline int32_t map_pixel(int row, int v, int h, bool reverse)
 
     return vertical_offset * panel_stride + direction * (int32_t)(h * MATRIX_PANEL_WIDTH + row * PanelConfig::stride_row);
 }
+#elif defined(HUB75_P10_3535_16X32_4S)
+inline int32_t map_p10_pixel_pair(int j, int line)
+{
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
+    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+
+    return (!(j & PAIR_HALF_BIT))
+               ? j - (line << PAIR_HALF_SHIFT)
+               : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
+}
 #endif
 
 #if USE_PICO_GRAPHICS == true
@@ -1048,6 +1065,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     }
 #endif // CHAIN_COLS
 #elif defined HUB75_P10_3535_16X32_4S
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     int line = 0;
     int counter = 0;
 
@@ -1078,6 +1096,59 @@ __attribute__((optimize("unroll-loops"))) void update(
             ++line;
         }
     }
+#else
+    int32_t fb_index = 0;
+
+    constexpr int PANEL_PAIRS = matrix_panel_pixels >> 1;
+
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+
+    constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * MATRIX_PANEL_WIDTH;
+
+    for (int v = 0; v < CHAIN_ROWS; ++v)
+    {
+        const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
+
+        for (int h = 0; h < CHAIN_COLS; ++h)
+        {
+            // Panel base offset in source buffer
+            const int32_t panel_base = (v * CHAIN_COLS + h) * matrix_panel_pixels;
+
+            int line = 0;
+            int counter = 0;
+
+            for (int j = 0; j < PANEL_PAIRS; ++j)
+            {
+                int32_t idx = map_p10_pixel_pair(j, line);
+
+                // Apply panel offset
+                idx += panel_base;
+
+                if (reverse)
+                {
+                    // 180° rotation (serpentine)
+                    int32_t ridx = panel_base + (matrix_panel_pixels - 1 - idx);
+
+                    rgb_buffer[fb_index] = LUT_MAPPING(src[ridx]);
+                    rgb_buffer[fb_index + 1] = LUT_MAPPING(src[ridx + HALF_PANEL_OFFSET]);
+                }
+                else
+                {
+                    rgb_buffer[fb_index] = LUT_MAPPING(src[idx]);
+                    rgb_buffer[fb_index + 1] = LUT_MAPPING(src[idx + HALF_PANEL_OFFSET]);
+                }
+
+                fb_index += 2;
+
+                if (++counter >= COLUMN_PAIRS)
+                {
+                    counter = 0;
+                    ++line;
+                }
+            }
+        }
+    }
+#endif
 #elif defined HUB75_P3_1415_16S_64X64_S31
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     constexpr uint total_pixels = TOTAL_PIXELS;
@@ -1271,6 +1342,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     }
 #endif
 #elif defined HUB75_P10_3535_16X32_4S
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     int line = 0;
     int counter = 0;
 
@@ -1302,6 +1374,58 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
             ++line;
         }
     }
+#else
+    int32_t fb_index = 0;
+
+    constexpr int PANEL_PAIRS = matrix_panel_pixels >> 1;
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+    constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * MATRIX_PANEL_WIDTH * 3;
+
+    for (int v = 0; v < CHAIN_ROWS; ++v)
+    {
+        const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
+
+        for (int h = 0; h < CHAIN_COLS; ++h)
+        {
+            // Panel base offset in source buffer
+            const int32_t panel_base = (v * CHAIN_COLS + h) * matrix_panel_pixels;
+
+            int line = 0;
+            int counter = 0;
+
+            for (int j = 0; j < PANEL_PAIRS; ++j)
+            {
+                int32_t idx = map_p10_pixel_pair(j, line);
+
+                // Apply panel offset
+                idx += panel_base;
+
+                if (reverse)
+                {
+                    // 180° rotation (serpentine)
+                    int32_t offset = (panel_base + (matrix_panel_pixels - 1 - idx)) * 3;
+
+                    rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[offset - 2], src[offset - 1], src[offset]);
+                    rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[offset + HALF_PANEL_OFFSET - 2], src[offset + HALF_PANEL_OFFSET - 1], src[offset + HALF_PANEL_OFFSET]);
+                }
+                else
+                {
+                    int32_t offset = idx * 3;
+                    rgb_buffer[fb_index] = LUT_MAPPING_RGB(src[offset + 2], src[offset + 1], src[offset]);
+                    rgb_buffer[fb_index + 1] = LUT_MAPPING_RGB(src[offset + HALF_PANEL_OFFSET + 2], src[offset + HALF_PANEL_OFFSET + 1], src[offset + HALF_PANEL_OFFSET]);
+                }
+
+                fb_index += 2;
+
+                if (++counter >= COLUMN_PAIRS)
+                {
+                    counter = 0;
+                    ++line;
+                }
+            }
+        }
+    }
+#endif
 #elif defined HUB75_P3_1415_16S_64X64_S31
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;

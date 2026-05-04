@@ -69,7 +69,7 @@ target_compile_definitions(hub75 PRIVATE
     DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
     DATA_N_PINS=6               # number (count) of colour pins (usually 6)
     ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins
-    ROWSEL_N_PINS=4             # number (count) of address pins available on your matrix panel board (look at your panels connector)
+    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board (look at your panels connector)
     CLK_PIN=41                  # GPIO pin for CLK
     STROBE_PIN=42               # GPIO pin for STROBE (LATCH)
     OEN_PIN=43                  # GPIO for OE pin
