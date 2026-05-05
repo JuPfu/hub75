@@ -1205,38 +1205,44 @@ __attribute__((optimize("unroll-loops"))) void update(
                 // map row and its paired row(s) in current panel located at position (v, h)
                 if (reverse)
                 {
+                    const int32_t base1 = row_offset - 1 * PanelConfig::stride_to_paired_row;
+                    const int32_t base3 = row_offset - 3 * PanelConfig::stride_to_paired_row;
+
                     // Odd serpentine panel row (180° rotated)
                     for (int j = 1; j <= MATRIX_PANEL_WIDTH; j++)
                     {
-                        int32_t offset = row_offset - 1 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset - j]);
-                        offset = row_offset - 3 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base1 - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base3 - j]);
                     }
+
+                    const int32_t base0 = row_offset - 0 * PanelConfig::stride_to_paired_row;
+                    const int32_t base2 = row_offset - 2 * PanelConfig::stride_to_paired_row;
+
                     for (int j = 1; j <= MATRIX_PANEL_WIDTH; j++)
                     {
-                        int32_t offset = row_offset - 0 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset - j]);
-                        offset = row_offset - 2 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base0 - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base2 - j]);
                     }
                 }
                 else
                 {
+                    const int32_t base1 = row_offset + 1 * PanelConfig::stride_to_paired_row;
+                    const int32_t base3 = row_offset + 3 * PanelConfig::stride_to_paired_row;
+
                     // Even panel row
                     for (int j = 0; j < MATRIX_PANEL_WIDTH; j++)
                     {
-                        int32_t offset = row_offset + 1 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset + j]);
-                        offset = row_offset + 3 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base1 + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base3 + j]);
                     }
+
+                    const int32_t base0 = row_offset + 0 * PanelConfig::stride_to_paired_row;
+                    const int32_t base2 = row_offset + 2 * PanelConfig::stride_to_paired_row;
+
                     for (int j = 0; j < MATRIX_PANEL_WIDTH; j++)
                     {
-                        int offset = row_offset + 0 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset + j]);
-                        offset = row_offset + 2 * PanelConfig::stride_to_paired_row;
-                        rgb_buffer[fb_index++] = LUT_MAPPING(src[offset + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base0 + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING(src[base2 + j]);
                     }
                 }
             }
@@ -1255,7 +1261,7 @@ __attribute__((optimize("unroll-loops"))) void update(
  * @brief Updates the frame buffer with pixel data from the source array.
  *
  * This function takes a source array of pixel data and updates the frame buffer
- * with interleaved pixel values. The pixel values are gamma-corrected to 10 bits using a lookup table.
+ * with interleaved pixel values. The pixel values are CIE-corrected to 10 bits using a lookup table.
  *
  * @param src Graphics object to be updated - RGB888 format, 24-bits in uint32_t array
  */
@@ -1508,38 +1514,44 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 
                 if (reverse)
                 {
+                    const int32_t base1 = (row_offset - 1 * PanelConfig::stride_to_paired_row) * 3;
+                    const int32_t base3 = (row_offset - 3 * PanelConfig::stride_to_paired_row) * 3;
+
                     // Odd serpentine panel row (180° rotated)
                     for (int32_t j = 3; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
-                        int32_t offset = (row_offset - 1 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset - j - 2], src[offset - j - 1], src[offset - j]);
-                        offset = (row_offset - 3 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset - j - 2], src[offset - j - 1], src[offset - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base1 - j - 2], src[base1 - j - 1], src[base1 - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base3 - j - 2], src[base3 - j - 1], src[base3 - j]);
                     }
+
+                    const int32_t base0 = (row_offset - 0 * PanelConfig::stride_to_paired_row) * 3;
+                    const int32_t base2 = (row_offset - 2 * PanelConfig::stride_to_paired_row) * 3;
+
                     for (int32_t j = 3; j <= MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
-                        int32_t offset = (row_offset - 0 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset - j - 2], src[offset - j - 1], src[offset - j]);
-                        offset = (row_offset - 2 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset - j - 2], src[offset - j - 1], src[offset - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base0 - j - 2], src[base0 - j - 1], src[base0 - j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base2 - j - 2], src[base2 - j - 1], src[base2 - j]);
                     }
                 }
                 else
                 {
+                    const int32_t base1 = (row_offset + 1 * PanelConfig::stride_to_paired_row) * 3;
+                    const int32_t base3 = (row_offset + 3 * PanelConfig::stride_to_paired_row) * 3;
+
                     // Even row
                     for (int j = 0; j < MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
-                        int32_t offset = (row_offset + 1 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
-                        offset = (row_offset + 3 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base1 + j + 2], src[base1 + j + 1], src[base1 + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base3 + j + 2], src[base3 + j + 1], src[base3 + j]);
                     }
+
+                    const int32_t base0 = (row_offset + 0 * PanelConfig::stride_to_paired_row) * 3;
+                    const int32_t base2 = (row_offset + 2 * PanelConfig::stride_to_paired_row) * 3;
+
                     for (int j = 0; j < MATRIX_PANEL_WIDTH * 3; j += 3)
                     {
-                        int32_t offset = (row_offset + 0 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
-                        offset = (row_offset + 2 * PanelConfig::stride_to_paired_row) * 3;
-                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[offset + j + 2], src[offset + j + 1], src[offset + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base0 + j + 2], src[base0 + j + 1], src[base0 + j]);
+                        rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base2 + j + 2], src[base2 + j + 1], src[base2 + j]);
                     }
                 }
             }

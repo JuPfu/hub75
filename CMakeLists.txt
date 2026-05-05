@@ -76,7 +76,7 @@ target_compile_definitions(hub75 PRIVATE
     PANEL=HUB75                 # 
     PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
     INVERTED_STB=false          # inverted pin signal for OE (untested)
-    SM_CLOCKDIV_FACTOR=2.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     BITPLANES=10                # number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
     BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
     SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
