@@ -41,7 +41,7 @@ pico_sdk_init()
 add_executable(hub75 hub75_demo.cpp )
 
 pico_set_program_name(hub75 "hub75_demo")
-pico_set_program_version(hub75 "3.0")
+pico_set_program_version(hub75 "3.1")
 
 set(PICO_PIO_VERSION 1)
 pico_set_float_implementation(hub75 pico)
