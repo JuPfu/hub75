@@ -23,11 +23,13 @@ if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-# set(PICO_BOARD pico2 CACHE STRING "Board type")
+# As far as I know the Raspberry Pi Pico plugin for VSCode does not (yet) support bare RP2350 microcontrollers without a board.
+# To adapt the C-SDK for a standard Pico board configure this CMakeLists.txt file via the Raspberry Pi Pico plugin's "Switch Board" option.
+set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # Uncomment the following two lines to compile for bare RP2350 without a board
-set(PICO_PLATFORM rp2350)
-set(PICO_BOARD none CACHE STRING "Board type")
+# set(PICO_PLATFORM rp2350)
+# set(PICO_BOARD none CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -59,7 +61,7 @@ set(CHAIN_MODE_RASTER 1)
 # Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
 # Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
 target_compile_definitions(hub75 PRIVATE
-    PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
+    # PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
