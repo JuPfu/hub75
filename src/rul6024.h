@@ -40,13 +40,13 @@
 //                               0：disable
 //                               1：enable
 //                      0b0
-#define R_TDM 0b0 << 9
+#define R_TDM 0b1 << 9
 //
 // R_UPCTRL     08:08            Cancellation circuit enable signal selection
 //                               0: Program control erasure (erasure at line break)
 //                               1: Register ROUT2<3> controls the pull-up
 //                      0b1  ???
-#define R_UPCTRL 0b0 << 8
+#define R_UPCTRL 0b1 << 8
 //
 // R_FALL_TIME  07:07            Channel output falling edge time selection
 //                               0：35ns
@@ -89,8 +89,8 @@
 //                               00：0ns
 //                               01：10ns
 //                               11: 20ns
-//                       0b01
-#define R_OE 0b01
+//                       0b00
+#define R_OE 0b00
 
 #define WREG2 R_OE_CH | R_TDM | R_UPCTRL | R_FALL_TIME | R_LATCH | R_UPCH | R_EN_AM | ROUT2 | R_CLK_SDO | R_OE
 
