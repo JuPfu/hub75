@@ -1114,7 +1114,7 @@ __attribute__((optimize("unroll-loops"))) void update(
                 if (reverse)
                 {
                     // 180° rotated
-                    for (int i = (MATRIX_PANEL_WIDTH - 1) * 3; i >= 0; i -= 3)
+                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
                     {
                         for (int p = 3; p >= 0; --p)
                         {
