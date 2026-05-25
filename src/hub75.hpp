@@ -263,7 +263,7 @@ constexpr uint32_t matrix_panel_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGH
 constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_COLS;
 constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
 
-constexpr size_t TOTAL_PIXELS = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT * CHAIN_ROWS * CHAIN_COLS;
+constexpr size_t TOTAL_PIXELS = DISPLAY_WIDTH * DISPLAY_HEIGHT;
 
 #define LUT_MAPPING(COLOUR) pack_lut_rgb(COLOUR)
 #define LUT_MAPPING_RGB(R, G, B) pack_lut_rgb_(R, G, B)
@@ -305,10 +305,11 @@ namespace PanelConfig
     // BITPLANE_STREAM_LENGTH: number of bytes streamed for each row (including paired rows) in a bitplane
     // Used in hub75_bitplane_stream as value of Y-register
     // Each OUT instruction writes color information for 2 pixels r0g0b0 and r1b1g1, therefore term  ">> 1u"
-    constexpr uint32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
+    constexpr int32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
-    constexpr uint32_t stride_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS;
-    constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
+    constexpr int32_t stride_row = MATRIX_PANEL_WIDTH * CHAIN_COLS;
+    //constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
+    constexpr int32_t stride_to_paired_row = SCAN_DEPTH * DISPLAY_WIDTH;
 }
 
 enum Hub75ChainMode

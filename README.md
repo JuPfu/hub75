@@ -2008,7 +2008,7 @@ My hardware repository of matrix panels which I used to develop the library (and
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
     DATA_BASE_PIN=0             # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins - use 30 for PICO_RP2350B
     DATA_N_PINS=6               # number (count) of colour pins (usually 6)
-    ROWSEL_BASE_PIN=6          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins - use 36 for PICO_RP2350B
+    ROWSEL_BASE_PIN=6           # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins - use 36 for PICO_RP2350B
     ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board (look at your panels connector)
     CLK_PIN=11                  # GPIO pin for CLK - use pin 41 for PICO_RP2350B
     STROBE_PIN=12               # GPIO pin for STROBE (LATCH) - use pin 42 for PICO_RP2350B
@@ -2020,10 +2020,10 @@ My hardware repository of matrix panels which I used to develop the library (and
     BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
     SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    BASE_LATCH_NS=100            # wait time in nano-seconds to stabilise latch
+    BASE_LATCH_NS=100           # wait time in nano-seconds to stabilise latch
     BASE_ADDR_NS=200            # wait time in nano-seconds to stabilise row addressing
     BASE_OE_NS=60               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)
-    FRAME_RATE=true            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
+    FRAME_RATE=true             # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
     )
    ```
 

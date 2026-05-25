@@ -15,8 +15,10 @@
 #endif
 
 // Example images
-#if (MATRIX_PANEL_WIDTH * CHAIN_COLS) == 128 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 64
+#if (MATRIX_PANEL_WIDTH *  CHAIN_COLS) == 128 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 64
 #include "taylor_swift_128x64.h"
+#elif (MATRIX_PANEL_WIDTH * CHAIN_COLS) == 64 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 128
+#include "taylor_swift_64x128.h"
 #elif (MATRIX_PANEL_WIDTH * CHAIN_COLS) == 64 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 64
 #include "taylor_swift_64x64.h"
 #else
@@ -197,6 +199,8 @@ int main()
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
 #if (MATRIX_PANEL_WIDTH * CHAIN_COLS) == 128 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 64
             update_bgr(taylor_swift_128x64);
+#elif (MATRIX_PANEL_WIDTH * CHAIN_COLS) == 64 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 128
+            update_bgr(taylor_swift_64x128);
 #elif (MATRIX_PANEL_WIDTH * CHAIN_COLS) == 64 && (MATRIX_PANEL_HEIGHT * CHAIN_ROWS) == 64
             update_bgr(taylor_swift_64x64);
 #else
