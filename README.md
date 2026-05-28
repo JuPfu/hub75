@@ -15,7 +15,6 @@
   - [All Available Defines and Their Default Values](#all-available-defines-and-their-default-values)
   - [Full CMakeLists.txt Example](#full-cmakeliststxt-example)
   - [Notes on Default Values](#notes-on-default-values)
-  - [Layout Mapping](#layout-mapping)
   - [Pixel Mapping Defines — Choosing the Right One for Your Panel](#pixel-mapping-defines--choosing-the-right-one-for-your-panel)
     - [Why This Mapping Step Exists](#why-this-mapping-step-exists)
     - [The Three Defines at a Glance](#the-three-defines-at-a-glance)
@@ -84,7 +83,6 @@
 - [Configuration via CMakeLists.txt](#configuration-via-cmakeliststxt-2)
   - [Overview](#overview-2)
   - [All Available Defines and Their Default Values](#all-available-defines-and-their-default-values-1)
-  - [Full CMakeLists.txt Example](#full-cmakeliststxt-example-1)
   - [Notes on Default Values](#notes-on-default-values-1)
 - [Configuring Your HUB75 LED Matrix Panel](#configuring-your-hub75-led-matrix-panel)
   - [Step 1 — Panel Dimensions](#step-1--panel-dimensions)
@@ -452,27 +450,6 @@ All other values fall back to the defaults in `hub75.hpp`.
 
 When no `target_compile_definitions` entry is provided for a given define, the driver uses the **default values** declared in `hub75.hpp`. These defaults correspond to the standard wiring and a **64×64 panel** connected to a **Raspberry Pi Pico** using GPIO 0–13.
 
-## Layout Mapping
-
-```cpp
-// hub75.hpp — default values (used when not overridden in CMakeLists.txt)
-
-
-// Set your panel --- this is the only configuration not yet available in CMakeList.txt
-//
-// Example:
-// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
-//
-// #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
-// #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously
-// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
-//
-// Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
-// Only define default if none of the mapping modes are already defined
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
-#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
-#endif
-```
 ## Pixel Mapping Defines — Choosing the Right One for Your Panel
 
 The three defines below tell the `update()` / `update_bgr()` method how to reorder pixels from
@@ -1641,69 +1618,6 @@ The table below lists every configurable preprocessor define, its **default valu
   set(PICO_PLATFORM rp2350)
   set(PICO_BOARD none CACHE STRING "Board type")
   ```
-
----
-
-## Full CMakeLists.txt Example
-
-The block below shows a complete `target_compile_definitions` for a **RP2350B** using GPIO pins 30–43. For real-world board configurations (including the RP2350B with a 64×64 outdoor panel) see the [Boards](#boards) section.
-
-For a bare RP2350 without a board, uncomment these two lines **before** `include(pico_sdk_import.cmake)`:
-
-```cmake
-set(PICO_PLATFORM rp2350)
-set(PICO_BOARD none CACHE STRING "Board type")
-```
-
-```cmake
-# No need to modify preprocessor defines in hub75.cpp - instead set their values here.
-#
-# Example:
-# Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
-# Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
-target_compile_definitions(hub75 PRIVATE
-    PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
-    USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
-    MATRIX_PANEL_WIDTH=64       # your matrix panel width
-    MATRIX_PANEL_HEIGHT=64      # your matrix panel height
-    CHAIN_MODE=CHAIN_MODE_SERPENTINE # set chain-mode - default is serpentine (U-Turn with compensation for 180° rotation)
-    CHAIN_COLS=1                # number of panels chained left-to-right in a single chain row (columns)
-    CHAIN_ROWS=1                # number of chain rows stacked vertically (rows)
-    DATA_BASE_PIN=30            # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
-    DATA_N_PINS=6               # number (count) of colour pins (usually 6)
-    ROWSEL_BASE_PIN=36          # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins
-    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board (look at your panels connector)
-    CLK_PIN=41                  # GPIO pin for CLK
-    STROBE_PIN=42               # GPIO pin for STROBE (LATCH)
-    OEN_PIN=43                  # GPIO for OE pin
-    PANEL_TYPE=PANEL_RUL6024    # select PANEL_TYPE
-    INVERTED_STB=false          # inverted pin signal for OE (untested)
-    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
-    BITPLANES=10                # number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
-    BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
-    SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
-    CCM_RG_SHIFT=6              # CCM Cross-channel mixing - mix ~1.6% green into the red channel
-    CCM_GB_SHIFT=7              # CCM Cross-channel mixing - mix ~0.8% blue into the green channel
-    BASE_LATCH_NS=80            # wait time in nano-seconds to stabilise latch
-    BASE_ADDR_NS=120            # wait time in nano-seconds to stabilise row addressing
-    BASE_OE_NS=40               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)
-    HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
-)
-```
-
-A minimal configuration for the default RP2350A wiring (GPIO 0–13) only needs to override what differs from the defaults, for example:
-
-```cmake
-target_compile_definitions(hub75 PRIVATE
-    MATRIX_PANEL_WIDTH=32
-    MATRIX_PANEL_HEIGHT=16
-    ROWSEL_N_PINS=3
-    BIT_DEPTH=8
-)
-```
-
-All other values fall back to the defaults in `hub75.hpp`.
 
 ---
 
