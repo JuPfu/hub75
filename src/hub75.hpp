@@ -280,6 +280,11 @@ constexpr size_t TOTAL_PIXELS = DISPLAY_WIDTH * DISPLAY_HEIGHT;
 #if USE_PICO_GRAPHICS == true
 using namespace pimoroni;
 #endif
+
+#ifndef CLAMP
+#define CLAMP(a, mn, mx) ((a)<(mx)?((a)>(mn)?(a):(mn)):(mx))
+#endif
+
 namespace PanelConfig
 {
     constexpr uint32_t WIDTH = MATRIX_PANEL_WIDTH;
