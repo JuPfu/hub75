@@ -34,6 +34,7 @@
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
 #include "grey_scale_stripes.hpp"
+#include "rectangle.hpp"
 
 static int demo_index = -1; ///< Example selector (-1 for auto-cycle)
 
@@ -90,7 +91,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 7)
+    if (++demo_index > 8)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -159,6 +160,8 @@ int main()
     PixelFill pixelFill = PixelFill(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     GreyScaleStripes greyScaleStripes = GreyScaleStripes(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+    Rectangle rectangle = Rectangle(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
@@ -236,6 +239,11 @@ int main()
         {
             greyScaleStripes.drawStripes();
             update(&greyScaleStripes);
+        }
+        else if (demo_index == 8)
+        {
+            rectangle.draw();
+            update(&rectangle);
         }
 
         // matrix panel brightness will vary when you uncomment the following api call
