@@ -35,7 +35,7 @@
 #include "pixel_fill.hpp"
 #include "grey_scale_stripes.hpp"
 
-static int demo_index = 0; ///< Example selector
+static int demo_index = -1; ///< Example selector (-1 for auto-cycle)
 
 // Perform initialisation
 int pico_led_init(void)
@@ -162,7 +162,10 @@ int main()
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
-    add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
+    if (demo_index < 0) {
+        demo_index = 0;
+        add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
+    }
 
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
