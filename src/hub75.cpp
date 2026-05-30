@@ -1515,17 +1515,13 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                 if (reverse)
                 {
                     // 180° rotation:
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    for (int i = (MATRIX_PANEL_WIDTH - 1) * 3; i >= 0; i -= 3)
                     {
-                        const int j = i * 3;
-
                         rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base1 + i + 2], src[base1 + i + 1], src[base1 + i]);
                         rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base3 + i + 2], src[base3 + i + 1], src[base3 + i]);
                     }
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    for (int i = (MATRIX_PANEL_WIDTH - 1) * 3; i >= 0; i -= 3)
                     {
-                        const int j = i * 3;
-
                         rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base0 + i + 2], src[base0 + i + 1], src[base0 + i]);
                         rgb_buffer[fb_index++] = LUT_MAPPING_RGB(src[base2 + i + 2], src[base2 + i + 1], src[base2 + i]);
                     }
