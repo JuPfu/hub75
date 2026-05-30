@@ -182,6 +182,10 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 #define CCM_BG_SHIFT 31 // bits of Green added into Blue output  (31 = off)
 #endif
 
+#ifndef BITPLANES
+#define BITPLANES 10 // default to 10-bit color depth (1024 levels per channel)
+#endif
+
 // Maximum output value for clamping (depends on BITPLANES)
 #if BITPLANES == 10
 #define CCM_MAX_VAL 1023u
