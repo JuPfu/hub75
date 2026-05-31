@@ -1,6 +1,6 @@
 #pragma once
 
-#include "libraries/pico_graphics/pico_graphics.hpp"
+#include "pico_graphics.hpp"
 #include <cstdint>
 
 using namespace pimoroni;

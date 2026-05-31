@@ -1,5 +1,5 @@
 // Example derived from https://github.com/pimoroni/pimoroni-pico/blob/main/examples/interstate75/interstate75_fire_effect.cpp
-#include "libraries/pico_graphics/pico_graphics.hpp"
+#include "pico_graphics.hpp"
 
 using namespace pimoroni;
 
