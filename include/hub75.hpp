@@ -5,7 +5,7 @@
 #endif
 
 #if USE_PICO_GRAPHICS == true
-#include "libraries/pico_graphics/pico_graphics.hpp"
+#include "pico_graphics.hpp"
 #endif
 
 // See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel

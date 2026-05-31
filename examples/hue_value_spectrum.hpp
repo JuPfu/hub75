@@ -1,8 +1,8 @@
 // Example derviced from https://github.com/mrcodetastic/ESP32-HUB75-MatrixPanel-DMA/blob/master/examples/HueValueSpectrum/HueValueSpectrum.ino
 #include <algorithm>
 
-#include "libraries/pico_graphics/pico_graphics.hpp"
-#include "libraries/bitmap_fonts/font14_outline_data.hpp"
+#include "pico_graphics.hpp"
+#include "font14_outline_data.hpp"
 
 using namespace pimoroni;
 
