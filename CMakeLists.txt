@@ -39,14 +39,43 @@ project(hub75 C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# Add executable. Default name is the project name
-add_executable(hub75 hub75_demo.cpp )
+# Add library. This is the core HUB75 driver.
+add_library(hub75 STATIC)
 
-pico_set_program_name(hub75 "hub75_demo")
-pico_set_program_version(hub75 "3.1")
+target_sources(hub75 PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
+)
 
-set(PICO_PIO_VERSION 1)
-pico_set_float_implementation(hub75 pico)
+target_link_libraries(hub75 PUBLIC
+        pico_stdlib
+        pico_multicore
+        pico_aon_timer
+        hardware_pio
+        hardware_dma
+        hardware_vreg
+        pico_graphics
+)
+
+target_include_directories(hub75 PUBLIC
+        ${CMAKE_CURRENT_LIST_DIR}/include
+)
+
+target_include_directories(hub75 PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
+
+
+# Add demo executable. Everything that is only required for the demo remains here.
+add_executable(hub75_demo hub75_demo.cpp )
+
+pico_set_program_name(hub75_demo "hub75_demo")
+pico_set_program_version(hub75_demo "3.1")
+
+pico_set_float_implementation(hub75_demo pico)
 
 set(PANEL_GENERIC 0)
 set(PANEL_FM6126A 1)
@@ -60,7 +89,7 @@ set(CHAIN_MODE_RASTER 1)
 # Example:
 # Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
 # Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75_demo PRIVATE
     # PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
@@ -92,17 +121,14 @@ target_compile_definitions(hub75 PRIVATE
     FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
 
-# Generate PIO header
-pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
-
 # Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(hub75 0)
-pico_enable_stdio_usb(hub75 1)
+pico_enable_stdio_uart(hub75_demo 0)
+pico_enable_stdio_usb(hub75_demo 1)
 
 add_subdirectory(common)
 add_subdirectory(libraries)
 
-target_sources(hub75 PRIVATE
+target_sources(hub75_demo PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.cpp
@@ -119,7 +145,7 @@ target_sources(hub75 PRIVATE
         )
 
 # Add the standard library to the build
-target_link_libraries(hub75
+target_link_libraries(hub75_demo PRIVATE
         pico_stdlib
         pico_multicore
         pico_aon_timer
@@ -129,16 +155,19 @@ target_link_libraries(hub75
         pico_graphics)
 
 if(PICO_CYW43_SUPPORTED)
-    target_link_libraries(hub75
+    target_link_libraries(hub75_demo PRIVATE
                           pico_cyw43_arch_none)
 endif()
 
 # Add the standard include files to the build
-target_include_directories(hub75 PRIVATE
+target_include_directories(hub75_demo PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/include
         ${CMAKE_CURRENT_LIST_DIR}/src
         ${CMAKE_CURRENT_LIST_DIR}/examples
-        ${CMAKE_CURRENT_LIST_DIR}
 )
 
-pico_add_extra_outputs(hub75)
+pico_generate_pio_header(hub75_demo ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
+
+
+pico_add_extra_outputs(hub75_demo)
 
