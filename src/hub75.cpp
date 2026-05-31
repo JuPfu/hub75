@@ -653,22 +653,38 @@ void setup_bitplane_stream_irq()
  *
  * @param w Width of the HUB75 display in pixels.
  * @param h Height of the HUB75 display in pixels.
+ * @param panel_type Type of the HUB75 panel (e.g., PANEL_GENERIC, PANEL_FM6126A, PANEL_RUL6024).
+ * @param inverted_stb Whether the panel uses an inverted strobe signal (STB).
+ * 
+ * @return 0 on success, or a negative error code on failure (e.g., -ENOMEM if memory allocation fails).
  */
-void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inverted_stb = INVERTED_STB)
+int create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inverted_stb = INVERTED_STB)
 {
     frame_buffer1 = new uint8_t[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
     frame_buffer2 = new uint8_t[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
+    if (!frame_buffer1 || !frame_buffer2)
+    {
+        goto error_cleanup;
+    }
 
     dma_buffer = frame_buffer1;
     frame_buffer = frame_buffer2;
 
     row_cmd_buffer1 = new row_cmd_t[PanelConfig::SCAN_DEPTH * bcm_sequence_length];
     row_cmd_buffer2 = new row_cmd_t[PanelConfig::SCAN_DEPTH * bcm_sequence_length];
+    if (!row_cmd_buffer1 || !row_cmd_buffer2)
+    {
+        goto error_cleanup;
+    }
 
     dma_row_cmd_buffer = row_cmd_buffer1;
     row_cmd_buffer = row_cmd_buffer2;
 
     rgb_buffer = new uint32_t[TOTAL_PIXELS]();
+    if (!rgb_buffer)
+    {
+        goto error_cleanup;
+    }
 
     hub75_timing_init(&hub75_timing_config, clock_get_hz(clk_sys), SM_CLOCKDIV);
 
@@ -687,6 +703,17 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
     setup_display_irq();
     setup_bitplane_stream_irq();
     hub75_build_row_cmd_buffer(brightness_fp);
+
+    return 0;
+
+error_cleanup:
+    // Freeing nullptr is safe, so we can call delete[] on all pointers without checking
+    delete[] frame_buffer1;
+    delete[] frame_buffer2;
+    delete[] row_cmd_buffer1;
+    delete[] row_cmd_buffer2;
+    delete[] rgb_buffer;
+    return -ENOMEM;
 }
 
 /**

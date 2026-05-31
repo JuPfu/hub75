@@ -327,7 +327,7 @@ enum Hub75ChainMode
     CHAIN_MODE_RASTER
 };
 
-void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
+int create_hub75_driver(uint w, uint h, uint panel_type, bool inverted_stb);
 void start_hub75_driver();
 void update_bgr(const uint8_t *src);
 #if USE_PICO_GRAPHICS == true
