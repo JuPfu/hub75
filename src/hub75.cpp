@@ -18,8 +18,8 @@
 #include "cie.hpp"
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
-alignas(32) uint8_t *frame_buffer; ///< Back buffer — written by bitplane builder (read_chan_handler)
-uint8_t *dma_buffer;               ///< Front buffer — read by pixel_chan DMA → panel streamer
+uint8_t *frame_buffer; ///< Back buffer — written by bitplane builder (read_chan_handler)
+uint8_t *dma_buffer;   ///< Front buffer — read by pixel_chan DMA → panel streamer
 
 /**
  * @struct row_cmd_t
