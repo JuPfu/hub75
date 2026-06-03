@@ -221,10 +221,6 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
         (bv) = CCM_CLAMP(_b);                                                 \
     } while (0)
 
-#ifndef BITPLANES
-#define BITPLANES 10 // default
-#endif
-
 // Balanced Light Output
 // High-weight bit-planes are split into multiple smaller slices within the BCM sequence.
 // This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
@@ -286,7 +282,7 @@ using namespace pimoroni;
 #endif
 
 #ifndef CLAMP
-#define CLAMP(a, mn, mx) ((a)<(mx)?((a)>(mn)?(a):(mn)):(mx))
+#define CLAMP(a, mn, mx) ((a) < (mx) ? ((a) > (mn) ? (a) : (mn)) : (mx))
 #endif
 
 namespace PanelConfig
@@ -317,7 +313,6 @@ namespace PanelConfig
     constexpr int32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
     constexpr int32_t stride_row = MATRIX_PANEL_WIDTH * CHAIN_COLS;
-    //constexpr uint32_t stride_to_paired_row = MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS * SCAN_DEPTH;
     constexpr int32_t stride_to_paired_row = SCAN_DEPTH * DISPLAY_WIDTH;
 }
 
