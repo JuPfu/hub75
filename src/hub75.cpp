@@ -1,8 +1,8 @@
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <vector>
 #include <memory>
-
-#include "pico/stdlib.h"
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
