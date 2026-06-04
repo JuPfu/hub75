@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include "libraries/pico_graphics/pico_graphics.hpp"
-#include "libraries/bitmap_fonts/font14_outline_data.hpp"
+#include "pico_graphics.hpp"
+#include "font14_outline_data.hpp"
 
 using namespace pimoroni;
 
