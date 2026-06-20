@@ -193,6 +193,24 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 #define CCM_MAX_VAL 255u
 #endif
 
+// ---------------------------------------------------------------------------
+// Display Rotation
+//
+// Set DISPLAY_ROTATION in CMakeLists.txt:
+//   target_compile_definitions(hub75 PRIVATE DISPLAY_ROTATION=90)
+//
+// Valid values: 0 (default, no rotation), 90 (CW), 180, 270 (CW = CCW 90°).
+//
+// At 0° / 180°: src buffer is DISPLAY_WIDTH × DISPLAY_HEIGHT (row-major).
+// At 90° / 270°: src buffer is DISPLAY_HEIGHT × DISPLAY_WIDTH (transposed).
+//   → e.g. for a 64×96 display: src must be 96 wide × 64 tall at 90°.
+// ---------------------------------------------------------------------------
+#ifndef DISPLAY_ROTATION
+#define DISPLAY_ROTATION 0
+#endif
+
+static_assert(DISPLAY_ROTATION == 0 || DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 180 || DISPLAY_ROTATION == 270, "DISPLAY_ROTATION must be 0, 90, 180, or 270");
+
 // CCM_CLAMP: saturate at CCM_MAX_VAL without branching
 // Uses the fact that if (a + b) overflows CCM_MAX_VAL, we cap to CCM_MAX_VAL.
 // Implemented as: min(a + b, CCM_MAX_VAL) via conditional expression.

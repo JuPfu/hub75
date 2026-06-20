@@ -952,26 +952,6 @@ inline int32_t map_panel_row(int row, int v, int h, bool reverse)
     return panel_top_left + local_row * (int32_t)DISPLAY_WIDTH;
 }
 
-// ---------------------------------------------------------------------------
-// Display Rotation
-//
-// Set DISPLAY_ROTATION in CMakeLists.txt:
-//   target_compile_definitions(hub75 PRIVATE DISPLAY_ROTATION=90)
-//
-// Valid values: 0 (default, no rotation), 90 (CW), 180, 270 (CW = CCW 90°).
-//
-// At 0° / 180°: src buffer is DISPLAY_WIDTH × DISPLAY_HEIGHT (row-major).
-// At 90° / 270°: src buffer is DISPLAY_HEIGHT × DISPLAY_WIDTH (transposed).
-//   → e.g. for a 64×96 display: src must be 96 wide × 64 tall at 90°.
-// ---------------------------------------------------------------------------
-#ifndef DISPLAY_ROTATION
-#define DISPLAY_ROTATION 0
-#endif
-static_assert(
-    DISPLAY_ROTATION == 0 || DISPLAY_ROTATION == 90 ||
-        DISPLAY_ROTATION == 180 || DISPLAY_ROTATION == 270,
-    "DISPLAY_ROTATION must be 0, 90, 180, or 270");
-
 // Returns the flat src-buffer index for display coordinate (dx, dy).
 // Panel-side addressing (rgb_buffer) is never passed through this function.
 // Fully inlined at compile time — zero overhead at DISPLAY_ROTATION == 0.
