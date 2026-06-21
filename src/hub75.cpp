@@ -1017,14 +1017,23 @@ __attribute__((optimize("unroll-loops"))) void update(
         return;
 
 #if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
-    if (graphics->bounds.w != DISPLAY_HEIGHT || graphics->bounds.h != DISPLAY_WIDTH)
-        printf("For DISPLAY_ROTATION == 90 or DISPLAY_ROTATION == 270 graphics->bounds.w must be set to DISPLAY_HEIGHT and graphics->bounds.h must be set to DISPLAY_WIDTH!");
-        return;
+    constexpr int expected_w = DISPLAY_HEIGHT;
+    constexpr int expected_h = DISPLAY_WIDTH;
+    const char *const error_msg = "For DISPLAY_ROTATION 90/270, width must be DISPLAY_HEIGHT and height must be DISPLAY_WIDTH!";
 #else
-    if (graphics->bounds.w != DISPLAY_WIDTH || graphics->bounds.h != DISPLAY_HEIGHT)
-        printf("For DISPLAY_ROTATION == 0 or DISPLAY_ROTATION == 180 graphics->bounds.w must be set to DISPLAY_WIDTH and graphics->bounds.h must be set to DISPLAY_HEIGHT!");
-        return;
+    constexpr int expected_w = DISPLAY_WIDTH;
+    constexpr int expected_h = DISPLAY_HEIGHT;
+    const char *const error_msg = "For DISPLAY_ROTATION 0/180, width must be DISPLAY_WIDTH and height must be DISPLAY_HEIGHT!";
 #endif
+
+    if (graphics->bounds.w != expected_w || graphics->bounds.h != expected_h)
+    {
+        printf("\n[HUB75 ERROR] Dimension Mismatch!\n");
+        printf("Expected: %dx%d, Got: %dx%d\n", expected_w, expected_h, graphics->bounds.w, graphics->bounds.h);
+
+        // Hard panic halts both RP2350 cores and prints a clean debug trace over the terminal
+        panic(error_msg);
+    }
 
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
