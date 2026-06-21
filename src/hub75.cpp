@@ -1016,6 +1016,16 @@ __attribute__((optimize("unroll-loops"))) void update(
     if (graphics->pen_type != PicoGraphics::PEN_RGB888)
         return;
 
+#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
+    if (graphics->bounds.w != DISPLAY_HEIGHT || graphics->bounds.h != DISPLAY_WIDTH)
+        printf("For DISPLAY_ROTATION == 90 or DISPLAY_ROTATION == 270 graphics->bounds.w must be set to DISPLAY_HEIGHT and graphics->bounds.h must be set to DISPLAY_WIDTH!");
+        return;
+#else
+    if (graphics->bounds.w != DISPLAY_WIDTH || graphics->bounds.h != DISPLAY_HEIGHT)
+        printf("For DISPLAY_ROTATION == 0 or DISPLAY_ROTATION == 180 graphics->bounds.w must be set to DISPLAY_WIDTH and graphics->bounds.h must be set to DISPLAY_HEIGHT!");
+        return;
+#endif
+
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if defined(HUB75)
