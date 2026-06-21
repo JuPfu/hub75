@@ -952,9 +952,7 @@ inline int32_t map_panel_row(int row, int v, int h, bool reverse)
     return panel_top_left + local_row * (int32_t)DISPLAY_WIDTH;
 }
 
-// Returns the flat src-buffer index for display coordinate (dx, dy).
-// Panel-side addressing (rgb_buffer) is never passed through this function.
-// Fully inlined at compile time — zero overhead at DISPLAY_ROTATION == 0.
+// Returns the flat src-buffer index for display coordinate (dx, dy)
 static inline constexpr int rotated_src_index(int dx, int dy, int dw, int dh)
 {
 #if DISPLAY_ROTATION == 90
@@ -982,15 +980,11 @@ static inline constexpr int rotated_src_index(int dx, int dy, int dw, int dh)
 //     const int dy = base / W;             (hoisted once per row-group)
 //     ... LUT_MAPPING(src[rotated_src_index(i, dy, W, H)]) ...
 //
-// IMPORTANT: a flat panel-side index `base` is only guaranteed to be a
-// multiple of W (DISPLAY_WIDTH) when CHAIN_COLS == 1. For CHAIN_COLS > 1,
-// map_panel_row() returns a row_base that already carries a horizontal
-// panel offset (h * MATRIX_PANEL_WIDTH), which is NOT, in general, a
-// multiple of DISPLAY_WIDTH. Decompose base into (dx_base, dy) with both
-// % and / once per row-group, then add the column-local `i` to dx_base
-// (not to dy) before passing to rotated_src_index(). Only the W-divide
-// is needed once per (row, v, h[, p]) group; the inner i-loop stays
-// division-free.
+// IMPORTANT: a flat panel-side index `base` is only guaranteed to be a multiple of W (DISPLAY_WIDTH) when CHAIN_COLS == 1.
+// For CHAIN_COLS > 1, map_panel_row() returns a row_base that already carries a horizontal panel offset (h * MATRIX_PANEL_WIDTH),
+// which is NOT, in general, a multiple of DISPLAY_WIDTH. Decompose base into (dx_base, dy) with both % and / once per row-group,
+// then add the column-local `i` to dx_base (not to dy) before passing to rotated_src_index(). Only the W-divide is needed
+// once per (row, v, h[, p]) group; the inner i-loop stays division-free.
 // ---------------------------------------------------------------------------
 static inline uint32_t rot_lut(const uint32_t *src, int dx_base, int dy, int i, int W, int H)
 {
@@ -1031,7 +1025,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         printf("\n[HUB75 ERROR] Dimension Mismatch!\n");
         printf("Expected: %dx%d, Got: %dx%d\n", expected_w, expected_h, graphics->bounds.w, graphics->bounds.h);
 
-        // Hard panic halts both RP2350 cores and prints a clean debug trace over the terminal
+        // Hard panic halts both pico cores and prints a clean debug trace over the terminal
         panic(error_msg);
     }
 
@@ -1102,20 +1096,22 @@ __attribute__((optimize("unroll-loops"))) void update(
 
     int32_t fb_index = 0;
 
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
+    for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++) // row: current row
     {
-        for (int v = 0; v < CHAIN_ROWS; v++)
+        for (int v = 0; v < CHAIN_ROWS; v++) // v: panel in row (vertical chain)
         {
             const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
 
-            for (int h = 0; h < CHAIN_COLS; h++)
+            for (int h = 0; h < CHAIN_COLS; h++) // h: panel in column (horizontal chain)
             {
+                // Input parameters
+                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
+                // Output parameters
+                // row_base: row offset
                 const int32_t row_base = map_panel_row(row, v, h, reverse);
 
                 // row_base is only guaranteed W-aligned when CHAIN_COLS == 1
                 // (phys_h * MATRIX_PANEL_WIDTH is otherwise a sub-row offset).
-                // Decompose fully: one % and one / per (row, v, h) triplet —
-                // negligible cost, and the i-loop below stays division-free.
                 const int dx_base = row_base % W;
                 const int dy_base = row_base / W;
 
@@ -1154,9 +1150,8 @@ __attribute__((optimize("unroll-loops"))) void update(
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // HUB75_P10_3535_16X32_4S — single panel, with display rotation support.
     //
-    // `index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
+    // index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
     // We decompose each into (dx, dy) and redirect through rotated_src_index().
-    // Panel-side fb_index write order is unchanged.
 
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
@@ -1181,8 +1176,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     {
         // Panel-side flat index (destination address in display space).
         // Single-panel case: this index is always within [0, W*H), so a
-        // direct %/ decomposition (not the row_base-based rot_lut helper)
-        // is the natural fit here.
+        // direct %/ decomposition (not the row_base-based rot_lut helper) is the natural fit here.
         const int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
         const int32_t index2 = index + HALF_PANEL_OFFSET;
 
@@ -1222,8 +1216,7 @@ __attribute__((optimize("unroll-loops"))) void update(
                 };
 
                 // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
-                // Decompose fully (dx_base AND dy) per scan group — 4 of each
-                // per (row, v, h) triplet, zero divisions inside the i loop.
+                // Decompose fully (dx_base AND dy) per scan group — 4 of eachvper (row, v, h) triplet
                 const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
                 const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
 
@@ -1273,10 +1266,10 @@ __attribute__((optimize("unroll-loops"))) void update(
 
         constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
 
-        uint q1 = 0 * quarter; // rows in quarter1  0–15
-        uint q2 = 1 * quarter; // rows in quarter2  16–31
-        uint q3 = 2 * quarter; // rows in quarter3  32–47
-        uint q4 = 3 * quarter; // rows in quarter4  48–63
+        uint quarter1 = 0 * quarter; // rows in quarter1  0–15
+        uint quarter2 = 1 * quarter; // rows in quarter2  16–31
+        uint quarter3 = 2 * quarter; // rows in quarter3  32–47
+        uint quarter4 = 3 * quarter; // rows in quarter4  48–63
 
         uint p = 0; // per line pixel counter
 
@@ -1287,14 +1280,14 @@ __attribute__((optimize("unroll-loops"))) void update(
         // Each iteration processes 4 physical rows (2 scan-row pairs)
         while (line < (PanelConfig::HEIGHT >> 2))
         {
-            dst[0] = LUT_MAPPING(src[rotated_src_index(q2 % W, q2 / W, W, H)]);
-            ++q2;
-            dst[1] = LUT_MAPPING(src[rotated_src_index(q4 % W, q4 / W, W, H)]);
-            ++q4;
-            dst[line_offset + 0] = LUT_MAPPING(src[rotated_src_index(q1 % W, q1 / W, W, H)]);
-            ++q1;
-            dst[line_offset + 1] = LUT_MAPPING(src[rotated_src_index(q3 % W, q3 / W, W, H)]);
-            ++q3;
+            dst[0] = LUT_MAPPING(src[rotated_src_index(quarter2 % W, quarter2 / W, W, H)]);
+            ++quarter2;
+            dst[1] = LUT_MAPPING(src[rotated_src_index(quarter4 % W, quarter4 / W, W, H)]);
+            ++quarter4;
+            dst[line_offset + 0] = LUT_MAPPING(src[rotated_src_index(quarter1 % W, quarter1 / W, W, H)]);
+            ++quarter1;
+            dst[line_offset + 1] = LUT_MAPPING(src[rotated_src_index(quarter3 % W, quarter3 / W, W, H)]);
+            ++quarter3;
 
             dst += 2;
 
@@ -1303,7 +1296,7 @@ __attribute__((optimize("unroll-loops"))) void update(
             {
                 p = 0;
                 line++;
-                dst += line_offset;
+                dst += line_offset; // advance to next scan-row pair
             }
         }
     }
@@ -1399,9 +1392,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support (BGR byte layout).
     //
     // src is uint8_t* with 3 bytes per pixel: [B, G, R] at byte offset flat_idx*3.
-    // We decompose the flat pixel index into (dx, dy) and use rot_lut_rgb(),
-    // which applies rotated_src_index() and multiplies by 3 internally.
-    // Panel-side write order (fb_index) is unchanged.
+    // Decompose the flat pixel index into (dx, dy) and use rot_lut_rgb(), which applies rotated_src_index() and multiplies by 3 internally.
 
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
@@ -1544,9 +1535,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 
         for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
         {
-            const int32_t pf = !(j & PAIR_HALF_BIT)
-                                   ? j - (line << PAIR_HALF_SHIFT)
-                                   : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
+            const int32_t pf = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
             const int32_t pf2 = pf + HALF_PANEL_OFFSET_PX;
 
             rgb_buffer[fb_index] = rot_lut_rgb(src, pf % W, pf / W, 0, W, H);
@@ -1578,8 +1567,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
             {
                 const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-                // Pixel-domain row pointers (no byte multiply yet — rot_lut_rgb
-                // performs the *3 conversion internally after rotation).
+                // Pixel-domain row pointers (no byte multiply yet — rot_lut_rgb performs the *3 conversion internally after rotation).
                 const int32_t row_ptr[4] = {
                     row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
                     row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
@@ -1627,46 +1615,45 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // HUB75_P3_1415_16S_64X64_S31 — single panel, with display rotation support (BGR byte layout).
     //
-    // pq1..pq4 are flat pixel-index counters (no *3). rot_lut_rgb() applies
+    // quarter1..quarter4 are flat pixel-index counters (no *3). rot_lut_rgb() applies
     // rotated_src_index() and the byte conversion internally.
+    constexpr int W = DISPLAY_WIDTH;
+    constexpr int H = DISPLAY_HEIGHT;
+
+    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+    constexpr uint line_width = PanelConfig::LINE_OFFSET;
+
+    constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
+
+    uint quarter1 = 0 * quarter; // rows in quarter1  0–15
+    uint quarter2 = 1 * quarter; // rows in quarter2  16–31
+    uint quarter3 = 2 * quarter; // rows in quarter3  32–47
+    uint quarter4 = 3 * quarter; // rows in quarter4  48–63
+
+    uint p = 0; // per line pixel counter
+    uint line = 0;
+    uint32_t *dst = rgb_buffer;
+
+    while (line < (PanelConfig::HEIGHT >> 2))
     {
-        constexpr int W = DISPLAY_WIDTH;
-        constexpr int H = DISPLAY_HEIGHT;
+        dst[0] = rot_lut_rgb(src, quarter2 % W, quarter2 / W, 0, W, H);
+        ++quarter2;
+        dst[1] = rot_lut_rgb(src, quarter4 % W, quarter4 / W, 0, W, H);
+        ++quarter4;
+        dst[line_width + 0] = rot_lut_rgb(src, quarter1 % W, quarter1 / W, 0, W, H);
+        ++quarter1;
+        dst[line_width + 1] = rot_lut_rgb(src, quarter3 % W, quarter3 / W, 0, W, H);
+        ++quarter3;
 
-        constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-        constexpr uint line_width = PanelConfig::LINE_OFFSET;
-        constexpr uint px_quarter = total_pixels >> 2; // pixel count per quarter
+        dst += 2;
+        p++;
 
-        uint pq1 = 0 * px_quarter;
-        uint pq2 = 1 * px_quarter;
-        uint pq3 = 2 * px_quarter;
-        uint pq4 = 3 * px_quarter;
-
-        uint p = 0;
-        uint line = 0;
-        uint32_t *dst = rgb_buffer;
-
-        while (line < (PanelConfig::HEIGHT >> 2))
+        // End of logical row
+        if (p == PanelConfig::WIDTH)
         {
-            dst[0] = rot_lut_rgb(src, pq2 % W, pq2 / W, 0, W, H);
-            ++pq2;
-            dst[1] = rot_lut_rgb(src, pq4 % W, pq4 / W, 0, W, H);
-            ++pq4;
-            dst[line_width + 0] = rot_lut_rgb(src, pq1 % W, pq1 / W, 0, W, H);
-            ++pq1;
-            dst[line_width + 1] = rot_lut_rgb(src, pq3 % W, pq3 / W, 0, W, H);
-            ++pq3;
-
-            dst += 2;
-            p++;
-
-            // End of logical row
-            if (p == PanelConfig::WIDTH)
-            {
-                p = 0;
-                line++;
-                dst += line_width; // advance to next scan-row pair
-            }
+            p = 0;
+            line++;
+            dst += line_width; // advance to next scan-row pair
         }
     }
 #else
@@ -1708,6 +1695,10 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 
             for (int h = 0; h < CHAIN_COLS; h++)
             {
+                // Input parameters
+                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
+                // Output parameters
+                // row_base: row offset
                 const int32_t row_base = map_panel_row(row, v, h, reverse);
 
                 // S31 quarter-row layout (pixel domain — rot_lut_rgb converts to bytes)
