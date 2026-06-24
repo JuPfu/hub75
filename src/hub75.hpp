@@ -334,6 +334,11 @@ namespace PanelConfig
     constexpr int32_t stride_to_paired_row = SCAN_DEPTH * DISPLAY_WIDTH;
 }
 
+// Assert ROWSEL_N_PINS is set correctly
+static_assert(
+    (size_t)PanelConfig::SCAN_DEPTH * CHAIN_ROWS * CHAIN_COLS * MATRIX_PANEL_WIDTH * PanelConfig::ROWS_IN_PARALLEL == TOTAL_PIXELS,
+    "rgb_buffer total writes must equal TOTAL_PIXELS — check ROWSEL_N_PINS vs MATRIX_PANEL_HEIGHT, and CHAIN_ROWS/CHAIN_COLS");
+
 enum Hub75ChainMode
 {
     CHAIN_MODE_SERPENTINE,
