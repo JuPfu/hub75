@@ -334,6 +334,11 @@ namespace PanelConfig
     constexpr int32_t stride_to_paired_row = SCAN_DEPTH * DISPLAY_WIDTH;
 }
 
+#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
+static_assert(DISPLAY_WIDTH == CHAIN_ROWS * MATRIX_PANEL_HEIGHT, "Width/height mismatch for rotated display");
+static_assert(DISPLAY_HEIGHT == CHAIN_COLS * MATRIX_PANEL_WIDTH, "Width/height mismatch for rotated display");
+#endif
+
 // Assert ROWSEL_N_PINS is set correctly
 static_assert(
     (size_t)PanelConfig::SCAN_DEPTH * CHAIN_ROWS * CHAIN_COLS * MATRIX_PANEL_WIDTH * PanelConfig::ROWS_IN_PARALLEL == TOTAL_PIXELS,
