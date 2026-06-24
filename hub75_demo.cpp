@@ -159,9 +159,12 @@ int main()
 
     PixelFill pixelFill = PixelFill(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    GreyScaleStripes greyScaleStripes = GreyScaleStripes(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    // Pico RAM is finite - due to your configuration of DISPLAY_WIDTH and DISPLAY_HEIGHT, BITPLANES, BALANCED_LIGHT_OUTPUT 
+    // and SEPARATE_CIE_CHANNELS you have to select just a selection of demos! 
+    
+    // GreyScaleStripes greyScaleStripes = GreyScaleStripes(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    Rectangle rectangle = Rectangle(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    // Rectangle rectangle = Rectangle(DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
@@ -235,16 +238,16 @@ int main()
             pixelFill.fill();
             update(&pixelFill);
         }
-        else if (demo_index == 7)
-        {
-            greyScaleStripes.drawStripes();
-            update(&greyScaleStripes);
-        }
-        else if (demo_index == 8)
-        {
-            rectangle.draw();
-            update(&rectangle);
-        }
+        // else if (demo_index == 7)
+        // {
+        //     greyScaleStripes.drawStripes();
+        //     update(&greyScaleStripes);
+        // }
+        // else if (demo_index == 8)
+        // {
+        //     rectangle.draw();
+        //     update(&rectangle);
+        // }
 
         // matrix panel brightness will vary when you uncomment the following api call
         // setIntensity(intensity);

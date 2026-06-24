@@ -84,6 +84,7 @@ target_compile_definitions(hub75 PRIVATE
     SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
     CCM_RG_SHIFT=6              # CCM Cross-channel mixing - mix ~1.6% green into the red channel
     CCM_GB_SHIFT=7              # CCM Cross-channel mixing - mix ~0.8% blue into the green channel
+    DISPLAY_ROTATION=0          # display rotation - valid values 0, 90, 180, 270 
     BASE_LATCH_NS=80            # wait time in nano-seconds to stabilise latch
     BASE_ADDR_NS=120            # wait time in nano-seconds to stabilise row addressing
     BASE_OE_NS=40               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)

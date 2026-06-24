@@ -78,6 +78,13 @@
     - [Supported Panel Types and Chaining](#supported-panel-types-and-chaining)
     - [Memory Considerations](#memory-considerations)
     - [Quick-Reference: Common Configurations](#quick-reference-common-configurations)
+  - [Display Rotation](#display-rotation)
+    - [Configuration](#configuration)
+    - [Physical Panel vs. Logical Source Buffer](#physical-panel-vs-logical-source-buffer)
+    - [Source Buffer Dimensions per Rotation Value](#source-buffer-dimensions-per-rotation-value)
+    - [Setting Up the Source Buffer](#setting-up-the-source-buffer)
+    - [Combining Rotation with Chained Panels](#combining-rotation-with-chained-panels)
+    - [Common Mistake — Why This Can Go Unnoticed](#common-mistake--why-this-can-go-unnoticed)
   - [Demo Effects](#demo-effects)
   - [Next Steps](#next-steps)
 - [Configuration via CMakeLists.txt](#configuration-via-cmakeliststxt-2)
@@ -1534,6 +1541,133 @@ and/or `SEPARATE_CIE_CHANNELS=true`, as both options increase memory usage furth
 | Six panels (3×2) | `3` | `2` | 192 | 128 |
 | Eight panels (4×2) | `4` | `2` | 256 | 128 |
 
+## Display Rotation
+
+The driver supports software rotation of the displayed image by `0°`, `90°`, `180°`, or `270°`,
+independent of how the panels are physically wired. This is useful when the matrix chain has to be
+mounted in an orientation (e.g. portrait instead of landscape) that doesn't match the natural
+left-to-right, top-to-bottom layout of the signal chain.
+
+Rotation is set once, at compile time, and applies to the whole display — including chained arrays.
+
+---
+
+### Configuration
+
+Set `DISPLAY_ROTATION` in `CMakeLists.txt`:
+
+```cmake
+target_compile_definitions(hub75 PRIVATE
+    DISPLAY_ROTATION=90   # 0 (default), 90, 180, or 270
+)
+```
+
+| Value | Effect |
+|---|---|
+| `0` (default) | No rotation |
+| `90` | Rotated 90° clockwise |
+| `180` | Rotated 180° (upside down) |
+| `270` | Rotated 270° clockwise (= 90° counter-clockwise) |
+
+Any other value fails a `static_assert` at compile time.
+
+---
+
+### Physical Panel vs. Logical Source Buffer
+
+`DISPLAY_WIDTH` and `DISPLAY_HEIGHT` (see [Configuration Parameters](#configuration-parameters)
+above) always describe the **physical** matrix chain — `MATRIX_PANEL_WIDTH × CHAIN_COLS` and
+`MATRIX_PANEL_HEIGHT × CHAIN_ROWS`. These two values never change when you set `DISPLAY_ROTATION`;
+the physical wiring obviously doesn't change just because you rotate the image.
+
+What *does* change is the shape of the buffer your application has to draw into and hand to
+`update()` / `update_bgr()` — the **logical source buffer**. At `90°`/`270°` the logical buffer is
+the *transpose* of the physical chain, because you're effectively drawing into a canvas that is then
+turned sideways onto the panel:
+
+```
+Physical chain:  DISPLAY_WIDTH × DISPLAY_HEIGHT   (fixed — depends only on panel + chain layout)
+Logical buffer:  depends on DISPLAY_ROTATION       (this is what YOU must size correctly)
+```
+
+> **This is the one part of rotation the driver cannot do for you.** It derives `DISPLAY_WIDTH` /
+> `DISPLAY_HEIGHT` purely from your physical panel and chain configuration, and applies the rotation
+> internally when sampling from your buffer — but nothing checks at compile time or runtime that the
+> buffer you actually pass in has the right shape for the rotation you configured.
+
+---
+
+### Source Buffer Dimensions per Rotation Value
+
+| `DISPLAY_ROTATION` | Source buffer width | Source buffer height |
+|---|---|---|
+| `0` | `DISPLAY_WIDTH` | `DISPLAY_HEIGHT` |
+| `90` | `DISPLAY_HEIGHT` | `DISPLAY_WIDTH` |
+| `180` | `DISPLAY_WIDTH` | `DISPLAY_HEIGHT` |
+| `270` | `DISPLAY_HEIGHT` | `DISPLAY_WIDTH` |
+
+Example: a `64×96` physical chain (`DISPLAY_WIDTH=64`, `DISPLAY_HEIGHT=96`) at `DISPLAY_ROTATION=90`
+needs a source buffer that is **96 pixels wide and 64 pixels tall** — not 64×96.
+
+180° keeps the same buffer shape as 0° (the image is simply flipped, not transposed), so it needs no
+special handling beyond setting the define.
+
+---
+
+### Setting Up the Source Buffer
+
+**`update_bgr()`** takes a raw byte buffer. Size it using the table above instead of always assuming
+`DISPLAY_WIDTH × DISPLAY_HEIGHT`:
+
+```cpp
+#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
+constexpr uint32_t SRC_WIDTH  = DISPLAY_HEIGHT;
+constexpr uint32_t SRC_HEIGHT = DISPLAY_WIDTH;
+#else
+constexpr uint32_t SRC_WIDTH  = DISPLAY_WIDTH;
+constexpr uint32_t SRC_HEIGHT = DISPLAY_HEIGHT;
+#endif
+
+uint8_t src_buffer[SRC_WIDTH * SRC_HEIGHT * 3]; // BGR888
+```
+
+**`update()`** takes a `PicoGraphics` canvas. Construct it with the same swapped dimensions at
+`90°`/`270°`:
+
+```cpp
+#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
+PicoGraphics_PenRGB888 graphics(DISPLAY_HEIGHT, DISPLAY_WIDTH, frame_buffer);
+#else
+PicoGraphics_PenRGB888 graphics(DISPLAY_WIDTH, DISPLAY_HEIGHT, frame_buffer);
+#endif
+```
+
+(Exact constructor signature depends on the graphics backend you use — the point is which value goes
+into *width* and which into *height*, not the specific class name.)
+
+---
+
+### Combining Rotation with Chained Panels
+
+Rotation and serpentine chaining are independent and compose cleanly: `CHAIN_MODE_SERPENTINE`
+handles the 180° per-panel correction needed for the physical U-turn cabling (see
+[How Serpentine Reversal Works Internally](#how-serpentine-reversal-works-internally)), while
+`DISPLAY_ROTATION` applies on top of that, to the display as a whole. You don't need to do anything
+differently for chained arrays beyond sizing your source buffer according to the table above, using
+the chain's derived `DISPLAY_WIDTH` / `DISPLAY_HEIGHT`.
+
+---
+
+### Common Mistake — Why This Can Go Unnoticed
+
+If `DISPLAY_WIDTH == DISPLAY_HEIGHT` (a single square panel, or a chain where `CHAIN_COLS ==
+CHAIN_ROWS` with a square panel), swapping width and height is a no-op, so forgetting to transpose
+the source buffer at `90°`/`270°` won't be visible — both the "correct" and the "wrong" buffer shape
+happen to be the same number. The mistake only shows up on non-square configurations (e.g. a `64×32`
+panel, or an asymmetric chain like `CHAIN_COLS=2, CHAIN_ROWS=1`), where it produces a visibly skewed
+or scrambled image, or — worse — out-of-bounds reads from the source buffer. If you've only tested
+rotation on a square panel so far, it's worth a quick test on a non-square one (or chain) before
+considering it verified.
 
 ## Demo Effects
 
