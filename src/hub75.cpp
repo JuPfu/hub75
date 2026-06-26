@@ -972,7 +972,6 @@ static inline constexpr int rotated_src_index(int dx, int dy, int dw, int dh)
 #endif
 }
 
-#if USE_PICO_GRAPHICS == true
 // ---------------------------------------------------------------------------
 // Shared rotation-lookup helper
 //
@@ -998,6 +997,7 @@ static inline uint32_t rot_lut_rgb(const uint8_t *src, int dx_base, int dy, int 
     return LUT_MAPPING_RGB(src[rot + 2], src[rot + 1], src[rot]);
 }
 
+#if USE_PICO_GRAPHICS == true
 /**
  * @brief Update frame_buffer from PicoGraphics source (RGB888 / packed 32-bit),
  *
