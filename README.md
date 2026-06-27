@@ -1384,6 +1384,8 @@ constexpr uint32_t DISPLAY_WIDTH  = MATRIX_PANEL_WIDTH  * CHAIN_COLS;
 constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
 ```
 
+The display dimensions are only used internally, use the [rotation-aware](#display-rotation) `HUB75_SCREEN_WIDTH` and `HUB75_SCREEN_HEIGHT` to initialize graphics libraries or allocate framebuffers.
+
 #### Chain Modes
 
 | Mode | Description |
@@ -1597,53 +1599,33 @@ Logical buffer:  depends on DISPLAY_ROTATION       (this is what YOU must size c
 
 ---
 
-### Source Buffer Dimensions per Rotation Value
+To help avoiding mistakes, the library provides the rotation-aware `HUB75_SCREEN_WIDTH` and `HUB75_SCREEN_HEIGHT` constants. They contain the current width and height of your logical screen.
 
-| `DISPLAY_ROTATION` | Source buffer width | Source buffer height |
+### Screen Dimensions per Rotation Value
+
+| `DISPLAY_ROTATION` | Screen width | Screen height |
 |---|---|---|
 | `0` | `DISPLAY_WIDTH` | `DISPLAY_HEIGHT` |
 | `90` | `DISPLAY_HEIGHT` | `DISPLAY_WIDTH` |
 | `180` | `DISPLAY_WIDTH` | `DISPLAY_HEIGHT` |
 | `270` | `DISPLAY_HEIGHT` | `DISPLAY_WIDTH` |
 
-Example: a `64×96` physical chain (`DISPLAY_WIDTH=64`, `DISPLAY_HEIGHT=96`) at `DISPLAY_ROTATION=90`
-needs a source buffer that is **96 pixels wide and 64 pixels tall** — not 64×96.
-
-180° keeps the same buffer shape as 0° (the image is simply flipped, not transposed), so it needs no
-special handling beyond setting the define.
-
 ---
 
 ### Setting Up the Source Buffer
 
-**`update_bgr()`** takes a raw byte buffer. Size it using the table above instead of always assuming
-`DISPLAY_WIDTH × DISPLAY_HEIGHT`:
+**`update_bgr()`** takes a raw byte buffer. Use the provided rotation-aware constants instead of `DISPLAY_WIDTH × DISPLAY_HEIGHT`:
 
 ```cpp
-#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
-constexpr uint32_t SRC_WIDTH  = DISPLAY_HEIGHT;
-constexpr uint32_t SRC_HEIGHT = DISPLAY_WIDTH;
-#else
-constexpr uint32_t SRC_WIDTH  = DISPLAY_WIDTH;
-constexpr uint32_t SRC_HEIGHT = DISPLAY_HEIGHT;
-#endif
-
-uint8_t src_buffer[SRC_WIDTH * SRC_HEIGHT * 3]; // BGR888
+uint8_t src_buffer[HUB75_SCREEN_WIDTH * HUB75_SCREEN_HEIGHT * 3]; // BGR888
 ```
+The underlying memory allocation stays the same, but the code gets much more readable. The graphics library can be initialized with the exact same constants as well:
 
-**`update()`** takes a `PicoGraphics` canvas. Construct it with the same swapped dimensions at
-`90°`/`270°`:
+**`update()`** takes a `PicoGraphics` canvas:
 
 ```cpp
-#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
-PicoGraphics_PenRGB888 graphics(DISPLAY_HEIGHT, DISPLAY_WIDTH, frame_buffer);
-#else
-PicoGraphics_PenRGB888 graphics(DISPLAY_WIDTH, DISPLAY_HEIGHT, frame_buffer);
-#endif
+PicoGraphics_PenRGB888 graphics(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT, frame_buffer);
 ```
-
-(Exact constructor signature depends on the graphics backend you use — the point is which value goes
-into *width* and which into *height*, not the specific class name.)
 
 ---
 
@@ -1653,21 +1635,7 @@ Rotation and serpentine chaining are independent and compose cleanly: `CHAIN_MOD
 handles the 180° per-panel correction needed for the physical U-turn cabling (see
 [How Serpentine Reversal Works Internally](#how-serpentine-reversal-works-internally)), while
 `DISPLAY_ROTATION` applies on top of that, to the display as a whole. You don't need to do anything
-differently for chained arrays beyond sizing your source buffer according to the table above, using
-the chain's derived `DISPLAY_WIDTH` / `DISPLAY_HEIGHT`.
-
----
-
-### Common Mistake — Why This Can Go Unnoticed
-
-If `DISPLAY_WIDTH == DISPLAY_HEIGHT` (a single square panel, or a chain where `CHAIN_COLS ==
-CHAIN_ROWS` with a square panel), swapping width and height is a no-op, so forgetting to transpose
-the source buffer at `90°`/`270°` won't be visible — both the "correct" and the "wrong" buffer shape
-happen to be the same number. The mistake only shows up on non-square configurations (e.g. a `64×32`
-panel, or an asymmetric chain like `CHAIN_COLS=2, CHAIN_ROWS=1`), where it produces a visibly skewed
-or scrambled image, or — worse — out-of-bounds reads from the source buffer. If you've only tested
-rotation on a square panel so far, it's worth a quick test on a non-square one (or chain) before
-considering it verified.
+differently for chained arrays.
 
 ## Demo Effects
 
