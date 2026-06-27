@@ -105,7 +105,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(DISPLAY_WIDTH, DISPLAY_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver();
     start_hub75_driver();
 
     // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
@@ -132,7 +132,7 @@ void initialize()
     multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 #else
     // Run hub75 on core0 - the Hub75 driver is doing its job here
-    create_hub75_driver(DISPLAY_WIDTH, DISPLAY_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver();
     start_hub75_driver();
 #endif
 }

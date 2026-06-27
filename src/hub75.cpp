@@ -652,10 +652,8 @@ void setup_bitplane_stream_irq()
  * LED matrix display. It initializes DMA channels, PIO state machines, and
  * interrupt handlers.
  *
- * @param w Width of the HUB75 display in pixels.
- * @param h Height of the HUB75 display in pixels.
  */
-void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inverted_stb = INVERTED_STB)
+void create_hub75_driver(void)
 {
     dma_buffer = frame_buffer1;
     frame_buffer = frame_buffer2;
@@ -665,16 +663,13 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
 
     hub75_timing_init(&hub75_timing_config, clock_get_hz(clk_sys), SM_CLOCKDIV);
 
-    if (panel_type == PANEL_FM6126A)
-    {
+    #if PANEL_TYPE == PANEL_FM6126A
         FM6126A_setup();
-    }
-    else if (panel_type == PANEL_RUL6024)
-    {
+    #elif PANEL_TYPE == PANEL_RUL6024
         RUL6024_setup();
-    }
+    #endif
 
-    configure_pio(inverted_stb);
+    configure_pio(INVERTED_STB);
     setup_dma_transfers();
     setup_bitplane_creation();
     setup_display_irq();
@@ -689,7 +684,7 @@ void create_hub75_driver(uint w, uint h, uint panel_type = PANEL_TYPE, bool inve
  * for the Output Enable finished DMA channel and the read address for pixel data.
  * It ensures that the display begins processing frames.
  */
-void start_hub75_driver()
+void start_hub75_driver(void)
 {
     dma_row_cmd_buffer = row_cmd_buffer2;
     row_cmd_buffer = row_cmd_buffer1;
