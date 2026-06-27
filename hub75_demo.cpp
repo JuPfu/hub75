@@ -105,7 +105,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
  */
 void core1_entry()
 {
-    create_hub75_driver(DISPLAY_WIDTH, DISPLAY_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver();
     start_hub75_driver();
 
     // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
@@ -132,7 +132,7 @@ void initialize()
     multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
 #else
     // Run hub75 on core0 - the Hub75 driver is doing its job here
-    create_hub75_driver(DISPLAY_WIDTH, DISPLAY_HEIGHT, PANEL_TYPE, INVERTED_STB);
+    create_hub75_driver();
     start_hub75_driver();
 #endif
 }
@@ -144,27 +144,27 @@ int main()
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality
-    BouncingBalls bouncingBalls(10, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    BouncingBalls bouncingBalls(10, HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
     // Create rotating antialiased line using pico_graphics functionality
-    Rotator rotator(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    Rotator rotator(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
     // Create analog clock using pico_graphics functionality
-    AnalogClock analogClock(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    AnalogClock analogClock(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
     // Create fire effect using pico_graphics functionality
-    FireEffect fireEffect = FireEffect(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    FireEffect fireEffect = FireEffect(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
-    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
-    PixelFill pixelFill = PixelFill(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    PixelFill pixelFill = PixelFill(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
     // Pico RAM is finite - due to your configuration of DISPLAY_WIDTH and DISPLAY_HEIGHT, BITPLANES, BALANCED_LIGHT_OUTPUT 
     // and SEPARATE_CIE_CHANNELS you have to select just a selection of demos! 
     
-    // GreyScaleStripes greyScaleStripes = GreyScaleStripes(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    // GreyScaleStripes greyScaleStripes = GreyScaleStripes(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
-    // Rectangle rectangle = Rectangle(DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    // Rectangle rectangle = Rectangle(HUB75_SCREEN_WIDTH, HUB75_SCREEN_HEIGHT);
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
