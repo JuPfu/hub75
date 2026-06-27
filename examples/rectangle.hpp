@@ -17,8 +17,8 @@ public:
 
     void draw()
     {
-        constexpr int max_width = DISPLAY_WIDTH - 1;
-        constexpr int max_height = DISPLAY_HEIGHT - 1;
+        int max_width = bounds.w - 1;
+        int max_height = bounds.h - 1;
 
         // Draw four lines to form a rectangle around the screen. Each line has a unique color and ends one pixel short
         // of the edge of the panel so it doesn't 'interfere' with the next line.

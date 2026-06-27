@@ -17,6 +17,10 @@
 
 #include "cie.hpp"
 
+using HUB75::DISPLAY_WIDTH;
+using HUB75::DISPLAY_HEIGHT;
+using HUB75::TOTAL_PIXELS;
+
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
 uint8_t *frame_buffer; ///< Back buffer — written by bitplane builder (read_chan_handler)
 uint8_t *dma_buffer;   ///< Front buffer — read by pixel_chan DMA → panel streamer
