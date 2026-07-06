@@ -1026,7 +1026,7 @@ __attribute__((optimize("unroll-loops"))) void update(
 
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
-#if defined(HUB75)
+#if defined(HUB75_DEFAULT)
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support.
 
@@ -1382,7 +1382,7 @@ __attribute__((optimize("unroll-loops"))) void update(
  */
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
-#if defined(HUB75)
+#if defined(HUB75_DEFAULT)
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support (BGR byte layout).
     //

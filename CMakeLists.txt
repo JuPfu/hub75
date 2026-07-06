@@ -104,7 +104,7 @@ target_compile_definitions(hub75_demo PRIVATE
     CLK_PIN=11                  # GPIO pin for CLK - use pin 41 for PICO_RP2350B
     STROBE_PIN=12               # GPIO pin for STROBE (LATCH) - use pin 42 for PICO_RP2350B
     OEN_PIN=13                  # GPIO for OE pin - use pin 43 for PICO_RP2350B
-    PANEL=HUB75                 # 
+    PANEL=HUB75_DEFAULT         #
     PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
     INVERTED_STB=false          # inverted pin signal for OE (untested)
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
