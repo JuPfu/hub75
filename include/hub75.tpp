@@ -575,13 +575,40 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_blue_table()
 template <Hub75Config Cfg>
 constexpr void Hub75Driver<Cfg>::apply_ccm(uint32_t &rv, uint32_t &gv, uint32_t &bv)
 {
-    uint32_t r = rv + (gv >> Cfg.color.ccm_rg_shift) + (bv >> Cfg.color.ccm_rb_shift);
-    uint32_t g = gv + (rv >> Cfg.color.ccm_gr_shift) + (bv >> Cfg.color.ccm_gb_shift);
-    uint32_t b = bv + (rv >> Cfg.color.ccm_br_shift) + (gv >> Cfg.color.ccm_bg_shift);
+    // shift == 31 means "off" (see Hub75ColorConfig doc comment). Skip disabled cross-terms
+    // at compile time instead of computing a shift+add that would numerically fold to +0
+    // anyway: this runs once per pixel, TOTAL_PIXELS times per update()/update_bgr() call.
+    const uint32_t rv0 = rv, gv0 = gv, bv0 = bv;
 
-    rv = (r > CCM_MAX_VAL) ? CCM_MAX_VAL : r;
-    gv = (g > CCM_MAX_VAL) ? CCM_MAX_VAL : g;
-    bv = (b > CCM_MAX_VAL) ? CCM_MAX_VAL : b;
+    if constexpr (Cfg.color.ccm_rg_shift != 31 || Cfg.color.ccm_rb_shift != 31)
+    {
+        uint32_t r = rv0;
+        if constexpr (Cfg.color.ccm_rg_shift != 31)
+            r += gv0 >> Cfg.color.ccm_rg_shift;
+        if constexpr (Cfg.color.ccm_rb_shift != 31)
+            r += bv0 >> Cfg.color.ccm_rb_shift;
+        rv = (r > CCM_MAX_VAL) ? CCM_MAX_VAL : r;
+    }
+
+    if constexpr (Cfg.color.ccm_gr_shift != 31 || Cfg.color.ccm_gb_shift != 31)
+    {
+        uint32_t g = gv0;
+        if constexpr (Cfg.color.ccm_gr_shift != 31)
+            g += rv0 >> Cfg.color.ccm_gr_shift;
+        if constexpr (Cfg.color.ccm_gb_shift != 31)
+            g += bv0 >> Cfg.color.ccm_gb_shift;
+        gv = (g > CCM_MAX_VAL) ? CCM_MAX_VAL : g;
+    }
+
+    if constexpr (Cfg.color.ccm_br_shift != 31 || Cfg.color.ccm_bg_shift != 31)
+    {
+        uint32_t b = bv0;
+        if constexpr (Cfg.color.ccm_br_shift != 31)
+            b += rv0 >> Cfg.color.ccm_br_shift;
+        if constexpr (Cfg.color.ccm_bg_shift != 31)
+            b += gv0 >> Cfg.color.ccm_bg_shift;
+        bv = (b > CCM_MAX_VAL) ? CCM_MAX_VAL : b;
+    }
 }
 
 // Apply LUT and pack into 30-bit RGB (10 bits per channel)
