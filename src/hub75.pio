@@ -101,7 +101,7 @@ dark_loop:
         if ( inverted_stb) {
             // Inverts the STROBE (latch) pin output at the GPIO pad level.
             // The PIO SM continues to output standard active-HIGH pulses, but the physical pin outputs active-LOW signals to the panel!
-            gpio_set_outover(STROBE_PIN, GPIO_OVERRIDE_INVERT);
+            gpio_set_outover(latch_base_pin, GPIO_OVERRIDE_INVERT);
         }
 
         pio_sm_config c = hub75_row_program_get_default_config(offset);

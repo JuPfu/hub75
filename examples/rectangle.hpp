@@ -12,7 +12,6 @@ public:
     {
         set_pen(0);
         clear();
-        setIntensity(1.0);
     }
 
     void draw()
