@@ -95,14 +95,14 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 // Example:
 // The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
 //
-// #define HUB75                       // default - two rows lit simultaneously
+// #define HUB75_DEFAULT               // default - two rows lit simultaneously
 // #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
 // #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
 //
-// Default to HUB75 if no multiplexing mode is defined
+// Default to HUB75_DEFAULT if no multiplexing mode is defined
 // Only define default if none of the mapping modes are already defined
-#if !defined(HUB75) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
-#define HUB75 // two or four rows lit simultaneously
+#if !defined(HUB75_DEFAULT) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
+#define HUB75_DEFAULT // two or four rows lit simultaneously
 #endif
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
@@ -275,13 +275,24 @@ static_assert(DISPLAY_ROTATION == 0 || DISPLAY_ROTATION == 90 || DISPLAY_ROTATIO
 
 // --- modifications below this line might imply changes in source code ---
 
-constexpr uint32_t matrix_panel_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+namespace HUB75 {
+    // Total virtual display dimensions (derived — do not set manually)
+    constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_COLS;
+    constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
 
-// Total virtual display dimensions (derived — do not set manually)
-constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_COLS;
-constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
+    constexpr size_t TOTAL_PIXELS = DISPLAY_WIDTH * DISPLAY_HEIGHT;
+}
 
-constexpr size_t TOTAL_PIXELS = DISPLAY_WIDTH * DISPLAY_HEIGHT;
+// Define HUB75_SCREEN_WIDTH and HUB75_SCREEN_HEIGHT that follow screen rotation
+// settings. Use those to initialize drawing routines or allocate framebuffers.
+#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
+    #define HUB75_SCREEN_WIDTH (HUB75::DISPLAY_HEIGHT)
+    #define HUB75_SCREEN_HEIGHT (HUB75::DISPLAY_WIDTH)
+#else
+    #define HUB75_SCREEN_WIDTH (HUB75::DISPLAY_WIDTH)
+    #define HUB75_SCREEN_HEIGHT (HUB75::DISPLAY_HEIGHT)
+#endif
+
 
 #define LUT_MAPPING(COLOUR) pack_lut_rgb(COLOUR)
 #define LUT_MAPPING_RGB(R, G, B) pack_lut_rgb_(R, G, B)
@@ -331,17 +342,12 @@ namespace PanelConfig
     constexpr int32_t BITPLANE_STREAM_LENGTH = ((MATRIX_PANEL_WIDTH * CHAIN_ROWS * CHAIN_COLS) >> 1u) * ROWS_IN_PARALLEL;
 
     constexpr int32_t stride_row = MATRIX_PANEL_WIDTH * CHAIN_COLS;
-    constexpr int32_t stride_to_paired_row = SCAN_DEPTH * DISPLAY_WIDTH;
+    constexpr int32_t stride_to_paired_row = SCAN_DEPTH * HUB75::DISPLAY_WIDTH;
 }
-
-#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
-static_assert(DISPLAY_WIDTH == CHAIN_ROWS * MATRIX_PANEL_HEIGHT, "Width/height mismatch for rotated display");
-static_assert(DISPLAY_HEIGHT == CHAIN_COLS * MATRIX_PANEL_WIDTH, "Width/height mismatch for rotated display");
-#endif
 
 // Assert ROWSEL_N_PINS is set correctly
 static_assert(
-    (size_t)PanelConfig::SCAN_DEPTH * CHAIN_ROWS * CHAIN_COLS * MATRIX_PANEL_WIDTH * PanelConfig::ROWS_IN_PARALLEL == TOTAL_PIXELS,
+    (size_t)PanelConfig::SCAN_DEPTH * CHAIN_ROWS * CHAIN_COLS * MATRIX_PANEL_WIDTH * PanelConfig::ROWS_IN_PARALLEL == HUB75::TOTAL_PIXELS,
     "rgb_buffer total writes must equal TOTAL_PIXELS — check ROWSEL_N_PINS vs MATRIX_PANEL_HEIGHT, and CHAIN_ROWS/CHAIN_COLS");
 
 enum Hub75ChainMode
@@ -350,8 +356,8 @@ enum Hub75ChainMode
     CHAIN_MODE_RASTER
 };
 
-void create_hub75_driver(uint w, uint h, uint pt, bool stb_inverted);
-void start_hub75_driver();
+void create_hub75_driver(void);
+void start_hub75_driver(void);
 void update_bgr(const uint8_t *src);
 #if USE_PICO_GRAPHICS == true
 void update(PicoGraphics const *graphics);
@@ -364,4 +370,12 @@ void setIntensity(float intensity, bool linear_brightness_control);
 #if defined(HUB75_MULTIPLEX_2_ROWS)
 static_assert(MATRIX_PANEL_HEIGHT == 2 * PanelConfig::SCAN_DEPTH, "HUB75_MULTIPLEX_2_ROWS requires two-row multiplexing");
 #endif
-static_assert(DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
+static_assert(HUB75::DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
+
+#if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
+static_assert(HUB75_SCREEN_WIDTH == CHAIN_ROWS * MATRIX_PANEL_HEIGHT, "Width/height mismatch for rotated display");
+static_assert(HUB75_SCREEN_HEIGHT == CHAIN_COLS * MATRIX_PANEL_WIDTH, "Width/height mismatch for rotated display");
+#else
+static_assert(HUB75_SCREEN_HEIGHT == CHAIN_ROWS * MATRIX_PANEL_HEIGHT, "Width/height mismatch for rotated display");
+static_assert(HUB75_SCREEN_WIDTH == CHAIN_COLS * MATRIX_PANEL_WIDTH, "Width/height mismatch for rotated display");
+#endif
