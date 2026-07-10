@@ -8,6 +8,13 @@
 #include "pico_graphics.hpp"
 #endif
 
+enum class RowMapping
+{
+    Standard,
+    Split,
+    S31,
+};
+
 // See README.md file chapter "How to Configure" for some hints how to adapt the configuration to your panel
 
 // Set MATRIX_PANEL_WIDTH and MATRIX_PANEL_HEIGHT to the width and height of a SINGLE matrix panel.
@@ -90,20 +97,20 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 // Scan rate 1 : 4 for a 32x16 matrix panel means 16 pixel height divided by 4 pixel results in 4 rows lit simultaneously.
 // ...
 
-// Set your panel
-//
-// Example:
-// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
-//
-// #define HUB75_DEFAULT               // default - two rows lit simultaneously
-// #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
-// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
-//
-// Default to HUB75_DEFAULT if no multiplexing mode is defined
-// Only define default if none of the mapping modes are already defined
-#if !defined(HUB75_DEFAULT) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
-#define HUB75_DEFAULT // two or four rows lit simultaneously
+// Row/Buffer mapping topology 
+
+// Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
+#define ROWMAP_STANDARD RowMapping::Standard
+// Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+#define ROWMAP_SPLIT RowMapping::Split
+// S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
+#define ROWMAP_S31 RowMapping::S31
+
+#ifndef ROW_MAPPING
+#define ROW_MAPPING RowMapping::Standard
 #endif
+
+static_assert(ROW_MAPPING == ROWMAP_STANDARD || ROW_MAPPING == ROWMAP_SPLIT || ROW_MAPPING == ROWMAP_S31 , "Row mapping must be ROWMAP_STANDARD, ROWMAP_SPLIT, or ROWMAP_S31");
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
 #define PANEL_GENERIC 0
@@ -275,7 +282,8 @@ static_assert(DISPLAY_ROTATION == 0 || DISPLAY_ROTATION == 90 || DISPLAY_ROTATIO
 
 // --- modifications below this line might imply changes in source code ---
 
-namespace HUB75 {
+namespace HUB75
+{
     // Total virtual display dimensions (derived — do not set manually)
     constexpr uint32_t DISPLAY_WIDTH = MATRIX_PANEL_WIDTH * CHAIN_COLS;
     constexpr uint32_t DISPLAY_HEIGHT = MATRIX_PANEL_HEIGHT * CHAIN_ROWS;
@@ -286,13 +294,12 @@ namespace HUB75 {
 // Define HUB75_SCREEN_WIDTH and HUB75_SCREEN_HEIGHT that follow screen rotation
 // settings. Use those to initialize drawing routines or allocate framebuffers.
 #if DISPLAY_ROTATION == 90 || DISPLAY_ROTATION == 270
-    #define HUB75_SCREEN_WIDTH (HUB75::DISPLAY_HEIGHT)
-    #define HUB75_SCREEN_HEIGHT (HUB75::DISPLAY_WIDTH)
+#define HUB75_SCREEN_WIDTH (HUB75::DISPLAY_HEIGHT)
+#define HUB75_SCREEN_HEIGHT (HUB75::DISPLAY_WIDTH)
 #else
-    #define HUB75_SCREEN_WIDTH (HUB75::DISPLAY_WIDTH)
-    #define HUB75_SCREEN_HEIGHT (HUB75::DISPLAY_HEIGHT)
+#define HUB75_SCREEN_WIDTH (HUB75::DISPLAY_WIDTH)
+#define HUB75_SCREEN_HEIGHT (HUB75::DISPLAY_HEIGHT)
 #endif
-
 
 #define LUT_MAPPING(COLOUR) pack_lut_rgb(COLOUR)
 #define LUT_MAPPING_RGB(R, G, B) pack_lut_rgb_(R, G, B)

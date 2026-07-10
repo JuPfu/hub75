@@ -17,8 +17,8 @@
 
 #include "cie.hpp"
 
-using HUB75::DISPLAY_WIDTH;
 using HUB75::DISPLAY_HEIGHT;
+using HUB75::DISPLAY_WIDTH;
 using HUB75::TOTAL_PIXELS;
 
 // Frame buffer for the HUB75 matrix - memory area where pixel data is stored
@@ -667,11 +667,11 @@ void create_hub75_driver(void)
 
     hub75_timing_init(&hub75_timing_config, clock_get_hz(clk_sys), SM_CLOCKDIV);
 
-    #if PANEL_TYPE == PANEL_FM6126A
-        FM6126A_setup();
-    #elif PANEL_TYPE == PANEL_RUL6024
-        RUL6024_setup();
-    #endif
+#if PANEL_TYPE == PANEL_FM6126A
+    FM6126A_setup();
+#elif PANEL_TYPE == PANEL_RUL6024
+    RUL6024_setup();
+#endif
 
     configure_pio(INVERTED_STB);
     setup_dma_transfers();
@@ -1030,351 +1030,361 @@ __attribute__((optimize("unroll-loops"))) void update(
 
     __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
-#if defined(HUB75_DEFAULT)
+    if constexpr (ROW_MAPPING == RowMapping::Standard)
+    {
+        printf("RowMapping::Standard\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support.
+        // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support.
 
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
-
-    constexpr int rows_per_bank = H / PanelConfig::ROWS_IN_PARALLEL;
-
-    int32_t fb_index = 0;
-
-    int dx = 0;          // column:       0 .. W-1, then wraps
-    int row_in_bank = 0; // row within one bank: 0 .. rows_per_bank-1
-
-    for (int32_t i = 0; i < PanelConfig::stride_to_paired_row; ++i)
-    {
-        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-        {
-            // dy = which display row: bank p starts at p * rows_per_bank
-            const int dy = p * rows_per_bank + row_in_bank;
-            rgb_buffer[fb_index++] = LUT_MAPPING(src[rotated_src_index(dx, dy, W, H)]);
-        }
-
-        // Advance column; roll over into next row-within-bank
-        if (++dx == W)
-        {
-            dx = 0;
-            ++row_in_bank; // at most H/ROWS_IN_PARALLEL increments total
-        }
-    }
-#else
-    // U-Type Serpentine Chaining
-    // Example:
-    //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
-    //
-    //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
-    //
-    //    This results in a long matrix panel with 192 columns and 32 rows.
-    //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
-    //
-    //                       0 -> 1 U-turn to panel 2
-    //                            |
-    //                            v
-    //    U-turn to panel 4  3 <- 2
-    //                       |
-    //                       v
-    //                       4 -> 5
-    //
-    //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
-    //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
-    //    panel 5 below panel 2.
-    //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
-    //
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
-
-    // NOTE: rows_per_bank is the step between paired rows *within a single
-    // panel's SCAN_DEPTH*, not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two
-    // coincide only when CHAIN_ROWS == 1. PanelConfig::SCAN_DEPTH is the
-    // authoritative source (== MATRIX_PANEL_HEIGHT / ROWS_IN_PARALLEL).
-    constexpr int rows_per_bank = PanelConfig::SCAN_DEPTH;
-
-    int32_t fb_index = 0;
-
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++) // row: current row
-    {
-        for (int v = 0; v < CHAIN_ROWS; v++) // v: panel in row (vertical chain)
-        {
-            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
-
-            for (int h = 0; h < CHAIN_COLS; h++) // h: panel in column (horizontal chain)
-            {
-                // Input parameters
-                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
-                // Output parameters
-                // row_base: row offset
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                // row_base is only guaranteed W-aligned when CHAIN_COLS == 1
-                // (phys_h * MATRIX_PANEL_WIDTH is otherwise a sub-row offset).
-                const int dx_base = row_base % W;
-                const int dy_base = row_base / W;
-
-                if (reverse)
-                {
-                    // Serpentine physical 180° correction (chain topology):
-                    //   - scan row reversed  → map_panel_row
-                    //   - i traversal        → reversed below
-                    //   - multiplex ordering → reversed below
-                    // DISPLAY_ROTATION is composited independently via rot_lut().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
-                    {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-                        {
-                            const int dy = dy_base - p * rows_per_bank;
-                            rgb_buffer[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
-                        }
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-                        {
-                            const int dy = dy_base + p * rows_per_bank;
-                            rgb_buffer[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
-                        }
-                    }
-                }
-            }
-        }
-    }
-#endif // CHAIN_COLS
-#elif defined HUB75_P10_3535_16X32_4S
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // HUB75_P10_3535_16X32_4S — single panel, with display rotation support.
-    //
-    // index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
-    // We decompose each into (dx, dy) and redirect through rotated_src_index().
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
-
-    int line = 0;
-    int counter = 0;
-
-    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
-    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
-
-    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
-    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
-
-    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
-    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
-    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-    constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
-
-    constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
-
-    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
-    {
-        // Panel-side flat index (destination address in display space).
-        // Single-panel case: this index is always within [0, W*H), so a
-        // direct %/ decomposition (not the row_base-based rot_lut helper) is the natural fit here.
-        const int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
-        const int32_t index2 = index + HALF_PANEL_OFFSET;
-
-        rgb_buffer[fb_index] = LUT_MAPPING(src[rotated_src_index(index % W, index / W, W, H)]);
-        rgb_buffer[fb_index + 1] = LUT_MAPPING(src[rotated_src_index(index2 % W, index2 / W, W, H)]);
-
-        if (++counter >= COLUMN_PAIRS)
-        {
-            counter = 0;
-            ++line;
-        }
-    }
-#else
-    // P10 chained — with display rotation support.
-    static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
-
-    size_t fb_index = 0;
-
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
-    {
-        for (int v = 0; v < CHAIN_ROWS; ++v)
-        {
-            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
-
-            for (int h = 0; h < CHAIN_COLS; ++h)
-            {
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                const int32_t row_ptr[4] = {
-                    row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[2] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[3] * PanelConfig::stride_to_paired_row,
-                };
-
-                // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
-                // Decompose fully (dx_base AND dy) per scan group — 4 of eachvper (row, v, h) triplet
-                const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
-                const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
-
-                if (reverse)
-                {
-                    // Serpentine physical 180° correction:
-                    //   - scan row reversed  → map_panel_row
-                    //   - i reversed         → below
-                    //   - scan group order   → p counts 3..0
-                    // DISPLAY_ROTATION composited independently via rot_lut().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
-                    {
-                        for (int p = 3; p >= 0; --p)
-                        {
-                            rgb_buffer[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
-                        }
-                    }
-                }
-                else
-                {
-                    // Normal orientation
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        for (int p = 0; p < 4; ++p)
-                        {
-                            rgb_buffer[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
-                        }
-                    }
-                }
-            }
-        }
-    }
-#endif
-#elif defined HUB75_P3_1415_16S_64X64_S31
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // HUB75_P3_1415_16S_64X64_S31 — single panel, with display rotation support.
-    //
-    // q1..q4 are flat pixel indices advancing sequentially. We decompose each
-    // into (dx, dy) and redirect through rotated_src_index().
-    // Panel-side write order (dst pointer) is unchanged.
-    {
         constexpr int W = DISPLAY_WIDTH;
         constexpr int H = DISPLAY_HEIGHT;
 
-        constexpr uint total_pixels = TOTAL_PIXELS;
-        constexpr uint line_offset = PanelConfig::LINE_OFFSET;
+        constexpr int rows_per_bank = H / PanelConfig::ROWS_IN_PARALLEL;
 
-        constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
+        int32_t fb_index = 0;
 
-        uint quarter1 = 0 * quarter; // rows in quarter1  0–15
-        uint quarter2 = 1 * quarter; // rows in quarter2  16–31
-        uint quarter3 = 2 * quarter; // rows in quarter3  32–47
-        uint quarter4 = 3 * quarter; // rows in quarter4  48–63
+        int dx = 0;          // column:       0 .. W-1, then wraps
+        int row_in_bank = 0; // row within one bank: 0 .. rows_per_bank-1
 
-        uint p = 0; // per line pixel counter
-
-        uint line = 0; // Number of logical rows processed
-
-        uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
-
-        // Each iteration processes 4 physical rows (2 scan-row pairs)
-        while (line < (PanelConfig::HEIGHT >> 2))
+        for (int32_t i = 0; i < PanelConfig::stride_to_paired_row; ++i)
         {
-            dst[0] = LUT_MAPPING(src[rotated_src_index(quarter2 % W, quarter2 / W, W, H)]);
-            ++quarter2;
-            dst[1] = LUT_MAPPING(src[rotated_src_index(quarter4 % W, quarter4 / W, W, H)]);
-            ++quarter4;
-            dst[line_offset + 0] = LUT_MAPPING(src[rotated_src_index(quarter1 % W, quarter1 / W, W, H)]);
-            ++quarter1;
-            dst[line_offset + 1] = LUT_MAPPING(src[rotated_src_index(quarter3 % W, quarter3 / W, W, H)]);
-            ++quarter3;
-
-            dst += 2;
-
-            // End of logical row
-            if (++p >= PanelConfig::WIDTH)
+            for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
             {
-                p = 0;
-                line++;
-                dst += line_offset; // advance to next scan-row pair
+                // dy = which display row: bank p starts at p * rows_per_bank
+                const int dy = p * rows_per_bank + row_in_bank;
+                rgb_buffer[fb_index++] = LUT_MAPPING(src[rotated_src_index(dx, dy, W, H)]);
+            }
+
+            // Advance column; roll over into next row-within-bank
+            if (++dx == W)
+            {
+                dx = 0;
+                ++row_in_bank; // at most H/ROWS_IN_PARALLEL increments total
             }
         }
-    }
 #else
-    // P3 chained — with display rotation support.
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
+        // U-Type Serpentine Chaining
+        // Example:
+        //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
+        //
+        //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
+        //
+        //    This results in a long matrix panel with 192 columns and 32 rows.
+        //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
+        //
+        //                       0 -> 1 U-turn to panel 2
+        //                            |
+        //                            v
+        //    U-turn to panel 4  3 <- 2
+        //                       |
+        //                       v
+        //                       4 -> 5
+        //
+        //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
+        //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
+        //    panel 5 below panel 2.
+        //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
+        //
 
-    size_t fb_index = 0;
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
 
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
-    {
-        for (int v = 0; v < CHAIN_ROWS; v++)
+        // NOTE: rows_per_bank is the step between paired rows *within a single
+        // panel's SCAN_DEPTH*, not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two
+        // coincide only when CHAIN_ROWS == 1. PanelConfig::SCAN_DEPTH is the
+        // authoritative source (== MATRIX_PANEL_HEIGHT / ROWS_IN_PARALLEL).
+        constexpr int rows_per_bank = PanelConfig::SCAN_DEPTH;
+
+        int32_t fb_index = 0;
+
+        for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++) // row: current row
         {
-            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
-
-            for (int h = 0; h < CHAIN_COLS; h++)
+            for (int v = 0; v < CHAIN_ROWS; v++) // v: panel in row (vertical chain)
             {
-                // Input parameters
-                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
-                // Output parameters
-                // row_base: row offset
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
+                const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) ? (v & 1) : false;
 
-                // S31 quarter-row layout
-                const int32_t sign = reverse ? -1 : 1;
-                const int32_t base0 = row_base + sign * 0 * PanelConfig::stride_to_paired_row;
-                const int32_t base1 = row_base + sign * 1 * PanelConfig::stride_to_paired_row;
-                const int32_t base2 = row_base + sign * 2 * PanelConfig::stride_to_paired_row;
-                const int32_t base3 = row_base + sign * 3 * PanelConfig::stride_to_paired_row;
-
-                const int dx_base0 = base0 % W, dy0 = base0 / W;
-                const int dx_base1 = base1 % W, dy1 = base1 / W;
-                const int dx_base2 = base2 % W, dy2 = base2 / W;
-                const int dx_base3 = base3 % W, dy3 = base3 / W;
-
-                if (reverse)
+                for (int h = 0; h < CHAIN_COLS; h++) // h: panel in column (horizontal chain)
                 {
-                    // Serpentine physical 180° correction (chain topology):
-                    //   - scan row reversed    → map_panel_row
-                    //   - i reversed           → below
-                    //   - sign on quarter rows → above
-                    // DISPLAY_ROTATION composited independently via rot_lut().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    // Input parameters
+                    // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
+                    // Output parameters
+                    // row_base: row offset
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
+
+                    // row_base is only guaranteed W-aligned when CHAIN_COLS == 1
+                    // (phys_h * MATRIX_PANEL_WIDTH is otherwise a sub-row offset).
+                    const int dx_base = row_base % W;
+                    const int dy_base = row_base / W;
+
+                    if (reverse)
                     {
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                        // Serpentine physical 180° correction (chain topology):
+                        //   - scan row reversed  → map_panel_row
+                        //   - i traversal        → reversed below
+                        //   - multiplex ordering → reversed below
+                        // DISPLAY_ROTATION is composited independently via rot_lut().
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                        {
+                            for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+                            {
+                                const int dy = dy_base - p * rows_per_bank;
+                                rgb_buffer[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+                            }
+                        }
                     }
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    else
                     {
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
-                    }
-                }
-                else
-                {
-                    // Normal orientation
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
-                    }
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                        {
+                            for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+                            {
+                                const int dy = dy_base + p * rows_per_bank;
+                                rgb_buffer[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+                            }
+                        }
                     }
                 }
             }
         }
+#endif // CHAIN_COLS
     }
+    else if (ROW_MAPPING == RowMapping::Split)
+    {
+        // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+        printf("RowMapping::Split\n");
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
+        // Single panel, with display rotation support.
+        //
+        // index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
+        // We decompose each into (dx, dy) and redirect through rotated_src_index().
+
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
+
+        int line = 0;
+        int counter = 0;
+
+        constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+        constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+        constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+        constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+        constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
+        constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
+        constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+        constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
+
+        constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
+
+        for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+        {
+            // Panel-side flat index (destination address in display space).
+            // Single-panel case: this index is always within [0, W*H), so a
+            // direct %/ decomposition (not the row_base-based rot_lut helper) is the natural fit here.
+            const int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
+            const int32_t index2 = index + HALF_PANEL_OFFSET;
+
+            rgb_buffer[fb_index] = LUT_MAPPING(src[rotated_src_index(index % W, index / W, W, H)]);
+            rgb_buffer[fb_index + 1] = LUT_MAPPING(src[rotated_src_index(index2 % W, index2 / W, W, H)]);
+
+            if (++counter >= COLUMN_PAIRS)
+            {
+                counter = 0;
+                ++line;
+            }
+        }
+#else
+        // P10 chained — with display rotation support.
+        static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
+
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
+
+        size_t fb_index = 0;
+
+        for (int row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
+        {
+            for (int v = 0; v < CHAIN_ROWS; ++v)
+            {
+                const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
+
+                for (int h = 0; h < CHAIN_COLS; ++h)
+                {
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
+
+                    const int32_t row_ptr[4] = {
+                        row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
+                        row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
+                        row_base + scan_map[2] * PanelConfig::stride_to_paired_row,
+                        row_base + scan_map[3] * PanelConfig::stride_to_paired_row,
+                    };
+
+                    // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
+                    // Decompose fully (dx_base AND dy) per scan group — 4 of eachvper (row, v, h) triplet
+                    const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
+                    const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
+
+                    if (reverse)
+                    {
+                        // Serpentine physical 180° correction:
+                        //   - scan row reversed  → map_panel_row
+                        //   - i reversed         → below
+                        //   - scan group order   → p counts 3..0
+                        // DISPLAY_ROTATION composited independently via rot_lut().
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                        {
+                            for (int p = 3; p >= 0; --p)
+                            {
+                                rgb_buffer[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Normal orientation
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                        {
+                            for (int p = 0; p < 4; ++p)
+                            {
+                                rgb_buffer[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+#endif
+    }
+    else if (ROW_MAPPING == RowMapping::S31)
+    {
+        // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
+        printf("RowMapping::S31\n");
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
+        // Single panel, with display rotation support.
+        //
+        // q1..q4 are flat pixel indices advancing sequentially. We decompose each
+        // into (dx, dy) and redirect through rotated_src_index().
+        // Panel-side write order (dst pointer) is unchanged.
+        {
+            constexpr int W = DISPLAY_WIDTH;
+            constexpr int H = DISPLAY_HEIGHT;
+
+            constexpr uint total_pixels = TOTAL_PIXELS;
+            constexpr uint line_offset = PanelConfig::LINE_OFFSET;
+
+            constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
+
+            uint quarter1 = 0 * quarter; // rows in quarter1  0–15
+            uint quarter2 = 1 * quarter; // rows in quarter2  16–31
+            uint quarter3 = 2 * quarter; // rows in quarter3  32–47
+            uint quarter4 = 3 * quarter; // rows in quarter4  48–63
+
+            uint p = 0; // per line pixel counter
+
+            uint line = 0; // Number of logical rows processed
+
+            uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
+
+            // Each iteration processes 4 physical rows (2 scan-row pairs)
+            while (line < (PanelConfig::HEIGHT >> 2))
+            {
+                dst[0] = LUT_MAPPING(src[rotated_src_index(quarter2 % W, quarter2 / W, W, H)]);
+                ++quarter2;
+                dst[1] = LUT_MAPPING(src[rotated_src_index(quarter4 % W, quarter4 / W, W, H)]);
+                ++quarter4;
+                dst[line_offset + 0] = LUT_MAPPING(src[rotated_src_index(quarter1 % W, quarter1 / W, W, H)]);
+                ++quarter1;
+                dst[line_offset + 1] = LUT_MAPPING(src[rotated_src_index(quarter3 % W, quarter3 / W, W, H)]);
+                ++quarter3;
+
+                dst += 2;
+
+                // End of logical row
+                if (++p >= PanelConfig::WIDTH)
+                {
+                    p = 0;
+                    line++;
+                    dst += line_offset; // advance to next scan-row pair
+                }
+            }
+        }
+#else
+        // P3 chained — with display rotation support.
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
+
+        size_t fb_index = 0;
+
+        for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
+        {
+            for (int v = 0; v < CHAIN_ROWS; v++)
+            {
+                const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
+
+                for (int h = 0; h < CHAIN_COLS; h++)
+                {
+                    // Input parameters
+                    // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
+                    // Output parameters
+                    // row_base: row offset
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
+
+                    // S31 quarter-row layout
+                    const int32_t sign = reverse ? -1 : 1;
+                    const int32_t base0 = row_base + sign * 0 * PanelConfig::stride_to_paired_row;
+                    const int32_t base1 = row_base + sign * 1 * PanelConfig::stride_to_paired_row;
+                    const int32_t base2 = row_base + sign * 2 * PanelConfig::stride_to_paired_row;
+                    const int32_t base3 = row_base + sign * 3 * PanelConfig::stride_to_paired_row;
+
+                    const int dx_base0 = base0 % W, dy0 = base0 / W;
+                    const int dx_base1 = base1 % W, dy1 = base1 / W;
+                    const int dx_base2 = base2 % W, dy2 = base2 / W;
+                    const int dx_base3 = base3 % W, dy3 = base3 / W;
+
+                    if (reverse)
+                    {
+                        // Serpentine physical 180° correction (chain topology):
+                        //   - scan row reversed    → map_panel_row
+                        //   - i reversed           → below
+                        //   - sign on quarter rows → above
+                        // DISPLAY_ROTATION composited independently via rot_lut().
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                        }
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                        }
+                    }
+                    else
+                    {
+                        // Normal orientation
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                        }
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                        }
+                    }
+                }
+            }
+        }
 #endif
 #endif
-    // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
-    dma_channel_set_write_addr(write_chan, frame_buffer, false);
-    dma_channel_set_read_addr(read_chan, rgb_buffer, false);
-    dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
+        // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
+        dma_channel_set_write_addr(write_chan, frame_buffer, false);
+        dma_channel_set_read_addr(read_chan, rgb_buffer, false);
+        dma_start_channel_mask((1u << read_chan) | (1u << write_chan));
+    }
 }
-#endif
 
 /**
  * @brief Updates the frame buffer with pixel data from the source array.
@@ -1386,133 +1396,138 @@ __attribute__((optimize("unroll-loops"))) void update(
  */
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
-#if defined(HUB75_DEFAULT)
+    if constexpr (ROW_MAPPING == RowMapping::Standard)
+    {
+        printf("RowMapping::Standard\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support (BGR byte layout).
-    //
-    // src is uint8_t* with 3 bytes per pixel: [B, G, R] at byte offset flat_idx*3.
-    // Decompose the flat pixel index into (dx, dy) and use rot_lut_rgb(), which applies rotated_src_index() and multiplies by 3 internally.
+        // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support (BGR byte layout).
+        //
+        // src is uint8_t* with 3 bytes per pixel: [B, G, R] at byte offset flat_idx*3.
+        // Decompose the flat pixel index into (dx, dy) and use rot_lut_rgb(), which applies rotated_src_index() and multiplies by 3 internally.
 
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
 
-    constexpr int rows_per_bank = H / PanelConfig::ROWS_IN_PARALLEL;
+        constexpr int rows_per_bank = H / PanelConfig::ROWS_IN_PARALLEL;
 
-    int32_t fb_index = 0;
+        int32_t fb_index = 0;
 
-    int dx = 0;
-    int row_in_bank = 0;
+        int dx = 0;
+        int row_in_bank = 0;
 
-    for (int32_t i = 0; i < PanelConfig::stride_to_paired_row; ++i)
-    {
-        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+        for (int32_t i = 0; i < PanelConfig::stride_to_paired_row; ++i)
         {
-            const int dy = p * rows_per_bank + row_in_bank;
-            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
-        }
-
-        if (++dx == W)
-        {
-            dx = 0;
-            ++row_in_bank;
-        }
-    }
-#else
-    // U-Type Serpentine Chaining
-    // Example:
-    //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
-    //
-    //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
-    //
-    //    This results in a long matrix panel with 192 columns and 32 rows.
-    //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
-    //
-    //                       0 -> 1 U-turn to panel 2
-    //                            |
-    //                            v
-    //    U-turn to panel 4  3 <- 2
-    //                       |
-    //                       v
-    //                       4 -> 5
-    //
-    //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
-    //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
-    //    panel 5 below panel 2.
-    //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
-    //
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
-
-    // Step between paired rows within a single panel's SCAN_DEPTH — not
-    // DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two only coincide when CHAIN_ROWS == 1.
-    constexpr int rows_per_bank = PanelConfig::SCAN_DEPTH;
-
-    size_t fb_index = 0;
-
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
-    {
-        for (int v = 0; v < CHAIN_ROWS; v++)
-        {
-            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
-
-            for (int h = 0; h < CHAIN_COLS; h++)
+            for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
             {
-                // Input parameters
-                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
-                // Output parameters
-                // row_base: row offset
-                //
-                // map_panel_row():
-                //   - selects physical panel
-                //   - selects row inside panel
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
+                const int dy = p * rows_per_bank + row_in_bank;
+                rgb_buffer[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
+            }
 
-                // row_base (pixel-domain) is only guaranteed W-aligned when
-                // CHAIN_COLS == 1; decompose fully once per (row, v, h).
-                const int dx_base = row_base % W;
-                const int dy_base = row_base / W;
+            if (++dx == W)
+            {
+                dx = 0;
+                ++row_in_bank;
+            }
+        }
+#else
+        // U-Type Serpentine Chaining
+        // Example:
+        //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
+        //
+        //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
+        //
+        //    This results in a long matrix panel with 192 columns and 32 rows.
+        //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
+        //
+        //                       0 -> 1 U-turn to panel 2
+        //                            |
+        //                            v
+        //    U-turn to panel 4  3 <- 2
+        //                       |
+        //                       v
+        //                       4 -> 5
+        //
+        //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
+        //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
+        //    panel 5 below panel 2.
+        //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
+        //
 
-                if (reverse)
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
+
+        // Step between paired rows within a single panel's SCAN_DEPTH — not
+        // DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two only coincide when CHAIN_ROWS == 1.
+        constexpr int rows_per_bank = PanelConfig::SCAN_DEPTH;
+
+        size_t fb_index = 0;
+
+        for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
+        {
+            for (int v = 0; v < CHAIN_ROWS; v++)
+            {
+                const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
+
+                for (int h = 0; h < CHAIN_COLS; h++)
                 {
-                    // True 180° rotation:
+                    // Input parameters
+                    // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
+                    // Output parameters
+                    // row_base: row offset
                     //
-                    // reverse:
-                    //   - local scan row      (done in map_panel_row)
-                    //   - i traversal         (done here)
-                    //   - multiplex ordering  (done here)
-                    // DISPLAY_ROTATION composited independently via rot_lut_rgb().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    // map_panel_row():
+                    //   - selects physical panel
+                    //   - selects row inside panel
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
+
+                    // row_base (pixel-domain) is only guaranteed W-aligned when
+                    // CHAIN_COLS == 1; decompose fully once per (row, v, h).
+                    const int dx_base = row_base % W;
+                    const int dy_base = row_base / W;
+
+                    if (reverse)
                     {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+                        // True 180° rotation:
+                        //
+                        // reverse:
+                        //   - local scan row      (done in map_panel_row)
+                        //   - i traversal         (done here)
+                        //   - multiplex ordering  (done here)
+                        // DISPLAY_ROTATION composited independently via rot_lut_rgb().
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
                         {
-                            const int dy = dy_base - p * rows_per_bank;
-                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                            for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+                            {
+                                const int dy = dy_base - p * rows_per_bank;
+                                rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                            }
                         }
                     }
-                }
-                else
-                {
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                    else
                     {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
                         {
-                            const int dy = dy_base + p * rows_per_bank;
-                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                            for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
+                            {
+                                const int dy = dy_base + p * rows_per_bank;
+                                rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                            }
                         }
                     }
                 }
             }
         }
-    }
 #endif
-#elif defined HUB75_P10_3535_16X32_4S
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // HUB75_P10_3535_16X32_4S — single panel, with display rotation support (BGR byte layout).
-    //
-    // pf / pf2 are flat pixel indices (no byte multiply). rot_lut_rgb() applies
-    // rotated_src_index() and the *3 byte conversion internally.
+    }
+    else if constexpr (ROW_MAPPING == RowMapping::Split)
     {
+        // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+        printf("RowMapping::Split\n");
+#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
+        // Single panel, with display rotation support (BGR byte layout).
+        //
+        // pf / pf2 are flat pixel indices (no byte multiply). rot_lut_rgb() applies
+        // rotated_src_index() and the *3 byte conversion internally.
         constexpr int W = DISPLAY_WIDTH;
         constexpr int H = DISPLAY_HEIGHT;
 
@@ -1546,209 +1561,212 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
                 ++line;
             }
         }
-    }
 #else
-    // P10 chained — with display rotation support (BGR byte layout).
-    static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
+        // P10 chained — with display rotation support (BGR byte layout).
+        static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
 
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
 
-    size_t fb_index = 0;
+        size_t fb_index = 0;
 
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
-    {
-        for (int v = 0; v < CHAIN_ROWS; ++v)
+        for (int row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
         {
-            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
-
-            for (int h = 0; h < CHAIN_COLS; ++h)
+            for (int v = 0; v < CHAIN_ROWS; ++v)
             {
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
+                const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
 
-                // Pixel-domain row pointers (no byte multiply yet — rot_lut_rgb performs the *3 conversion internally after rotation).
-                const int32_t row_ptr[4] = {
-                    row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[2] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[3] * PanelConfig::stride_to_paired_row,
-                };
-
-                // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
-                // Decompose fully (dx_base AND dy) once per scan group.
-                const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
-                const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
-
-                if (reverse)
+                for (int h = 0; h < CHAIN_COLS; ++h)
                 {
-                    // 180° rotation
-                    //
-                    // reverse:
-                    //   - scan row       (map_panel_row)
-                    //   - traversal      (reverse i)
-                    //   - scan group     (reverse p)
-                    // DISPLAY_ROTATION composited independently via rot_lut_rgb().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
+
+                    // Pixel-domain row pointers (no byte multiply yet — rot_lut_rgb performs the *3 conversion internally after rotation).
+                    const int32_t row_ptr[4] = {
+                        row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
+                        row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
+                        row_base + scan_map[2] * PanelConfig::stride_to_paired_row,
+                        row_base + scan_map[3] * PanelConfig::stride_to_paired_row,
+                    };
+
+                    // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
+                    // Decompose fully (dx_base AND dy) once per scan group.
+                    const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
+                    const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
+
+                    if (reverse)
                     {
-                        for (int p = 3; p >= 0; --p)
+                        // 180° rotation
+                        //
+                        // reverse:
+                        //   - scan row       (map_panel_row)
+                        //   - traversal      (reverse i)
+                        //   - scan group     (reverse p)
+                        // DISPLAY_ROTATION composited independently via rot_lut_rgb().
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
                         {
-                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base[p], dy[p], i, W, H);
+                            for (int p = 3; p >= 0; --p)
+                            {
+                                rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base[p], dy[p], i, W, H);
+                            }
                         }
                     }
-                }
-                else
-                {
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                    else
                     {
-                        for (int p = 0; p < 4; ++p)
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
                         {
-                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base[p], dy[p], i, W, H);
+                            for (int p = 0; p < 4; ++p)
+                            {
+                                rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base[p], dy[p], i, W, H);
+                            }
                         }
                     }
                 }
             }
         }
-    }
 #endif
-#elif defined HUB75_P3_1415_16S_64X64_S31
+    }
+    else if constexpr (ROW_MAPPING == RowMapping::S31)
+    {
+        // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
+        printf("RowMapping::S31\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // HUB75_P3_1415_16S_64X64_S31 — single panel, with display rotation support (BGR byte layout).
-    //
-    // quarter1..quarter4 are flat pixel-index counters (no *3). rot_lut_rgb() applies
-    // rotated_src_index() and the byte conversion internally.
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
+        // Single panel, with display rotation support (BGR byte layout).
+        //
+        // quarter1..quarter4 are flat pixel-index counters (no *3). rot_lut_rgb() applies
+        // rotated_src_index() and the byte conversion internally.
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
 
-    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    constexpr uint line_width = PanelConfig::LINE_OFFSET;
+        constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
+        constexpr uint line_width = PanelConfig::LINE_OFFSET;
 
-    constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
+        constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
 
-    uint quarter1 = 0 * quarter; // rows in quarter1  0–15
-    uint quarter2 = 1 * quarter; // rows in quarter2  16–31
-    uint quarter3 = 2 * quarter; // rows in quarter3  32–47
-    uint quarter4 = 3 * quarter; // rows in quarter4  48–63
+        uint quarter1 = 0 * quarter; // rows in quarter1  0–15
+        uint quarter2 = 1 * quarter; // rows in quarter2  16–31
+        uint quarter3 = 2 * quarter; // rows in quarter3  32–47
+        uint quarter4 = 3 * quarter; // rows in quarter4  48–63
 
-    uint p = 0; // per line pixel counter
-    uint line = 0;
-    uint32_t *dst = rgb_buffer;
+        uint p = 0; // per line pixel counter
+        uint line = 0;
+        uint32_t *dst = rgb_buffer;
 
-    while (line < (PanelConfig::HEIGHT >> 2))
-    {
-        dst[0] = rot_lut_rgb(src, quarter2 % W, quarter2 / W, 0, W, H);
-        ++quarter2;
-        dst[1] = rot_lut_rgb(src, quarter4 % W, quarter4 / W, 0, W, H);
-        ++quarter4;
-        dst[line_width + 0] = rot_lut_rgb(src, quarter1 % W, quarter1 / W, 0, W, H);
-        ++quarter1;
-        dst[line_width + 1] = rot_lut_rgb(src, quarter3 % W, quarter3 / W, 0, W, H);
-        ++quarter3;
-
-        dst += 2;
-        p++;
-
-        // End of logical row
-        if (p == PanelConfig::WIDTH)
+        while (line < (PanelConfig::HEIGHT >> 2))
         {
-            p = 0;
-            line++;
-            dst += line_width; // advance to next scan-row pair
-        }
-    }
-#else
-    // P3 chained — with display rotation support (BGR byte layout).
-    //
-    // U-Type Serpentine Chaining
-    // Example:
-    //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
-    //
-    //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
-    //
-    //    This results in a long matrix panel with 192 columns and 32 rows.
-    //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
-    //
-    //                       0 -> 1 U-turn to panel 2
-    //                            |
-    //                            v
-    //    U-turn to panel 4  3 <- 2
-    //                       |
-    //                       v
-    //                       4 -> 5
-    //
-    //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
-    //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
-    //    panel 5 below panel 2.
-    //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
-    //
+            dst[0] = rot_lut_rgb(src, quarter2 % W, quarter2 / W, 0, W, H);
+            ++quarter2;
+            dst[1] = rot_lut_rgb(src, quarter4 % W, quarter4 / W, 0, W, H);
+            ++quarter4;
+            dst[line_width + 0] = rot_lut_rgb(src, quarter1 % W, quarter1 / W, 0, W, H);
+            ++quarter1;
+            dst[line_width + 1] = rot_lut_rgb(src, quarter3 % W, quarter3 / W, 0, W, H);
+            ++quarter3;
 
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
+            dst += 2;
+            p++;
 
-    size_t fb_index = 0;
-
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
-    {
-        for (int v = 0; v < CHAIN_ROWS; v++)
-        {
-            const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
-
-            for (int h = 0; h < CHAIN_COLS; h++)
+            // End of logical row
+            if (p == PanelConfig::WIDTH)
             {
-                // Input parameters
-                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
-                // Output parameters
-                // row_base: row offset
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
+                p = 0;
+                line++;
+                dst += line_width; // advance to next scan-row pair
+            }
+        }
+#else
+        // P3 chained — with display rotation support (BGR byte layout).
+        //
+        // U-Type Serpentine Chaining
+        // Example:
+        //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
+        //
+        //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
+        //
+        //    This results in a long matrix panel with 192 columns and 32 rows.
+        //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
+        //
+        //                       0 -> 1 U-turn to panel 2
+        //                            |
+        //                            v
+        //    U-turn to panel 4  3 <- 2
+        //                       |
+        //                       v
+        //                       4 -> 5
+        //
+        //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
+        //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
+        //    panel 5 below panel 2.
+        //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
+        //
 
-                // S31 quarter-row layout (pixel domain — rot_lut_rgb converts to bytes)
-                const int32_t sign = reverse ? -1 : 1;
-                const int32_t base0 = row_base + sign * 0 * (int32_t)PanelConfig::stride_to_paired_row;
-                const int32_t base1 = row_base + sign * 1 * (int32_t)PanelConfig::stride_to_paired_row;
-                const int32_t base2 = row_base + sign * 2 * (int32_t)PanelConfig::stride_to_paired_row;
-                const int32_t base3 = row_base + sign * 3 * (int32_t)PanelConfig::stride_to_paired_row;
+        constexpr int W = DISPLAY_WIDTH;
+        constexpr int H = DISPLAY_HEIGHT;
 
-                // baseN is only guaranteed W-aligned when CHAIN_COLS == 1.
-                // Decompose fully (dx_base AND dy) once per quarter-row.
-                const int dx_base0 = base0 % W, dy0 = base0 / W;
-                const int dx_base1 = base1 % W, dy1 = base1 / W;
-                const int dx_base2 = base2 % W, dy2 = base2 / W;
-                const int dx_base3 = base3 % W, dy3 = base3 / W;
+        size_t fb_index = 0;
 
-                if (reverse)
+        for (int row = 0; row < PanelConfig::SCAN_DEPTH; row++)
+        {
+            for (int v = 0; v < CHAIN_ROWS; v++)
+            {
+                const bool reverse = (CHAIN_MODE == CHAIN_MODE_SERPENTINE) && (v & 1);
+
+                for (int h = 0; h < CHAIN_COLS; h++)
                 {
-                    // 180° rotation:
-                    // DISPLAY_ROTATION composited independently via rot_lut_rgb().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
-                    {
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
-                    }
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
-                    {
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
-                    }
-                }
-                else
-                {
-                    // Normal orientation
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
-                    }
+                    // Input parameters
+                    // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
+                    // Output parameters
+                    // row_base: row offset
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                    // S31 quarter-row layout (pixel domain — rot_lut_rgb converts to bytes)
+                    const int32_t sign = reverse ? -1 : 1;
+                    const int32_t base0 = row_base + sign * 0 * (int32_t)PanelConfig::stride_to_paired_row;
+                    const int32_t base1 = row_base + sign * 1 * (int32_t)PanelConfig::stride_to_paired_row;
+                    const int32_t base2 = row_base + sign * 2 * (int32_t)PanelConfig::stride_to_paired_row;
+                    const int32_t base3 = row_base + sign * 3 * (int32_t)PanelConfig::stride_to_paired_row;
+
+                    // baseN is only guaranteed W-aligned when CHAIN_COLS == 1.
+                    // Decompose fully (dx_base AND dy) once per quarter-row.
+                    const int dx_base0 = base0 % W, dy0 = base0 / W;
+                    const int dx_base1 = base1 % W, dy1 = base1 / W;
+                    const int dx_base2 = base2 % W, dy2 = base2 / W;
+                    const int dx_base3 = base3 % W, dy3 = base3 / W;
+
+                    if (reverse)
                     {
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                        // 180° rotation:
+                        // DISPLAY_ROTATION composited independently via rot_lut_rgb().
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                        }
+                        for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                        }
+                    }
+                    else
+                    {
+                        // Normal orientation
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                        }
+
+                        for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
+                        {
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                        }
                     }
                 }
             }
         }
+#endif
     }
-#endif
-#endif
     // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
     dma_channel_set_read_addr(read_chan, rgb_buffer, false);
