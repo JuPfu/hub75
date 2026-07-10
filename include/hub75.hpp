@@ -263,10 +263,6 @@ static_assert(DISPLAY_ROTATION == 0 || DISPLAY_ROTATION == 90 || DISPLAY_ROTATIO
 #define BASE_ADDR_NS 120
 #endif
 
-#ifndef BASE_OE_NS
-#define BASE_OE_NS 40
-#endif
-
 // Frame rate
 // Use only for testing or debugging
 #ifndef FRAME_RATE

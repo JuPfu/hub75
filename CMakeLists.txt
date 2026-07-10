@@ -115,8 +115,7 @@ target_compile_definitions(hub75_demo PRIVATE
     CCM_GB_SHIFT=7              # CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     DISPLAY_ROTATION=0          # display rotation - valid values 0, 90, 180, 270 
     BASE_LATCH_NS=80            # wait time in nano-seconds to stabilise latch
-    BASE_ADDR_NS=120            # wait time in nano-seconds to stabilise row addressing
-    BASE_OE_NS=40               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)
+    BASE_ADDR_NS=160            # wait time in nano-seconds to stabilise row addressing
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
     FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
