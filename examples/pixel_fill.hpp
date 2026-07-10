@@ -10,11 +10,11 @@ private:
     int w;
     int h;
 
-    volatile int i = 0;
-    volatile int j = 0;
-    volatile int l = 0;
+    int i = 0;
+    int j = 0;
+    int l = 0;
 
-    volatile int index = 0;
+    int index = 0;
 
     void drawPixel(int x, int y, uint32_t color)
     {
