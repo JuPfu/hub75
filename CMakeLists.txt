@@ -139,3 +139,48 @@ target_include_directories(hub75_demo PRIVATE
 )
 
 pico_add_extra_outputs(hub75_demo)
+
+
+# Add dual-panel demo executable - two independent Hub75Driver instances, see
+# hub75_demo_dual.cpp for details.
+add_executable(hub75_demo_dual hub75_demo_dual.cpp)
+
+pico_set_program_name(hub75_demo_dual "hub75_demo_dual")
+pico_set_program_version(hub75_demo_dual "3.1")
+
+pico_set_float_implementation(hub75_demo_dual pico)
+
+target_compile_definitions(hub75_demo_dual PRIVATE
+    USE_PICO_GRAPHICS=true
+)
+
+pico_enable_stdio_uart(hub75_demo_dual 0)
+pico_enable_stdio_usb(hub75_demo_dual 1)
+
+target_sources(hub75_demo_dual PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/hub75_demo_dual.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
+        )
+
+target_link_libraries(hub75_demo_dual PRIVATE
+        pico_stdlib
+        pico_multicore
+        pico_aon_timer
+        hardware_pio
+        hardware_dma
+        hardware_vreg
+        pico_graphics)
+
+target_include_directories(hub75_demo_dual PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/include
+        ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+pico_generate_pio_header(hub75_demo_dual ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
+
+pico_add_extra_outputs(hub75_demo_dual)
+
