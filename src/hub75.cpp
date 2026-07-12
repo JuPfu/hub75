@@ -34,11 +34,13 @@ uint8_t *dma_buffer;   ///< Front buffer — read by pixel_chan DMA → panel st
  *
  * Memory layout (packed, DMA streamed):
  * -------------------------------------
- * [0] row_address : Row select (A..E lines)
- * [1] t_addr      : Address setup delay (PIO cycles)
- * [2] t_oe        : OE guard delay before activation
- * [3] lit_cycles  : OE active duration (LEDs ON)
- * [4] dark_cycles : OE inactive duration (LEDs OFF)
+ * [0] addr_delay  : bits[4:0] row_address (A..E lines), bits[31:5] t_addr (PIO cycles)
+ * [1] lit_cycles  : OE active duration (LEDs ON)
+ * [2] dark_cycles : OE inactive duration (LEDs OFF)
+ *
+ * addr_delay is packed this way because the hub75_row PIO program consumes
+ * it as one 32-bit DMA word: `out pins, 5` peels off the row address, then
+ * `out x, 27` takes the rest straight into the address-settle wait loop
  *
  * Constraints:
  * ------------
@@ -49,9 +51,7 @@ uint8_t *dma_buffer;   ///< Front buffer — read by pixel_chan DMA → panel st
  */
 struct row_cmd_t
 {
-    uint32_t row_address; ///< 5-bit row select; selects which pair of rows to drive
-    uint32_t t_addr;      ///< wait cycles for row address to stabilise (bitplane dependent)
-    uint32_t t_oe;        ///< wait cycles before OE enabled (bitplane dependent)
+    uint32_t addr_delay;  ///< packed: bits[4:0]=row_address, bits[31:5]=t_addr (address-settling delay, bitplane dependent)
     uint32_t lit_cycles;  ///< OEn ON  duration for this bit plane, scaled by brightness
     uint32_t dark_cycles; ///< OEn OFF duration = full BCM period - lit_cycles
 
@@ -114,12 +114,10 @@ static void setup_dma_transfers();
  * 1. Physical domain (ns):
  *    - latch_ns
  *    - addr_ns
- *    - oe_ns
  *
  * 2. Derived domain (PIO cycles):
  *    - latch_cycles
  *    - addr_cycles
- *    - oe_cycles
  *
  * Conversion:
  * -----------
@@ -135,12 +133,10 @@ typedef struct
     // --- Physical timing (configuration level) ---
     uint32_t latch_ns; // STB settle
     uint32_t addr_ns;  // Address settle
-    uint32_t oe_ns;    // OE guard
 
     // --- Derived PIO-cycles (Runtime) ---
     uint16_t latch_cycles;
     uint16_t addr_cycles;
-    uint16_t oe_cycles;
 
     // --- System parameter (used for re-scaling) ---
     float clk_sys_hz;
@@ -268,14 +264,12 @@ static inline void hub75_timing_recompute(hub75_timing_config_t *cfg)
 {
     cfg->latch_cycles = ns_to_pio_cycles(cfg->latch_ns, cfg->clk_sys_hz, cfg->clkdiv);
     cfg->addr_cycles = ns_to_pio_cycles(cfg->addr_ns, cfg->clk_sys_hz, cfg->clkdiv);
-    cfg->oe_cycles = ns_to_pio_cycles(cfg->oe_ns, cfg->clk_sys_hz, cfg->clkdiv);
 }
 
-void hub75_set_timing_ns(hub75_timing_config_t *cfg, uint32_t latch_ns, uint32_t addr_ns, uint32_t oe_ns)
+void hub75_set_timing_ns(hub75_timing_config_t *cfg, uint32_t latch_ns, uint32_t addr_ns)
 {
     cfg->latch_ns = latch_ns;
     cfg->addr_ns = addr_ns;
-    cfg->oe_ns = oe_ns;
 
     hub75_timing_recompute(cfg);
 }
@@ -284,7 +278,6 @@ void hub75_timing_init(hub75_timing_config_t *cfg, float clk_sys_hz, float clkdi
 {
     cfg->latch_ns = BASE_LATCH_NS;
     cfg->addr_ns = BASE_ADDR_NS;
-    cfg->oe_ns = BASE_OE_NS;
 
     cfg->clk_sys_hz = clk_sys_hz;
     cfg->clkdiv = clkdiv;
@@ -358,10 +351,11 @@ void hub75_build_row_cmd_buffer(uint32_t brightness_fp)
 
         for (uint32_t row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
         {
+            uint32_t t_addr = hub75_timing_config.addr_cycles + (bp >> 1); // address settle
             row_cmd_t *cmd = &row_cmd_buffer[idx++];
-            cmd->row_address = encode_row_address(row);
-            cmd->t_addr = hub75_timing_config.addr_cycles + (bp >> 1); // very effective
-            cmd->t_oe = hub75_timing_config.oe_cycles + (bp >> 2);     // fine tuning
+            // low 5 bits = row address (hub75_row PIO consumes exactly 5 bits via `out pins, 5`),
+            // upper 27 bits = t_addr, taken by the following `out x, 27`
+            cmd->addr_delay = (t_addr << 5) | (encode_row_address(row) & 0x1Fu);
             cmd->lit_cycles = lit_cycles;
             cmd->dark_cycles = dark_cycles;
         }

@@ -381,8 +381,7 @@ The table below lists every configurable preprocessor define, its **default valu
 | `CCM_RG_SHIFT` | `6` | CCM Cross-channel mixing - mix ~1.6% green into the red channel. |
 | `CCM_GB_SHIFT`| `7` |  CCM Cross-channel mixing - mix ~0.8% blue into the green channel. |
 | `BASE_LATCH_NS` | `80` | Wait time in nano-seconds to stabilise latch. |
-| `BASE_ADDR_NS` | `120` | Wait time in nano-seconds to stabilise row addressing. |
-| `BASE_OE_NS` | `40` | Pre-Oe guard wait time in nano-seconds (prevents ghost flashes). |
+| `BASE_ADDR_NS` | `160` | Wait time in nano-seconds to stabilise row addressing. |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
 | `FRAME_RATE` | `false` | For testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production. |
 
@@ -431,8 +430,7 @@ target_compile_definitions(hub75 PRIVATE
     CCM_RG_SHIFT=6              # CCM Cross-channel mixing - mix ~1.6% green into the red channel
     CCM_GB_SHIFT=7              # CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     BASE_LATCH_NS=80            # wait time in nano-seconds to stabilise latch
-    BASE_ADDR_NS=120            # wait time in nano-seconds to stabilise row addressing
-    BASE_OE_NS=40               # pre-Oe guard wait time in nano-seconds (prevents ghost flashes)
+    BASE_ADDR_NS=160            # wait time in nano-seconds to stabilise row addressing
     HUB75_MULTICORE=true        # use core1 for the hub75 driver
     FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
@@ -793,7 +791,7 @@ Building on the DMA/PIO foundation, Version 3.0 adds:
 - **Colour Correction Matrix (CCM)** — Six integer-shift cross-terms correct spectral bleed
   between channels. Zero floating-point cost; off by default (`shift = 31`).
 - **Anti-ghosting & Settling Delays** — Configurable nano-second timing guards
-  (`BASE_LATCH_NS`, `BASE_ADDR_NS`, `BASE_OE_NS`) around latch, address, and OE transitions
+  (`BASE_LATCH_NS`, `BASE_ADDR_NS`) around latch and address transitions
   eliminate ghosting and edge glimmer at high clock speeds.
 - **Double-buffering for both frame and command buffers** — Tear-free updates; the
   `row_cmd_buffer` is only swapped when brightness actually changes.
@@ -1708,8 +1706,7 @@ The table below lists every configurable preprocessor define, its **default valu
 | `CCM_RG_SHIFT` | `6` | CCM Cross-channel mixing - mix ~1.6% green into the red channel. |
 | `CCM_GB_SHIFT`| `7` |  CCM Cross-channel mixing - mix ~0.8% blue into the green channel. |
 | `BASE_LATCH_NS` | `80` | Wait time in nano-seconds to stabilise latch. |
-| `BASE_ADDR_NS` | `120` | Wait time in nano-seconds to stabilise row addressing. |
-| `BASE_OE_NS` | `40` | Pre-Oe guard wait time in nano-seconds (prevents ghost flashes). |
+| `BASE_ADDR_NS` | `160` | Wait time in nano-seconds to stabilise row addressing. |
 | `HUB75_MULTICORE` | `true` | Set to `true` to run the hub75 driver on core 1, freeing core 0 for application logic. |
 | `FRAME_RATE` | `false` | For testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production. |
 
@@ -2475,8 +2472,7 @@ target_compile_definitions(hub75 PRIVATE
     SEPARATE_CIE_CHANNELS=true
     HUB75_MULTICORE=true
     BASE_LATCH_NS=80
-    BASE_ADDR_NS=120
-    BASE_OE_NS=40
+    BASE_ADDR_NS=160
     FRAME_RATE=false                # set to true only for debugging
 )
 ```
@@ -2532,8 +2528,7 @@ target_compile_definitions(hub75 PRIVATE
     SEPARATE_CIE_CHANNELS=true
     HUB75_MULTICORE=true
     BASE_LATCH_NS=80
-    BASE_ADDR_NS=120
-    BASE_OE_NS=40
+    BASE_ADDR_NS=160
     FRAME_RATE=false
 )
 ```
@@ -2605,8 +2600,7 @@ target_compile_definitions(hub75 PRIVATE
     SEPARATE_CIE_CHANNELS=true
     HUB75_MULTICORE=true
     BASE_LATCH_NS=100               # slightly wider timing margins for outdoor panel
-    BASE_ADDR_NS=200
-    BASE_OE_NS=60
+    BASE_ADDR_NS=260
     FRAME_RATE=false                # set to true only for debugging
 )
 ```
@@ -2667,8 +2661,7 @@ target_compile_definitions(hub75 PRIVATE
     SEPARATE_CIE_CHANNELS=true
     HUB75_MULTICORE=true
     BASE_LATCH_NS=80
-    BASE_ADDR_NS=120
-    BASE_OE_NS=40
+    BASE_ADDR_NS=160
     FRAME_RATE=false
 )
 ```
@@ -2727,8 +2720,7 @@ target_compile_definitions(hub75 PRIVATE
     SEPARATE_CIE_CHANNELS=true
     HUB75_MULTICORE=true
     BASE_LATCH_NS=80
-    BASE_ADDR_NS=120
-    BASE_OE_NS=40
+    BASE_ADDR_NS=160
     FRAME_RATE=false
 )
 ```
