@@ -97,7 +97,7 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 // Scan rate 1 : 4 for a 32x16 matrix panel means 16 pixel height divided by 4 pixel results in 4 rows lit simultaneously.
 // ...
 
-// Row/Buffer mapping topology 
+// Row/Buffer mapping topology
 
 // Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
 #define ROWMAP_STANDARD RowMapping::Standard
@@ -110,7 +110,7 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 #define ROW_MAPPING RowMapping::Standard
 #endif
 
-static_assert(ROW_MAPPING == ROWMAP_STANDARD || ROW_MAPPING == ROWMAP_SPLIT || ROW_MAPPING == ROWMAP_S31 , "Row mapping must be ROWMAP_STANDARD, ROWMAP_SPLIT, or ROWMAP_S31");
+static_assert(ROW_MAPPING == ROWMAP_STANDARD || ROW_MAPPING == ROWMAP_SPLIT || ROW_MAPPING == ROWMAP_S31, "Row mapping must be ROWMAP_STANDARD, ROWMAP_SPLIT, or ROWMAP_S31");
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
 #define PANEL_GENERIC 0
