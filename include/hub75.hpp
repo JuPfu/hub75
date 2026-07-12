@@ -260,7 +260,7 @@ static_assert(DISPLAY_ROTATION == 0 || DISPLAY_ROTATION == 90 || DISPLAY_ROTATIO
 #endif
 
 #ifndef BASE_ADDR_NS
-#define BASE_ADDR_NS 120
+#define BASE_ADDR_NS 160
 #endif
 
 // Frame rate
