@@ -1026,7 +1026,6 @@ __attribute__((optimize("unroll-loops"))) void update(
 
     if constexpr (ROW_MAPPING == RowMapping::Standard)
     {
-        printf("RowMapping::Standard\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
         // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support.
 
@@ -1145,7 +1144,6 @@ __attribute__((optimize("unroll-loops"))) void update(
     else if (ROW_MAPPING == RowMapping::Split)
     {
         // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-        printf("RowMapping::Split\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
         // Single panel, with display rotation support.
         //
@@ -1253,7 +1251,6 @@ __attribute__((optimize("unroll-loops"))) void update(
     else if (ROW_MAPPING == RowMapping::S31)
     {
         // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
-        printf("RowMapping::S31\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
         // Single panel, with display rotation support.
         //
@@ -1392,7 +1389,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
     if constexpr (ROW_MAPPING == RowMapping::Standard)
     {
-        printf("RowMapping::Standard\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
         // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support (BGR byte layout).
         //
@@ -1516,7 +1512,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     else if constexpr (ROW_MAPPING == RowMapping::Split)
     {
         // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-        printf("RowMapping::Split\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
         // Single panel, with display rotation support (BGR byte layout).
         //
@@ -1622,7 +1617,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     else if constexpr (ROW_MAPPING == RowMapping::S31)
     {
         // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
-        printf("RowMapping::S31\n");
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
         // Single panel, with display rotation support (BGR byte layout).
         //
