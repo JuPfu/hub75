@@ -81,6 +81,10 @@ set(PANEL_GENERIC 0)
 set(PANEL_FM6126A 1)
 set(PANEL_RUL6024 2)
 
+set(ROWMAP_STANDARD RowMapping::Standard) # Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
+set(ROWMAP_SPLIT RowMapping::Split)       # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+set(ROWMAP_S31 RowMapping::S31)           # S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
+
 set(CHAIN_MODE_SERPENTINE 0)
 set(CHAIN_MODE_RASTER 1)
 
@@ -104,7 +108,7 @@ target_compile_definitions(hub75_demo PRIVATE
     CLK_PIN=11                  # GPIO pin for CLK - use pin 41 for PICO_RP2350B
     STROBE_PIN=12               # GPIO pin for STROBE (LATCH) - use pin 42 for PICO_RP2350B
     OEN_PIN=13                  # GPIO for OE pin - use pin 43 for PICO_RP2350B
-    PANEL=HUB75_DEFAULT         #
+    ROW_MAPPING=ROWMAP_STANDARD # row/buffer mapping topology - default is ROWMAP_STANDARD
     PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
     INVERTED_STB=false          # inverted pin signal for OE (untested)
     SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
