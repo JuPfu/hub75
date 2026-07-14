@@ -107,7 +107,7 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 #define ROWMAP_S31 2
 
 #ifndef ROW_MAPPING
-#define ROW_MAPPING 1
+#define ROW_MAPPING 0
 #endif
 
 static_assert(ROW_MAPPING == ROWMAP_STANDARD || ROW_MAPPING == ROWMAP_SPLIT || ROW_MAPPING == ROWMAP_S31, "Row mapping must be ROWMAP_STANDARD, ROWMAP_SPLIT, or ROWMAP_S31");
