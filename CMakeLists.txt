@@ -114,11 +114,7 @@ add_subdirectory(common)
 add_subdirectory(libraries)
 
 target_sources(hub75_demo PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/rotator.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/analog_clock.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
@@ -162,8 +158,6 @@ target_sources(hub75_demo_dual PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
         ${CMAKE_CURRENT_LIST_DIR}/hub75_demo_dual.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
         )
 
 target_link_libraries(hub75_demo_dual PRIVATE

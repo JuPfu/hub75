@@ -5,12 +5,12 @@
 
 using namespace pimoroni;
 
+template <uint32_t W, uint32_t H>
 class GreyScaleStripes : public PicoGraphics_PenRGB888
 {
 
 private:
-    int w;
-    int h;
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
 
     void drawPixel(int x, int y, uint32_t color)
     {
@@ -19,7 +19,7 @@ private:
     }
 
 public:
-    explicit GreyScaleStripes(uint width = 64, uint height = 64) : PicoGraphics_PenRGB888(width, height, nullptr), w(width), h(height)
+    explicit GreyScaleStripes() : PicoGraphics_PenRGB888(W, H, pixel_buf_)
     {
         set_pen(0);
         clear();
@@ -28,10 +28,10 @@ public:
     void drawStripes()
     {
         // grey stripes in different shades all over the panel
-        for (int y = 0; y < h; ++y)
+        for (int y = 0; y < (int)H; ++y)
         {
-            uint32_t grey = (uint8_t)((y * 255) / (h - 1));
-            for (int x = 0; x < w; ++x)
+            uint32_t grey = (uint8_t)((y * 255) / (H - 1));
+            for (int x = 0; x < (int)W; ++x)
             {
                 drawPixel(x, y, (grey << 16) | (grey << 8) | grey);
             }

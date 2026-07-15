@@ -77,8 +77,8 @@ const uint8_t *demo_image()
 // Example effects
 #include "antialiased_line.hpp"
 #include "bouncing_balls.hpp"
-#include "rotator.cpp"
-#include "analog_clock.cpp"
+#include "rotator.hpp"
+#include "analog_clock.hpp"
 #include "fire_effect.hpp"
 #include "hue_value_spectrum.hpp"
 #include "pixel_fill.hpp"
@@ -196,27 +196,27 @@ int main()
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality
-    BouncingBalls bouncingBalls(10, Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    static BouncingBalls<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> bouncingBalls(10);
 
     // Create rotating antialiased line using pico_graphics functionality
-    Rotator rotator(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    static Rotator<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rotator;
 
     // Create analog clock using pico_graphics functionality
-    AnalogClock analogClock(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    static AnalogClock<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> analogClock;
 
     // Create fire effect using pico_graphics functionality
-    FireEffect fireEffect = FireEffect(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    static FireEffect<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> fireEffect;
 
-    HueValueSpectrum hueValueSpectrum = HueValueSpectrum(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    static HueValueSpectrum<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> hueValueSpectrum;
 
-    PixelFill pixelFill = PixelFill(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    static PixelFill<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> pixelFill;
 
     // Pico RAM is finite - due to your configuration of panel_cfg (dimensions, bitplanes,
     // balanced_light_output and separate_cie_channels) you have to select just a selection of demos!
 
-    // GreyScaleStripes greyScaleStripes = GreyScaleStripes(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    // static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
 
-    // Rectangle rectangle = Rectangle(Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT);
+    // static Rectangle<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rectangle;
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;

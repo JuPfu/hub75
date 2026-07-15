@@ -116,8 +116,8 @@ int main()
     multicore_reset_core1();
     multicore_launch_core1(core1_entry);
 
-    FireEffect fireEffect = FireEffect(PanelA::SCREEN_WIDTH, PanelA::SCREEN_HEIGHT);
-    BouncingBalls bouncingBalls(10, PanelB::SCREEN_WIDTH, PanelB::SCREEN_HEIGHT);
+    static FireEffect<PanelA::SCREEN_WIDTH, PanelA::SCREEN_HEIGHT> fireEffect;
+    static BouncingBalls<PanelB::SCREEN_WIDTH, PanelB::SCREEN_HEIGHT> bouncingBalls(10);
 
 
     while (true)

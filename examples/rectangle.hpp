@@ -5,10 +5,14 @@
 
 using namespace pimoroni;
 
+template <uint32_t W, uint32_t H>
 class Rectangle : public PicoGraphics_PenRGB888
 {
+private:
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
+
 public:
-    explicit Rectangle(uint width = 64, uint height = 64) : PicoGraphics_PenRGB888(width, height, nullptr)
+    explicit Rectangle() : PicoGraphics_PenRGB888(W, H, pixel_buf_)
     {
         set_pen(0);
         clear();
