@@ -39,20 +39,7 @@ project(hub75_demo C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
-# ====================================================================================
-# Panel / driver configuration
-#
-
-set(PANEL_GENERIC 0)
-set(PANEL_FM6126A 1)
-set(PANEL_RUL6024 2)
-
-set(ROW_MAP_STANDARD 0) # Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
-set(ROW_MAP_SPLIT 1)    # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-set(ROW_MAP_S31 2)      # S31 mapping. Four-way interleaved quarter mapping mostly used for high brightness or outdoor panels, sometimes also advertised as '1/8 scan'.
-
-set(CHAIN_MODE_SERPENTINE 0)
-set(CHAIN_MODE_RASTER 1)
+add_subdirectory(utils)
 
 # Add library. This is the core HUB75 driver.
 add_library(hub75 STATIC)
@@ -135,6 +122,7 @@ target_include_directories(hub75_demo PRIVATE
 )
 
 pico_add_extra_outputs(hub75_demo)
+print_size_info(hub75_demo)
 
 
 # Add dual-panel demo executable - two independent Hub75Driver instances, see
@@ -177,4 +165,5 @@ target_include_directories(hub75_demo_dual PRIVATE
 pico_generate_pio_header(hub75_demo_dual ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
 
 pico_add_extra_outputs(hub75_demo_dual)
+print_size_info(hub75_demo_dual)
 
