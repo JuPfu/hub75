@@ -82,8 +82,8 @@ set(PANEL_FM6126A 1)
 set(PANEL_RUL6024 2)
 
 set(ROWMAP_STANDARD 0) # Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
-set(ROWMAP_SPLIT 1)       # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-set(ROWMAP_S31 2)           # S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
+set(ROWMAP_SPLIT 1)    # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+set(ROWMAP_S31 2)      # S31 mapping. Four-way interleaved quarter mapping mostly used for high brightness or outdoor panels, sometimes also advertised as '1/8 scan'.
 
 set(CHAIN_MODE_SERPENTINE 0)
 set(CHAIN_MODE_RASTER 1)

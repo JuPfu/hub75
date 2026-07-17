@@ -103,7 +103,7 @@ static_assert(CHAIN_COLS >= 1, "CHAIN_COLS must be >= 1");
 #define ROWMAP_STANDARD 0
 // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
 #define ROWMAP_SPLIT 1
-// S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
+// S31 mapping. Four-way interleaved quarter mapping mostly used for high brightness or outdoor panels, sometimes also advertised as '1/8 scan'.
 #define ROWMAP_S31 2
 
 #ifndef ROW_MAPPING

@@ -280,7 +280,10 @@ bitstream_loop:
         sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
         pio_sm_init(pio, sm, offset, &c);
 
+        // Inject a single out y, N instruction directly into the state machine, bypassing the normal program counter.
+        // Because out reads from the OSR, and autopull is enabled, the state machine stalls waiting for the OSR to be refilled from the TX FIFO.
         pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
+        // Push the actual value into the FIFO, which unstalls the machine, autopulls that value into the OSR, and the injected out shifts it into y.
         pio_sm_put(pio, sm, panel_width - 1);
 
         pio_sm_set_enabled(pio, sm, true);

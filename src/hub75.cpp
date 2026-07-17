@@ -716,7 +716,12 @@ static void configure_pio(bool inverted_stb)
             &pio_config.data_pio,
             &pio_config.sm_data,
             &pio_config.data_prog_offs,
-            DATA_BASE_PIN, DATA_N_PINS + 1, true)) // +1 for CLK
+            DATA_BASE_PIN,
+            // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
+            // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
+            // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
+            CLK_PIN - DATA_BASE_PIN + 1,
+            true))
     {
         panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
     }
@@ -728,7 +733,12 @@ static void configure_pio(bool inverted_stb)
                 &pio_config.row_pio,
                 &pio_config.sm_row,
                 &pio_config.row_prog_offs,
-                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true)) // +2 for STROBE+OEN
+                ROWSEL_BASE_PIN,
+                // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
+                // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
+                // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
+                ROWSEL_N_PINS + 2,
+                true))
         {
             panic("Failed to claim PIO SM for hub75_row_inverted_program\n");
         }
@@ -740,7 +750,12 @@ static void configure_pio(bool inverted_stb)
                 &pio_config.row_pio,
                 &pio_config.sm_row,
                 &pio_config.row_prog_offs,
-                ROWSEL_BASE_PIN, ROWSEL_N_PINS + 2, true)) // +2 for STROBE+OEN
+                ROWSEL_BASE_PIN,
+                // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
+                // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
+                // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
+                (OEN_PIN - ROWSEL_BASE_PIN + 1),
+                true))
         {
             panic("Failed to claim PIO SM for hub75_row_program\n");
         }
