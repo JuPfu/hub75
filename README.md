@@ -1,3 +1,15 @@
+> **⚠️ Breaking change:** The pixel-mapping panel defines have been renamed to
+> reflect the row mapping topology instead of specific panel models (see
+> [issue #21](https://github.com/JuPfu/hub75/issues/21)):
+>
+> | Old name | New name |
+> |---|---|
+> | `HUB75_MULTIPLEX_2_ROWS` (formerly `HUB75_DEFAULT` / `HUB75`) | `ROWMAP_STANDARD` |
+> | `HUB75_P10_3535_16X32_4S` | `ROWMAP_SPLIT` |
+> | `HUB75_P3_1415_16S_64X64_S31` | `ROWMAP_S31` |
+>
+> Update your `CMakeLists.txt` compile definitions accordingly.
+
 - [HUB75 DMA/PIO Driver for Raspberry Pi Pico / RP2350](#hub75-dmapio-driver-for-raspberry-pi-pico--rp2350)
 - [Quick Start](#quick-start)
   - [Prerequisites](#prerequisites)
@@ -18,9 +30,9 @@
   - [Pixel Mapping Defines — Choosing the Right One for Your Panel](#pixel-mapping-defines--choosing-the-right-one-for-your-panel)
     - [Why This Mapping Step Exists](#why-this-mapping-step-exists)
     - [The Three Defines at a Glance](#the-three-defines-at-a-glance)
-    - [`HUB75_MULTIPLEX_2_ROWS` — Standard Two-Row Multiplexing](#hub75_multiplex_2_rows--standard-two-row-multiplexing)
-    - [`HUB75_P10_3535_16X32_4S` — Outdoor P10 Panel, Four-Row Multiplexing](#hub75_p10_3535_16x32_4s--outdoor-p10-panel-four-row-multiplexing)
-    - [`HUB75_P3_1415_16S_64X64_S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing](#hub75_p3_1415_16s_64x64_s31--outdoor-p3-6464-panel-four-row-multiplexing)
+    - [`ROWMAP_STANDARD` — Standard Two-Row Multiplexing](#rowmap_standard--standard-two-row-multiplexing)
+    - [`ROWMAP_SPLIT` — Outdoor P10 Panel, Four-Row Multiplexing](#rowmap_split--outdoor-p10-panel-four-row-multiplexing)
+    - [`ROWMAP_S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing](#rowmap_s31--outdoor-p3-6464-panel-four-row-multiplexing)
     - [How to Select the Correct Define — Decision Guide](#how-to-select-the-correct-define--decision-guide)
     - [What Happens When You Set One of These Defines](#what-happens-when-you-set-one-of-these-defines)
     - [Important Notes](#important-notes)
@@ -81,10 +93,9 @@
   - [Display Rotation](#display-rotation)
     - [Configuration](#configuration)
     - [Physical Panel vs. Logical Source Buffer](#physical-panel-vs-logical-source-buffer)
-    - [Source Buffer Dimensions per Rotation Value](#source-buffer-dimensions-per-rotation-value)
+    - [Screen Dimensions per Rotation Value](#screen-dimensions-per-rotation-value)
     - [Setting Up the Source Buffer](#setting-up-the-source-buffer)
     - [Combining Rotation with Chained Panels](#combining-rotation-with-chained-panels)
-    - [Common Mistake — Why This Can Go Unnoticed](#common-mistake--why-this-can-go-unnoticed)
   - [Demo Effects](#demo-effects)
   - [Next Steps](#next-steps)
 - [Configuration via CMakeLists.txt](#configuration-via-cmakeliststxt-2)
@@ -107,9 +118,6 @@
   - [Step 6 — State Machine Clock Divider (`SM_CLOCKDIV`)](#step-6--state-machine-clock-divider-sm_clockdiv)
     - [Pixel Mapping](#pixel-mapping)
       - [How Pixel Mapping Works (General Idea)](#how-pixel-mapping-works-general-idea)
-      - [`HUB75_MULTIPLEX_2_ROWS` Mapping](#hub75_multiplex_2_rows-mapping)
-      - [`HUB75_P10_3535_16X32_4S` Mapping](#hub75_p10_3535_16x32_4s-mapping)
-      - [`HUB75_P3_1415_16S_64X64_S31` Mapping](#hub75_p3_1415_16s_64x64_s31-mapping)
     - [Practical Notes](#practical-notes-1)
 - [Troubleshooting](#troubleshooting)
   - [1. Panel Stays Completely Dark](#1-panel-stays-completely-dark)
@@ -139,11 +147,11 @@
     - [Hardware](#hardware-1)
     - [Pixel Mapping](#pixel-mapping-2)
     - [CMakeLists.txt](#cmakeliststxt-1)
-  - [3. QP3 Outdoor / P3-1415 (`HUB75_P3_1415_16S_64X64_S31`)](#3-qp3-outdoor--p3-1415-hub75_p3_1415_16s_64x64_s31)
+  - [3. QP3 Outdoor / P3-1415 (`ROWMAP_S31`)](#3-qp3-outdoor--p3-1415-rowmap_s31)
     - [Hardware](#hardware-2)
     - [Pixel Mapping](#pixel-mapping-3)
     - [CMakeLists.txt](#cmakeliststxt-2)
-  - [4. P10-SMD-16x32-b (`HUB75_P10_3535_16X32_4S`)](#4-p10-smd-16x32-b-hub75_p10_3535_16x32_4s)
+  - [4. P10-SMD-16x32-b (`ROWMAP_SPLIT`)](#4-p10-smd-16x32-b-rowmap_split)
     - [Hardware](#hardware-3)
     - [Pixel Mapping](#pixel-mapping-4)
     - [CMakeLists.txt](#cmakeliststxt-3)
@@ -254,6 +262,7 @@ target_compile_definitions(hub75 PRIVATE
     CLK_PIN=11                  # GPIO pin for CLK
     STROBE_PIN=12               # GPIO pin for STROBE (LATCH)
     OEN_PIN=13                  # GPIO for OE pin
+    ROW_MAPPING=ROWMAP_STANDARD # row/buffer mapping topology - default is ROWMAP_STANDARD other values are ROWMAP_SPLIT and ROWMAP_S31
     ...
 )
 ```
@@ -460,7 +469,7 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 The three defines below tell the `update()` / `update_bgr()` method how to reorder pixels from
 your application's linear source buffer into the shift-register order that your physical panel
 expects. **Exactly one of them must be active at a time.** If none is set, the driver defaults
-to `HUB75_MULTIPLEX_2_ROWS`.
+to `ROWMAP_STANDARD`.
 
 > ⚠️ Setting the wrong mapping define is one of the most common configuration mistakes.
 > The panel will light up, but the image will look scrambled, interleaved, or repeated
@@ -489,9 +498,9 @@ extra cost.
 
 | Define | Rows lit simultaneously | Typical scan notation | Typical panel dimensions | Address lines needed |
 |---|:---:|---|---|:---:|
-| `HUB75_MULTIPLEX_2_ROWS` | 2 | 1/8 S, 1/16 S, 1/32 S | 32×16 / 64×32 / 64×64 | 3 / 4 / 5 |
-| `HUB75_P10_3535_16X32_4S` | 4 | 1/4 S | 32×16 outdoor | 2 |
-| `HUB75_P3_1415_16S_64X64_S31` | 4 | 1/16 S | 64×64 outdoor | 4 |
+| `ROWMAP_STANDARD` | 2 | 1/8 S, 1/16 S, 1/32 S | 32×16 / 64×32 / 64×64 | 3 / 4 / 5 |
+| `ROWMAP_SPLIT` | 4 | 1/4 S | 32×16 outdoor | 2 |
+| `ROWMAP_S31` | 4 | 1/16 S | 64×64 outdoor | 4 |
 
 > 💡 The number of address lines (`ROWSEL_N_PINS`) must match the selected mapping.
 > See [Step 2 — Scan Rate and Rows Lit Simultaneously](#step-2--scan-rate-and-rows-lit-simultaneously)
@@ -499,7 +508,7 @@ extra cost.
 
 ---
 
-### `HUB75_MULTIPLEX_2_ROWS` — Standard Two-Row Multiplexing
+### `ROWMAP_STANDARD` — Standard Two-Row Multiplexing
 
 **Use this for the vast majority of HUB75 panels.** It is the correct choice whenever exactly
 **two rows** of the panel are driven at the same time — one from the upper half and one from
@@ -539,7 +548,7 @@ target_compile_definitions(hub75 PRIVATE
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
     ROWSEL_N_PINS=5
-    # HUB75_MULTIPLEX_2_ROWS is the default — no explicit define required
+    # ROWMAP_STANDARD is the default — no explicit define required
 )
 
 # 64×32 standard panel, 1/16 scan (2 rows lit, 4 address pins)
@@ -557,12 +566,12 @@ target_compile_definitions(hub75 PRIVATE
 )
 ```
 
-> 💡 `HUB75_MULTIPLEX_2_ROWS` is the **default**. You do not need to add it to
+> 💡 `ROWMAP_STANDARD` is the **default**. You do not need to add it to
 > `CMakeLists.txt` unless you are switching back from one of the other defines.
 
 ---
 
-### `HUB75_P10_3535_16X32_4S` — Outdoor P10 Panel, Four-Row Multiplexing
+### `ROWMAP_SPLIT` — Outdoor P10 Panel, Four-Row Multiplexing
 
 Use this for the **P10-SMD 16×32** outdoor panel (3535 LED pitch, 1/4 scan) and any
 electrically equivalent panel where **four rows** are driven simultaneously and only
@@ -603,7 +612,7 @@ draws from the first or the second half of the available column pairs, and the
 target_compile_definitions(hub75 PRIVATE
     MATRIX_PANEL_WIDTH=32
     MATRIX_PANEL_HEIGHT=16
-    HUB75_P10_3535_16X32_4S=1
+    ROW_MAPPING=ROWMAP_SPLIT
     ROWSEL_N_PINS=2
     SM_CLOCKDIV_FACTOR=1.0f       # increase if ghosting occurs
     PANEL_TYPE=PANEL_GENERIC
@@ -616,7 +625,7 @@ target_compile_definitions(hub75 PRIVATE
 
 ---
 
-### `HUB75_P3_1415_16S_64X64_S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing
+### `ROWMAP_S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing
 
 Use this for the **QP3 outdoor 64×64** panel (1415 / 1.4 mm LED pitch, 1/16 scan) and
 panels with the same internal wiring convention — sometimes labelled `-16S-` on a 64-tall
@@ -660,7 +669,7 @@ scan-row pairing of this panel family.
 target_compile_definitions(hub75 PRIVATE
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
-    HUB75_P3_1415_16S_64X64_S31=1
+    ROW_MAPPING=ROWMAP_S31
     ROWSEL_N_PINS=4
     SM_CLOCKDIV_FACTOR=2.75f      # recommended starting value for this panel family
     PANEL_TYPE=PANEL_GENERIC
@@ -669,7 +678,7 @@ target_compile_definitions(hub75 PRIVATE
 
 > ⚠️ A 64×64 panel with a `-16S-` label **could also be a standard two-row panel** at
 > 1/32 scan that the manufacturer labelled inconsistently. If this define produces a
-> scrambled image, try `HUB75_MULTIPLEX_2_ROWS` with `ROWSEL_N_PINS=5` instead.
+> scrambled image, try `ROWMAP_STANDARD` with `ROWSEL_N_PINS=5` instead.
 
 ---
 
@@ -678,19 +687,19 @@ target_compile_definitions(hub75 PRIVATE
 ```
 Does your panel label contain "-16S-" or "-32S-" on a 64-tall panel
 with 5 address pins (A–E)?
-    └─ Yes → HUB75_MULTIPLEX_2_ROWS  (standard 1/32 scan, 2 rows lit)
+    └─ Yes → ROWMAP_STANDARD  (standard 1/32 scan, 2 rows lit)
 
 Does your panel label contain "-16S-" on a 64-tall panel
 with 4 address pins (A–D)?
-    └─ Yes → HUB75_P3_1415_16S_64X64_S31  (4 rows lit)
-              If image is still scrambled, try HUB75_MULTIPLEX_2_ROWS
+    └─ Yes → ROWMAP_S31  (4 rows lit)
+              If image is still scrambled, try ROWMAP_STANDARD
 
 Does your panel label contain "-4S-" and the panel is 32 × 16
 with 2 address pins (A, B)?
-    └─ Yes → HUB75_P10_3535_16X32_4S
+    └─ Yes → ROWMAP_SPLIT
 
 For any other panel, or when uncertain:
-    └─ Start with HUB75_MULTIPLEX_2_ROWS — it covers the majority of panels.
+    └─ Start with ROWMAP_STANDARD — it covers the majority of panels.
        If the image is stable but scrambled or interleaved, try the others.
 ```
 
@@ -698,11 +707,11 @@ For any other panel, or when uncertain:
 
 | Address pins on connector | Panel height | Rows lit simultaneously | Define to try first |
 |:---:|:---:|:---:|---|
-| 5 (A–E) | 64 | 2 | `HUB75_MULTIPLEX_2_ROWS` |
-| 4 (A–D) | 64 | 2 | `HUB75_MULTIPLEX_2_ROWS` (e.g. 64×32) |
-| 4 (A–D) | 64 | 4 | `HUB75_P3_1415_16S_64X64_S31` |
-| 3 (A–C) | 16 | 2 | `HUB75_MULTIPLEX_2_ROWS` |
-| 2 (A, B) | 16 | 4 | `HUB75_P10_3535_16X32_4S` |
+| 5 (A–E) | 64 | 2 | `ROWMAP_STANDARD` |
+| 4 (A–D) | 64 | 2 | `ROWMAP_STANDARD` (e.g. 64×32) |
+| 4 (A–D) | 64 | 4 | `ROWMAP_S31` |
+| 3 (A–C) | 16 | 2 | `ROWMAP_STANDARD` |
+| 2 (A, B) | 16 | 4 | `ROWMAP_SPLIT` |
 
 ---
 
@@ -729,7 +738,7 @@ mapping.
 ### Important Notes
 
 - **Exactly one define must be active.** The preprocessor guard in `hub75.hpp` defaults to
-  `HUB75_MULTIPLEX_2_ROWS` if none is defined. Defining more than one will cause a
+  `ROWMAP_STANDARD` if none is defined. Defining more than one will cause a
   compile-time error.
 
 - **`ROWSEL_N_PINS` must match the mapping.** The number of address lines is not derived
@@ -746,7 +755,7 @@ mapping.
   solid-colour or stripe test pattern — change **one parameter at a time**.
 
 - **`SM_CLOCKDIV_FACTOR` may need adjustment for 4-row panels.** Panels using
-  `HUB75_P10_3535_16X32_4S` or `HUB75_P3_1415_16S_64X64_S31` sometimes exhibit ghosting
+  `ROWMAP_SPLIT` or `ROWMAP_S31` sometimes exhibit ghosting
   or flicker at full PIO speed. Start with `SM_CLOCKDIV_FACTOR=1.0f` and increase
   (e.g. `2.0f`, `2.75f`) if artefacts appear. See
   [Step 6 — State Machine Clock Divider](#step-6--state-machine-clock-divider-sm_clockdiv).
@@ -1511,8 +1520,8 @@ All three supported panel mapping modes work with chained configurations:
 | Panel type define | Chain support |
 |---|---|
 | `HUB75` (default) | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
-| `HUB75_P10_3535_16X32_4S` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
-| `HUB75_P3_1415_16S_64X64_S31` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
+| `ROWMAP_SPLIT` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
+| `ROWMAP_S31` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
 
 ---
 
@@ -1769,16 +1778,16 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 // Set your panel
 //
 // Example:
-// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define HUB75_MULTIPLEX_2_ROWS should be correct
+// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define ROWMAP_STANDARD should be correct
 //
-// #define HUB75_MULTIPLEX_2_ROWS      // default - two rows lit simultaneously
-// #define HUB75_P10_3535_16X32_4S     // four rows lit simultaneously (can be defined via CMake)
-// #define HUB75_P3_1415_16S_64X64_S31 // four rows lit simultaneously
+// #define ROWMAP_STANDARD      // default - two rows lit simultaneously
+// #define ROWMAP_SPLIT     // four rows lit simultaneously (can be defined via CMake)
+// #define ROWMAP_S31 // four rows lit simultaneously
 //
-// Default to HUB75_MULTIPLEX_2_ROWS if no multiplexing mode is defined
+// Default to ROWMAP_STANDARD if no multiplexing mode is defined
 // Only define default if none of the mapping modes are already defined
-#if !defined(HUB75_MULTIPLEX_2_ROWS) && !defined(HUB75_P10_3535_16X32_4S) && !defined(HUB75_P3_1415_16S_64X64_S31)
-#define HUB75_MULTIPLEX_2_ROWS // two rows lit simultaneously
+#if !defined(ROWMAP_STANDARD) && !defined(ROWMAP_SPLIT) && !defined(ROWMAP_S31)
+#define ROWMAP_STANDARD // two rows lit simultaneously
 #endif
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
@@ -1892,13 +1901,13 @@ The hub75 driver deduces the number of multiplexed rows from the following rule.
 
 So, the number of multiplexed lines in both examples is $2$, even though the scan parameters (-32S- and -16S-) differ. Internally, the driver uses the number of multiplexed rows to resolve this ambiguity.
 
-In both examples you should choose **HUB75_MULTIPLEX_2_ROWS** 
+In both examples you should choose **ROWMAP_STANDARD** 
 
 ```c
-#define HUB75_MULTIPLEX_2_ROWS
+#define ROWMAP_STANDARD
 ```
 
-For panels **HUB75_P10_3535_16X32_4S** the calculation looks like this (the number of rows can easily be counted on the panel 😊):
+For panels **ROWMAP_SPLIT** the calculation looks like this (the number of rows can easily be counted on the panel 😊):
 
 > multiplexed_rows = MATRIX_PANEL_HEIGHT / 2^ROWSEL_N_PINS
 
@@ -1906,13 +1915,13 @@ For panels **HUB75_P10_3535_16X32_4S** the calculation looks like this (the numb
 
 In summary, the number of address lines on this board is $2$ which corresponds to $4$ rows being multiplexed.
 
-> ⚠️ The multiplexing define (e.g. `HUB75_MULTIPLEX_2_ROWS`) does **two things**:
+> ⚠️ The multiplexing define (e.g. `ROWMAP_STANDARD`) does **two things**:
 > 
 > 1. it defines how many rows are multiplexed **and** 
 > 
 > 2. selects the corresponding pixel mapping
 > 
-> The same applies to `HUB75_P10_3535_16X32_4S` and `HUB75_P3_1415_16S_64X64_S31`.
+> The same applies to `ROWMAP_SPLIT` and `ROWMAP_S31`.
 
 ---
 
@@ -1921,17 +1930,10 @@ In summary, the number of address lines on this board is $2$ which corresponds t
 Different panels wire pixels differently internally.
 This driver provides **predefined mapping modes** for known layouts.
 
-Select **exactly one**:
-
-```cpp
-#define HUB75_MULTIPLEX_2_ROWS
-// #define HUB75_P10_3535_16X32_4S
-// #define HUB75_P3_1415_16S_64X64_S31
-```
 
 If unsure:
 
-* start with `HUB75_MULTIPLEX_2_ROWS`
+* start with `ROWMAP_STANDARD`
 * if the image looks scrambled, try another mapping
 
 ---
@@ -1945,7 +1947,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
-#define HUB75_MULTIPLEX_2_ROWS
+#define ROWMAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
 // That is 32 = 2 to the power of 5 - we need 5 row select pins  
 #define ROWSEL_N_PINS 5
@@ -1955,7 +1957,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 32
 
-#define HUB75_MULTIPLEX_2_ROWS
+#define ROWMAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
@@ -1964,7 +1966,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 // Example for a 32×16 panel (1/8 scan) - 2 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 32
 #define MATRIX_PANEL_HEIGHT 16
-#define HUB75_MULTIPLEX_2_ROWS
+#define ROWMAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 8 rows to be adressed via row select.
 // That is 8 equals 2 to the power of 3 - we need 3 row select pins  
 #define ROWSEL_N_PINS 3
@@ -1974,7 +1976,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
-#define HUB75_P3_1415_16S_64X64_S31
+#define ROWMAP_S31
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
@@ -1986,7 +1988,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 32
 #define MATRIX_PANEL_HEIGHT 16
 
-#define HUB75_P10_3535_16X32_4S
+#define ROWMAP_SPLIT
 // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
 // That is 4 equals 2 to the power of 2 -> we need 2 row select pins  
 #define ROWSEL_N_PINS 2
@@ -2006,7 +2008,7 @@ Here an example for a **P3-64*64-32S-V2.0** panel.
 
 // The 32S in the panel name refers to (1/32 scan) - 2 rows lit simultaneously 
 // We can try the standard pixel mapping - maybe we are lucky and the pixel mapping fits
-#define HUB75_MULTIPLEX_2_ROWS
+#define ROWMAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
 // That is 32 equals 2 to the power of 5 -> we need 5 row select pins (as might be printed on the panel backside - A, B, C, D, E)
 #define ROWSEL_N_PINS 5
@@ -2100,143 +2102,7 @@ Key properties:
   - how many rows are multiplexed
   - how the panel internally wires its row drivers
 
-Each mapping below describes how pixels from the linear source buffer (`src`)
-are reordered into the panel's shift buffer (`frame_buffer`).
-
-
-#### `HUB75_MULTIPLEX_2_ROWS` Mapping
-
-Generic hub75 led matrix panels with 2 rows lit simultaneously.
-
-The **HUB75_MULTIPLEX_2_ROWS** defines the most common pixel mapping.
-
-Pixels from the source-data (**src**) are copied in alternating sequence (first **src[j]** then **src[j + offset]**) into the shift register of the matrix panel because each clock cycle shifts two pixels belonging to two different physical rows
-(upper half and lower half of the panel). Prior to this **offset** had been set to <em>MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT / 2</em>. Additionally colour perception is improved by mapping colours via a look-up table (**lut**). This mapping effectively expands the usable range to **10 bits per channel**. For details see [CIE 1931 lightness curve](https://jared.geek.nz/2013/02/linear-led-pwm/).
-
-```c
-   constexpr size_t pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-   constexpr size_t offset = pixels / 2;
-   for (size_t fb_index = 0, j = 0; fb_index < pixels; fb_index += 2, ++j) {
-      frame_buffer[fb_index] = LUT_MAPPING(j, src[j]);
-      frame_buffer[fb_index + 1] = LUT_MAPPING(j + offset, src[j + offset]);
-   }
-```
-
-#### `HUB75_P10_3535_16X32_4S` Mapping
-
-Outdoor LED matrix panel with 16 rows and 32 pixels per row. 4 rows are lit simultaneously, requiring only 2 address lines (A, B) to select a quarter of rows (0–3).
-
-The mapping works by iterating over column pairs. For each pair the selector bit `PAIR_HALF_BIT` determines which vertical quarter the source pixels come from: when clear, pixels from the upper and lower first-half quarters are used; when set, pixels from the upper and lower second-half quarters. The `GROUP_ROW_OFFSET` advances the source pointer at the end of each scan-group row.
-
-```c
-   int line = 0;
-   int counter = 0;
-
-   constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
-   constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
-
-   constexpr int PAIR_HALF_BIT = HALF_PAIRS;
-   constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
-
-   constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
-   constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
-   constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-   constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
-
-   constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
-
-   // Example: HUB75 panel, 32×16 pixels, 1/4 scan (2 address lines)
-   //
-   // Geometry:
-   //   COLUMN_PAIRS  = 32 / 2 = 16
-   //   HALF_PAIRS    = 16 / 2 = 8
-   //   PAIR_HALF_BIT = 8
-   //   PAIR_HALF_SHIFT = ctz(8) = 3
-   //
-   // Vertical scan:
-   //   SCAN_GROUPS     = 1 << ROWSEL_N_PINS = 4
-   //   ROWS_PER_GROUP  = 16 / 4 = 4
-   //   GROUP_ROW_OFFSET = 4 × 32 = 128
-   //   HALF_PANEL_OFFSET = (16 / 2) × 32 = 256
-   //
-   // Resulting source index:
-   //   index = (j & 8) == 0
-   //         ? j - (line << 3)
-   //         : 128 + j - ((line + 1) << 3)
-   //
-   // j advances in column pairs.
-   // One scan group consists of COLUMN_PAIRS iterations.
-   // Bit PAIR_HALF_BIT selects the first or second half of the column pairs within the current scan group.
-   //
-   // (j & PAIR_HALF_BIT) == 0 → first half of column pairs
-   //                          → quarters 1 (upper) + 3 (lower)
-   // (j & PAIR_HALF_BIT) != 0 → second half of column pairs
-   //                          → quarters 2 (upper) + 4 (lower)
-   // Note: The selector bit in j depends only on panel width (column pairing), not on HUB75 scan rate.
-
-   for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2) {
-      int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT)
-                                             : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
-
-      frame_buffer[fb_index] = LUT_MAPPING(index, src[index]);
-      frame_buffer[fb_index + 1] = LUT_MAPPING(index + HALF_PANEL_OFFSET, src[index + HALF_PANEL_OFFSET]);
-
-      if (++counter >= COLUMN_PAIRS)
-      {
-            counter = 0;
-            ++line;
-      }
-   }
-```
-
-#### `HUB75_P3_1415_16S_64X64_S31` Mapping
-
-Outdoor led matrix panel with 64 rows and each row has 64 pixels. 16S means 64 / 16 = 4 rows lit simultaneously. Four address lines (A, B, C, D) are available on the led matrix panel board, which confirms this calculation.
-
-Driving ICs are MBI5253 / ICND2055 / ICDN2065 / ICND2153S / CFD325 / MBI5264 / CFD555 / ICND2165.
-
-The shift-buffer is filled in alternating sequence with pixels from a line from second and fourth quarter of the panel 
-followed by an alternating sequence of the corresponding line from the first and third quarter.
-
-```c
-   constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-   constexpr uint line_offset = 2 * MATRIX_PANEL_WIDTH;
-
-   constexpr uint quarter = total_pixels >> 2;
-
-   uint quarter1 = 0 * quarter;
-   uint quarter2 = 1 * quarter;
-   uint quarter3 = 2 * quarter;
-   uint quarter4 = 3 * quarter;
-
-   uint p = 0; // per line pixel counter
-
-   // Number of logical rows processed
-   uint line = 0;
-
-   // Framebuffer write pointer
-   volatile uint32_t *dst = frame_buffer;
-
-   // Each iteration processes 4 physical rows (2 scan-row pairs)
-   while (line < (height >> 2)) {
-      // even src lines
-      dst[0] = LUT_MAPPING(quarter2, src[quarter2]); quarter2++;
-      dst[1] = LUT_MAPPING(quarter4, src[quarter4]); quarter4++;
-      // odd src lines
-      dst[line_offset + 0] = LUT_MAPPING(quarter1, src[quarter1]); quarter1++;
-      dst[line_offset + 1] = LUT_MAPPING(quarter3, src[quarter3]); quarter3++;
-
-      dst += 2; // move to next output pixels
-      p++;
-
-      // End of logical row
-      if (p == width) {
-            p = 0;
-            line++;
-            dst += line_offset; // advance to next scan-row pair
-      }
-   }
-```
+Each mapping describes how pixels from the linear source buffer (`src`) are reordered into the panel's shift buffer (`frame_buffer`).
 
 ### Practical Notes
 
@@ -2285,9 +2151,9 @@ This usually indicates a **pixel mapping mismatch**.
 * Try a different mapping define:
 
   ```cpp
-  #define HUB75_MULTIPLEX_2_ROWS
-  // #define HUB75_P10_3535_16X32_4S
-  // #define HUB75_P3_1415_16S_64X64_S31
+  #define ROWMAP_STANDARD
+  // #define ROWMAP_SPLIT
+  // #define ROWMAP_S31
   ```
 
 ### Typical symptoms
@@ -2396,8 +2262,7 @@ Follow this **minimal recovery procedure**:
 1. Use the simplest known-good configuration:
 
    ```cpp
-   #define HUB75_MULTIPLEX_2_ROWS
-   #define PANEL_TYPE PANEL_GENERIC
+  ROW_MAPPING=ROWMAP_STANDARD # row/buffer mapping topology - default is ROWMAP_STANDARD
    ```
 
 2. Verify:
@@ -2425,10 +2290,10 @@ This section lists every LED matrix panel used during development and testing of
 
 | # | Panel label | Dimensions | Scan / rows lit | Pixel mapping define | Driver chip(s) | `PANEL_TYPE` |
 |:---:|---|:---:|:---:|---|---|---|
-| [1](#1-p3qd-64x64-21--p3-64x64-2012-21a-10) | P3QD-64x64-21 | 64 × 64 | 1/32 S · 2 rows | `HUB75_MULTIPLEX_2_ROWS` | RUC7258D, FM6124DJ | `PANEL_GENERIC` |
-| [2](#2-p3-64x64-32s-v20--2310p3) | P3-64x64-32S-V2.0 | 64 × 64 | 1/32 S · 2 rows | `HUB75_MULTIPLEX_2_ROWS` | RUC7258D, RUL6024 | `PANEL_RUL6024` |
-| [3](#3-qp3-outdoor--p3-1415-hub75_p3_1415_16s_64x64_s31) | QP3 Outdoor P3-1415 | 64 × 64 | 1/16 S · 4 rows | `HUB75_P3_1415_16S_64X64_S31` | DP5125D | `PANEL_GENERIC` |
-| [4](#4-p10-smd-16x32-b--hub75_p10_3535_16x32_4s) | P10-SMD-16x32-b | 16 × 32 | 1/4 S · 4 rows | `HUB75_P10_3535_16X32_4S` | DP5020B | `PANEL_GENERIC` |
+| [1](#1-p3qd-64x64-21--p3-64x64-2012-21a-10) | P3QD-64x64-21 | 64 × 64 | 1/32 S · 2 rows | `ROWMAP_STANDARD` | RUC7258D, FM6124DJ | `PANEL_GENERIC` |
+| [2](#2-p3-64x64-32s-v20--2310p3) | P3-64x64-32S-V2.0 | 64 × 64 | 1/32 S · 2 rows | `ROWMAP_STANDARD` | RUC7258D, RUL6024 | `PANEL_RUL6024` |
+| [3](#3-qp3-outdoor--p3-1415-rowmap_s31) | QP3 Outdoor P3-1415 | 64 × 64 | 1/16 S · 4 rows | `ROWMAP_S31` | DP5125D | `PANEL_GENERIC` |
+| [4](#4-p10-smd-16x32-b--rowmap_split) | P10-SMD-16x32-b | 16 × 32 | 1/4 S · 4 rows | `ROWMAP_SPLIT` | DP5020B | `PANEL_GENERIC` |
 
 ---
 
@@ -2449,7 +2314,7 @@ This section lists every LED matrix panel used during development and testing of
 ### Pixel Mapping
 
 Standard two-row multiplexing. Upper and lower halves are interleaved column by column.
-Use `HUB75_MULTIPLEX_2_ROWS` (this is also the default when no mapping define is set).
+Use `ROWMAP_STANDARD` (this is also the default when no mapping define is set).
 
 ### CMakeLists.txt
 
@@ -2477,7 +2342,7 @@ target_compile_definitions(hub75 PRIVATE
 )
 ```
 
-> 💡 `HUB75_MULTIPLEX_2_ROWS` is the driver default and does not need to be listed
+> 💡 `ROWMAP_STANDARD` is the driver default and does not need to be listed
 > explicitly unless you are switching from a different mapping.
 
 ---
@@ -2535,7 +2400,7 @@ target_compile_definitions(hub75 PRIVATE
 
 ---
 
-## 3. QP3 Outdoor / P3-1415 (`HUB75_P3_1415_16S_64X64_S31`)
+## 3. QP3 Outdoor / P3-1415 (`ROWMAP_S31`)
 
 ### Hardware
 
@@ -2557,7 +2422,7 @@ simultaneously. The shift buffer is filled in a two-pass pattern per scan line:
 second and fourth quarter pixels first (even output slots), then first and third quarter
 pixels (odd output slots, offset by `2 × MATRIX_PANEL_WIDTH`).
 
-Set `HUB75_P3_1415_16S_64X64_S31`. Do **not** use `HUB75_MULTIPLEX_2_ROWS` for this
+Set `ROWMAP_S31`. Do **not** use `ROWMAP_STANDARD` for this
 panel — despite what the `-16S-` label might suggest for a 64-row panel, this is a
 4-row simultaneous design, not 2-row.
 
@@ -2584,7 +2449,7 @@ target_compile_definitions(hub75 PRIVATE
     USE_PICO_GRAPHICS=true          # false = use hub75 as a pure library
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
-    HUB75_P3_1415_16S_64X64_S31=1  # ← non-standard 4-row pixel mapping
+    ROW_MAPPING=ROWMAP_S31          # non-standard 4-row pixel mapping
     DATA_BASE_PIN=30                # RP2350B GPIO block starts at 30
     DATA_N_PINS=6
     ROWSEL_BASE_PIN=36              # RP2350B address pins start at 36
@@ -2613,7 +2478,7 @@ target_compile_definitions(hub75 PRIVATE
 
 ---
 
-## 4. P10-SMD-16x32-b (`HUB75_P10_3535_16X32_4S`)
+## 4. P10-SMD-16x32-b (`ROWMAP_SPLIT`)
 
 ### Hardware
 
@@ -2635,7 +2500,7 @@ column-pair groups; a selector bit derived from the panel width determines wheth
 pair slot draws from the first or second half of the column pairs within the current
 scan group.
 
-Set `HUB75_P10_3535_16X32_4S`. Note that although both this panel and board 3 light
+Set `ROWMAP_SPLIT`. Note that although both this panel and board 3 light
 4 rows simultaneously, their internal wiring conventions differ — these two defines are
 **not** interchangeable.
 
@@ -2645,7 +2510,7 @@ Set `HUB75_P10_3535_16X32_4S`. Note that although both this panel and board 3 li
 target_compile_definitions(hub75 PRIVATE
     MATRIX_PANEL_WIDTH=32
     MATRIX_PANEL_HEIGHT=16
-    HUB75_P10_3535_16X32_4S=1      # ← 4-row outdoor panel pixel mapping
+    ROW_MAPPING=ROWMAP_SPLIT       # 4-row outdoor panel pixel mapping
     DATA_BASE_PIN=0
     DATA_N_PINS=6
     ROWSEL_BASE_PIN=6
@@ -2696,7 +2561,7 @@ and add a row to the [overview table](#overview) at the top of this section.
 
 <Brief description of why this mapping applies and any gotchas.>
 
-Use `<HUB75_MULTIPLEX_2_ROWS | HUB75_P10_3535_16X32_4S | HUB75_P3_1415_16S_64X64_S31>`.
+Use `<ROWMAP_STANDARD | ROWMAP_SPLIT | ROWMAP_S31>`.
 
 ### CMakeLists.txt
 
@@ -2704,7 +2569,7 @@ Use `<HUB75_MULTIPLEX_2_ROWS | HUB75_P10_3535_16X32_4S | HUB75_P3_1415_16S_64X64
 target_compile_definitions(hub75 PRIVATE
     MATRIX_PANEL_WIDTH=<W>
     MATRIX_PANEL_HEIGHT=<H>
-    <MAPPING_DEFINE>=1              # pixel mapping — see Step 3
+    ROW_MAPPING=<row_mapping>      # pixel mapping topology — see Step 3
     DATA_BASE_PIN=<pin>
     DATA_N_PINS=6
     ROWSEL_BASE_PIN=<pin>
