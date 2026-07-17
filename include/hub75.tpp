@@ -390,33 +390,122 @@ void Hub75Driver<Cfg>::setup_bitplane_stream_irq()
     dma_channel_set_irq1_enabled(read_chan_, true);
 }
 
+// hub75_row(_inverted) and hub75_bitplane_stream synchronise with each other via PIO-block-
+// local IRQ flags 0/1 (see src/hub75.pio: "wait 1 irq 0/1" / "irq nowait 0/1"). Those flags
+// are local to one physical PIO block, so the two programs MUST share a block or the handshake
+// silently breaks. The generic pio_claim_free_sm_and_add_program*() helpers have no
+// "put it on this specific block" option, only "search all blocks in some order".
+// This function claims every free SM on every OTHER block first, so the wrapped claim has
+// no choice but to land on `target` (or fail cleanly), then releases the reservation again.
+template <typename ClaimFn>
+inline bool hub75_claim_on_pio(PIO target, ClaimFn &&claim_fn)
+{
+    bool reserved[NUM_PIOS][NUM_PIO_STATE_MACHINES] = {};
+    for (uint i = 0; i < (uint)NUM_PIOS; ++i)
+    {
+        PIO pio = pio_get_instance(i);
+        if (pio == target)
+            continue;
+        for (uint sm = 0; sm < NUM_PIO_STATE_MACHINES; ++sm)
+        {
+            if (!pio_sm_is_claimed(pio, sm))
+            {
+                pio_sm_claim(pio, sm);
+                reserved[i][sm] = true;
+            }
+        }
+    }
+
+    bool ok = claim_fn();
+
+    for (uint i = 0; i < (uint)NUM_PIOS; ++i)
+    {
+        PIO pio = pio_get_instance(i);
+        for (uint sm = 0; sm < NUM_PIO_STATE_MACHINES; ++sm)
+        {
+            if (reserved[i][sm])
+                pio_sm_unclaim(pio, sm);
+        }
+    }
+    return ok;
+}
+
 // Configures the PIO state machines responsible for shifting pixel data and controlling
 // row addressing, and claims hardware resources for them.
+//
+// hub75_bitplane_stream + hub75_row(_inverted) must share one 32-word PIO block
+// (see hub75_claim_on_pio() above), and no two Hub75Driver instances can share a block
+// for their pairs (IRQ-flag collision, see claim_pio_block_for_row_stream()).
+// Each instance tries its own preferred block first (spreads instances apart when nothing
+// else is competing for PIO), then falls back through the remaining blocks in turn instead of
+// panicking. Block occupancy isn't only ours to plan: another PIO consumer (e.g. cyw43's wifi
+// SPI state machine on a pico2_w, may already be sitting on the preferred block, or a prior
+// instance's bitplane_setup program may have sneaked into it. If the row claim fails after
+// the stream claim already succeeded on a candidate, the stream claim is rolled back before
+// moving to the next candidate, so no candidate is left half-claimed.
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::configure_pio()
 {
-    // On RP2350B, GPIO 30-47 are only accessible via PIO2
-    // Force both state machines onto PIO2
-    if (!pio_claim_free_sm_and_add_program_for_gpio_range(
-            &hub75_bitplane_stream_program,
-            &pio_config_.data_pio,
-            &pio_config_.sm_data,
-            &pio_config_.data_prog_offs,
-            Cfg.pins.data_base_pin, Cfg.pins.data_n_pins + 1, true)) // +1 for CLK
+    const size_t my_index = instance_count();
+    const uint preferred = (uint)(NUM_PIOS - 1 - (my_index % (size_t)NUM_PIOS));
+
+    uint candidates[NUM_PIOS];
+    candidates[0] = preferred;
+    for (uint i = NUM_PIOS, n = 1; i-- > 0;)
+        if (i != preferred)
+            candidates[n++] = i;
+
+    bool placed = false;
+    for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
     {
-        panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
+        const uint pio_index = candidates[c];
+        if (!claim_pio_block_for_row_stream(pio_index))
+            continue; // another instance already dedicated this block to its own row+stream pair
+
+        PIO candidate = pio_get_instance(pio_index);
+
+        // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
+        // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
+        // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
+        bool stream_ok = hub75_claim_on_pio(candidate, [&]
+                                            { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                  &hub75_bitplane_stream_program,
+                                                  &pio_config_.data_pio,
+                                                  &pio_config_.sm_data,
+                                                  &pio_config_.data_prog_offs,
+                                                  Cfg.pins.data_base_pin,
+                                                  Cfg.pins.clk_pin - Cfg.pins.data_base_pin + 1, true); });
+
+        if (stream_ok)
+        {
+            // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
+            // level (see hub75_row_program_init), so there is only one row program.
+            bool row_ok = hub75_claim_on_pio(candidate, [&]
+                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                   &hub75_row_program,
+                                                   &pio_config_.row_pio,
+                                                   &pio_config_.sm_row,
+                                                   &pio_config_.row_prog_offs,
+                                                   Cfg.pins.rowsel_base_pin,
+                                                   Cfg.pins.oen_pin - Cfg.pins.rowsel_base_pin + 1, true); });
+
+            if (row_ok)
+            {
+                placed = true;
+                break;
+            }
+
+            pio_remove_program_and_unclaim_sm(&hub75_bitplane_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
+        }
+
+        release_pio_block_for_row_stream(pio_index);
     }
 
-    // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
-    // level (see hub75_row_program_init), so there is only one row program.
-    if (!pio_claim_free_sm_and_add_program_for_gpio_range(
-            &hub75_row_program,
-            &pio_config_.row_pio,
-            &pio_config_.sm_row,
-            &pio_config_.row_prog_offs,
-            Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins + 2, true)) // +2 for STROBE+OEN
+    if (!placed)
     {
-        panic("Failed to claim PIO SM for hub75_row_program\n");
+        panic("Failed to find a PIO block with room for hub75_bitplane_stream_program + "
+              "hub75_row_program (checked all %d blocks)\n",
+              (int)NUM_PIOS);
     }
 
     hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
@@ -426,7 +515,9 @@ void Hub75Driver<Cfg>::configure_pio()
     // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
     hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
 
-    // State machine for "parallelized" building of the bit-plane structure
+    // State machine for "parallelized" building of the bit-plane structure. No IRQ/GPIO use
+    // (see src/hub75.pio), so unlike stream/row it isn't restricted to any particular block or
+    // exclusive to one instance - the plain claim call already searches every block itself.
     if (!pio_claim_free_sm_and_add_program(
             &hub75_bitplane_setup_program,
             &pio_config_.pio_read,
@@ -435,7 +526,6 @@ void Hub75Driver<Cfg>::configure_pio()
     {
         panic("Failed to claim PIO SM for hub75_bitplane_setup_program\n");
     }
-
     hub75_bitplane_setup_program_init(pio_config_.pio_read, pio_config_.sm_read, pio_config_.offs_read);
 }
 

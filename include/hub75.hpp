@@ -205,6 +205,34 @@ protected:
     void register_instance();
     void unregister_instance();
 
+    // Number of instances registered so far so a fresh instance can read how many came before it.
+    // Its own future index is used to pick a preferred PIO block per instance.
+    static size_t instance_count()
+    {
+        critical_section_enter_blocking(&s_instance_lock);
+        size_t n = s_instance_count;
+        critical_section_exit(&s_instance_lock);
+        return n;
+    }
+
+    // hub75_row(_inverted) and hub75_bitplane_stream must share one physical PIO block.
+    // This tracks which blocks are already committed to some instance's row+stream pair,
+    // so a second instance's pair can never land on the same block as the first.
+    // This prevents IRQs flag mixups.
+    static bool claim_pio_block_for_row_stream(uint pio_index)
+    {
+        uint32_t bit = 1u << pio_index;
+        if (s_row_stream_pio_mask & bit)
+            return false;
+        s_row_stream_pio_mask |= bit;
+        return true;
+    }
+
+    static void release_pio_block_for_row_stream(uint pio_index)
+    {
+        s_row_stream_pio_mask &= ~(1u << pio_index);
+    }
+
     virtual void handle_ctrl_irq() = 0;
     virtual void handle_bitplane_irq() = 0;
 
@@ -212,6 +240,7 @@ private:
     static void global_ctrl_irq_handler();
     static void global_bitplane_irq_handler();
 
+    static inline uint32_t s_row_stream_pio_mask = 0;
     static inline Hub75DriverBase *s_instances[MAX_INSTANCES] = {};
     static inline size_t s_instance_count = 0;
     static inline bool s_irq_installed = false;
