@@ -1,8 +1,9 @@
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
 #include <memory>
+#include <algorithm>
+#include <list>
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
@@ -709,6 +710,19 @@ void start_hub75_driver(void)
  */
 static void configure_pio(bool inverted_stb)
 {
+    int gpio_pins[] = {
+        DATA_BASE_PIN, DATA_BASE_PIN + 5,                     // 6 RGB pins
+        ROWSEL_BASE_PIN, ROWSEL_BASE_PIN + ROWSEL_N_PINS - 1, // row-select pins
+        CLK_PIN,
+        STROBE_PIN,
+        OEN_PIN};
+    int n = sizeof(gpio_pins) / sizeof(gpio_pins[0]);
+
+    // Find the smallest element in the array
+    int min_gpio = *std::min_element(gpio_pins, gpio_pins + n);
+    // Find the largest element in the array
+    int max_gpio = *std::max_element(gpio_pins, gpio_pins + n);
+
     // On RP2350B, GPIO 30-47 are only accessible via PIO2
     // Force both state machines onto PIO2
     if (!pio_claim_free_sm_and_add_program_for_gpio_range(
@@ -716,11 +730,10 @@ static void configure_pio(bool inverted_stb)
             &pio_config.data_pio,
             &pio_config.sm_data,
             &pio_config.data_prog_offs,
-            DATA_BASE_PIN,
+            min_gpio,
             // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
             // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
-            // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
-            OEN_PIN - DATA_BASE_PIN + 1,
+            max_gpio - min_gpio + 1,
             true))
     {
         panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
@@ -728,37 +741,15 @@ static void configure_pio(bool inverted_stb)
 
     if (inverted_stb)
     {
-        if (!pio_claim_free_sm_and_add_program_for_gpio_range(
-                &hub75_row_inverted_program,
-                &pio_config.row_pio,
-                &pio_config.sm_row,
-                &pio_config.row_prog_offs,
-                ROWSEL_BASE_PIN,
-                // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
-                // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
-                // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
-                ROWSEL_N_PINS + 2,
-                true))
-        {
-            panic("Failed to claim PIO SM for hub75_row_inverted_program\n");
-        }
+        pio_config.row_pio = pio_config.data_pio;
+        pio_config.sm_row = pio_claim_unused_sm(pio_config.data_pio, true);
+        pio_config.row_prog_offs = pio_add_program(pio_config.data_pio, &hub75_row_inverted_program);
     }
     else
     {
-        if (!pio_claim_free_sm_and_add_program_for_gpio_range(
-                &hub75_row_program,
-                &pio_config.row_pio,
-                &pio_config.sm_row,
-                &pio_config.row_prog_offs,
-                ROWSEL_BASE_PIN,
-                // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
-                // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
-                // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
-                (OEN_PIN - ROWSEL_BASE_PIN + 1),
-                true))
-        {
-            panic("Failed to claim PIO SM for hub75_row_program\n");
-        }
+        pio_config.row_pio = pio_config.data_pio;
+        pio_config.sm_row = pio_claim_unused_sm(pio_config.data_pio, true);
+        pio_config.row_prog_offs = pio_add_program(pio_config.data_pio, &hub75_row_program);
     }
 
     hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, PanelConfig::BITPLANE_STREAM_LENGTH);
