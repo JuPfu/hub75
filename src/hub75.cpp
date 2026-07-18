@@ -720,7 +720,7 @@ static void configure_pio(bool inverted_stb)
             // This parameter needs to know the lowest and highest GPIO number actually used by the state machine
             // across all its pin groups: out, set, in, and side-set, so it can pick/configure a PIO instance whose window covers both ends.
             // ToDo: Put restraints on the mapping of GPIO pins so this requirement is always fullfilled!
-            CLK_PIN - DATA_BASE_PIN + 1,
+            OEN_PIN - DATA_BASE_PIN + 1,
             true))
     {
         panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
