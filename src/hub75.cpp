@@ -3,7 +3,7 @@
 #include <vector>
 #include <memory>
 #include <algorithm>
-#include <list>
+#include <cmath>
 
 #include "hardware/dma.h"
 #include "hardware/pio.h"
@@ -825,7 +825,7 @@ static void setup_dma_transfers()
 
     // When row_chan has finished a complete frame (each row in each bitplane) has been emitted.
     // The row_ctrl_chan resets the start address of row_chan to dma_row_cmd_buffer.
-    dma_channel_configure(row_ctrl_chan, &row_ctrl_chan_config, &dma_hw->ch[row_chan].read_addr, dma_row_cmd_buffer, dma_encode_transfer_count(1), false);
+    dma_channel_configure(row_ctrl_chan, &row_ctrl_chan_config, &dma_hw->ch[row_chan].read_addr, &dma_row_cmd_buffer, dma_encode_transfer_count(1), false);
 
     // pixel channel
     pixel_chan = dma_claim_unused_channel(true);
@@ -867,7 +867,7 @@ static void setup_dma_transfers()
 
     // When pixel_chan has finished a complete frame (each row in each bitplane) has been emitted.
     // The pixel_ctrl_chan resets the start address of pixel_chan to dma_buffer.
-    dma_channel_configure(pixel_ctrl_chan, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan].read_addr, dma_buffer, dma_encode_transfer_count(1), false);
+    dma_channel_configure(pixel_ctrl_chan, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan].read_addr, &dma_buffer, dma_encode_transfer_count(1), false);
 
     pio_sm_set_clkdiv(pio_config.data_pio, pio_config.sm_data, SM_CLOCKDIV);
     pio_sm_set_clkdiv(pio_config.row_pio, pio_config.sm_row, SM_CLOCKDIV);
@@ -1508,7 +1508,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
-#elif ROW_MAPPING == ROW_MAP_SPIT
+#elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // Single panel, with display rotation support (BGR byte layout).
