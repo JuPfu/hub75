@@ -1611,79 +1611,35 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
         }
     }
 #endif
-    elif ROW_MAPPING == ROW_MAP_S31
+#elif ROW_MAPPING == ROW_MAP_S31
     // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-        // Single panel, with display rotation support (BGR byte layout).
-        //
-        // quarter1..quarter4 are flat pixel-index counters (no *3). rot_lut_rgb() applies
-        // rotated_src_index() and the byte conversion internally.
-        constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
+    //
+    // P3 chained — with display rotation support (BGR byte layout).
+    //
+    // U-Type Serpentine Chaining
+    // Example:
+    //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
+    //
+    //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
+    //
+    //    This results in a long matrix panel with 192 columns and 32 rows.
+    //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
+    //
+    //                       0 -> 1 U-turn to panel 2
+    //                            |
+    //                            v
+    //    U-turn to panel 4  3 <- 2
+    //                       |
+    //                       v
+    //                       4 -> 5
+    //
+    //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
+    //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
+    //    panel 5 below panel 2.
+    //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
+    //
 
-    constexpr uint total_pixels = MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT;
-    constexpr uint line_width = PanelConfig::LINE_OFFSET;
-
-    constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
-
-    uint quarter1 = 0 * quarter; // rows in quarter1  0–15
-    uint quarter2 = 1 * quarter; // rows in quarter2  16–31
-    uint quarter3 = 2 * quarter; // rows in quarter3  32–47
-    uint quarter4 = 3 * quarter; // rows in quarter4  48–63
-
-    uint p = 0; // per line pixel counter
-    uint line = 0;
-    uint32_t *dst = rgb_buffer;
-
-    while (line < (PanelConfig::HEIGHT >> 2))
-    {
-        dst[0] = rot_lut_rgb(src, quarter2 % W, quarter2 / W, 0, W, H);
-        ++quarter2;
-        dst[1] = rot_lut_rgb(src, quarter4 % W, quarter4 / W, 0, W, H);
-        ++quarter4;
-        dst[line_width + 0] = rot_lut_rgb(src, quarter1 % W, quarter1 / W, 0, W, H);
-        ++quarter1;
-        dst[line_width + 1] = rot_lut_rgb(src, quarter3 % W, quarter3 / W, 0, W, H);
-        ++quarter3;
-
-        dst += 2;
-        p++;
-
-        // End of logical row
-        if (p == PanelConfig::WIDTH)
-        {
-            p = 0;
-            line++;
-            dst += line_width; // advance to next scan-row pair
-        }
-    }
-#else
-        // P3 chained — with display rotation support (BGR byte layout).
-        //
-        // U-Type Serpentine Chaining
-        // Example:
-        //    Six matrix panels of width 32 columns and height 32 rows are chained as depicted below:
-        //
-        //    0 -> 1 -> 2 -> 3 -> 4 -> 5  matrix panels chained
-        //
-        //    This results in a long matrix panel with 192 columns and 32 rows.
-        //    If you want a rectangular 64 x 96 chained matrix panel align the panels with unmodified connections as shown here:
-        //
-        //                       0 -> 1 U-turn to panel 2
-        //                            |
-        //                            v
-        //    U-turn to panel 4  3 <- 2
-        //                       |
-        //                       v
-        //                       4 -> 5
-        //
-        //    The connections between each of the panels remains unchanged, but now content of panels 2 and 3 will be rotated for 180°
-        //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
-        //    panel 5 below panel 2.
-        //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
-        //
-
-        constexpr int W = DISPLAY_WIDTH;
+    constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
 
     size_t fb_index = 0;
@@ -1749,7 +1705,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
             }
         }
     }
-#endif
 #endif
     // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
