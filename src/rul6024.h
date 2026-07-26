@@ -1,3 +1,7 @@
+#pragma once
+
+#include "hub75.hpp"
+
 // WREG1 components
 //
 // Name         Bit R1  Default  Description
@@ -102,7 +106,7 @@
 #define CMD_WREG1 11
 #define CMD_WREG2 12
 
-void RUL6024_setup();
-void RUL6024_write_command(uint8_t command);
-void RUL6024_write_register(uint16_t value, uint8_t position);
-void RUL6024_init_register();
+void RUL6024_setup(const Hub75PinConfig &pins, uint32_t matrix_panel_width);
+void RUL6024_write_command(const Hub75PinConfig &pins, uint32_t matrix_panel_width, uint8_t command);
+void RUL6024_write_register(const Hub75PinConfig &pins, uint32_t matrix_panel_width, uint16_t value, uint8_t position);
+void RUL6024_init_register(const Hub75PinConfig &pins);

@@ -10,18 +10,18 @@ using namespace pimoroni;
 #define M_PI (3.14159265358979323846)
 #endif
 
+template <uint32_t W, uint32_t H>
 class HueValueSpectrum : public PicoGraphics_PenRGB888
 {
 private:
-    uint width, height;
-    float reciprocal_width, reciprocal_height;
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
+
+    float reciprocal_width = 1.0f / W;
+    float reciprocal_height = 1.0f / H;
     float PI2 = 2.0f * M_PI;
 
 public:
-    explicit HueValueSpectrum(uint width = 64, uint height = 64) : PicoGraphics_PenRGB888(width, height, nullptr), width(width), height(height) {
-        reciprocal_width = 1.0f / width;
-        reciprocal_height = 1.0f / height;
-    }
+    explicit HueValueSpectrum() : PicoGraphics_PenRGB888(W, H, pixel_buf_) {}
 
     void drawShades()
     {
@@ -29,7 +29,7 @@ public:
         float t = (float)((millis() % 8000u) / 8000.f);
         float tt = (float)((millis() % 32000u) / 32000.f);
 
-        for (int x = 0; x < width; x++)
+        for (int x = 0; x < (int)W; x++)
         {
             // calculate the overal shade
             float f = (((sin(tt - (float)x * reciprocal_height / 32.f) * PI2) + 1.0f) / 2.0f) * 255.0f;
@@ -39,9 +39,9 @@ public:
             float b = std::max(std::min(cosf(PI2 * (t + ((float)x * reciprocal_height + 2.f) / 3.f)), 1.f), 0.f);
 
             // iterate pixels for every row
-            for (int y = 0; y < height; y++)
+            for (int y = 0; y < (int)H; y++)
             {
-                if (y * 2 < height)
+                if (y * 2 < (int)H)
                 {
                     // top-middle part of screen, transition of value
                     t = (2.f * y + 1.0f) * reciprocal_height;
@@ -50,7 +50,7 @@ public:
                 else
                 {
                     // middle to bottom of screen, transition of saturation
-                    t = (2.f * (height - y) - 1.0f) * reciprocal_height;
+                    t = (2.f * (H - y) - 1.0f) * reciprocal_height;
                     set_pen((uint8_t)((r * t + 1.0f - t) * f), (uint8_t)((g * t + 1.0f - t) * f), (uint8_t)((b * t + 1.0f - t) * f));
                 }
                 set_pixel(Point(x, y));

@@ -3,7 +3,7 @@
 cmake_minimum_required(VERSION 3.13)
 
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Initialise pico_sdk from installed location
@@ -38,6 +38,8 @@ project(hub75_demo C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
+
+add_subdirectory(utils)
 
 # Add library. This is the core HUB75 driver.
 add_library(hub75 STATIC)
@@ -77,51 +79,10 @@ pico_set_program_version(hub75_demo "3.1")
 
 pico_set_float_implementation(hub75_demo pico)
 
-set(PANEL_GENERIC 0)
-set(PANEL_FM6126A 1)
-set(PANEL_RUL6024 2)
-
-set(ROW_MAP_STANDARD 0) # Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
-set(ROW_MAP_SPLIT 1)    # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-set(ROW_MAP_S31 2)      # S31 mapping. Four-way interleaved quarter mapping mostly used for high brightness or outdoor panels, sometimes also advertised as '1/8 scan'.
-
-set(CHAIN_MODE_SERPENTINE 0)
-set(CHAIN_MODE_RASTER 1)
-
-# No need to modify preprocessor defines in hub75.cpp - instead set their values here.
-#
-# Example:
-# Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
-# Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
 target_compile_definitions(hub75_demo PRIVATE
-    # PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
-    USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
-    MATRIX_PANEL_WIDTH=64       # your matrix panel width
-    MATRIX_PANEL_HEIGHT=64      # your matrix panel height
-    CHAIN_MODE=CHAIN_MODE_SERPENTINE # set chain-mode - default is serpentine (U-Turn with compensation for 180° rotation)
-    CHAIN_COLS=1                # number of panels chained left-to-right in a single chain row (columns)
-    CHAIN_ROWS=1                # number of chain rows stacked vertically (rows)
-    DATA_BASE_PIN=0             # base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins - use 30 for PICO_RP2350B
-    DATA_N_PINS=6               # number (count) of colour pins (usually 6)
-    ROWSEL_BASE_PIN=6           # base GPIO address pin (aka start index) of A, B (, C, D. E) GPIO pins - use 36 for PICO_RP2350B
-    ROWSEL_N_PINS=5             # number (count) of address pins available on your matrix panel board (look at your panels connector)
-    CLK_PIN=11                  # GPIO pin for CLK - use pin 41 for PICO_RP2350B
-    STROBE_PIN=12               # GPIO pin for STROBE (LATCH) - use pin 42 for PICO_RP2350B
-    OEN_PIN=13                  # GPIO for OE pin - use pin 43 for PICO_RP2350B
-    ROW_MAPPING=ROW_MAP_STANDARD # row/buffer mapping topology - default is ROW_MAP_STANDARD
-    PANEL_TYPE=PANEL_GENERIC    # select PANEL_TYPE
-    INVERTED_STB=false          # inverted pin signal for OE (untested)
-    SM_CLOCKDIV_FACTOR=1.0f     # to prevent flicker or ghosting it might be worth a try to reduce state machine speed
-    BITPLANES=10                # number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values for BIT_DEPTH are 8 or 10
-    BALANCED_LIGHT_OUTPUT=true  # allthough it uses some more memory it improves effective refresh rate and really cuts down flicker
-    SEPARATE_CIE_CHANNELS=true  # use separate CIE channels for improved colour representation - needs more memory
-    CCM_RG_SHIFT=6              # CCM Cross-channel mixing - mix ~1.6% green into the red channel
-    CCM_GB_SHIFT=7              # CCM Cross-channel mixing - mix ~0.8% blue into the green channel
-    DISPLAY_ROTATION=0          # display rotation - valid values 0, 90, 180, 270 
-    BASE_LATCH_NS=80            # wait time in nano-seconds to stabilise latch
-    BASE_ADDR_NS=160            # wait time in nano-seconds to stabilise row addressing
-    HUB75_MULTICORE=true        # use core1 for the hub75 driver
-    FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
+    # PICO_RP2350A=0         # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
+    USE_PICO_GRAPHICS=true   # set to false if you use hub75 as a library - any reference to pico_graphics is removed
+    HUB75_MULTICORE=true     # use core1 for the hub75 driver
 )
 
 # Modify the below lines to enable/disable output over UART/USB
@@ -133,11 +94,6 @@ add_subdirectory(libraries)
 
 target_sources(hub75_demo PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/rotator.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/analog_clock.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
@@ -173,4 +129,48 @@ pico_generate_pio_header(hub75_demo ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
 
 
 pico_add_extra_outputs(hub75_demo)
+print_size_info(hub75_demo)
+
+
+# Add dual-panel demo executable - two independent Hub75Driver instances, see
+# hub75_demo_dual.cpp for details.
+add_executable(hub75_demo_dual hub75_demo_dual.cpp)
+
+pico_set_program_name(hub75_demo_dual "hub75_demo_dual")
+pico_set_program_version(hub75_demo_dual "3.1")
+
+pico_set_float_implementation(hub75_demo_dual pico)
+
+target_compile_definitions(hub75_demo_dual PRIVATE
+    USE_PICO_GRAPHICS=true
+)
+
+pico_enable_stdio_uart(hub75_demo_dual 0)
+pico_enable_stdio_usb(hub75_demo_dual 1)
+
+target_sources(hub75_demo_dual PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/hub75_demo_dual.cpp
+        )
+
+target_link_libraries(hub75_demo_dual PRIVATE
+        pico_stdlib
+        pico_multicore
+        pico_aon_timer
+        hardware_pio
+        hardware_dma
+        hardware_vreg
+        pico_graphics)
+
+target_include_directories(hub75_demo_dual PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/include
+        ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+pico_generate_pio_header(hub75_demo_dual ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
+
+pico_add_extra_outputs(hub75_demo_dual)
+print_size_info(hub75_demo_dual)
 

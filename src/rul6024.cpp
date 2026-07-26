@@ -6,71 +6,71 @@
 
 #include "rul6024.h"
 
-void RUL6024_init_register()
+void RUL6024_init_register(const Hub75PinConfig &pins)
 {
     // Set up GPIO
-    for (auto i = 0; i < DATA_N_PINS; i++)
+    for (auto i = 0u; i < pins.data_n_pins; i++)
     {
-        gpio_init(DATA_BASE_PIN + i);
-        gpio_set_function(DATA_BASE_PIN + i, GPIO_FUNC_SIO);
-        gpio_set_dir(DATA_BASE_PIN + i, true);
-        gpio_put(DATA_BASE_PIN + i, 0);
+        gpio_init(pins.data_base_pin + i);
+        gpio_set_function(pins.data_base_pin + i, GPIO_FUNC_SIO);
+        gpio_set_dir(pins.data_base_pin + i, true);
+        gpio_put(pins.data_base_pin + i, 0);
     }
 
-    for (auto i = 0; i < ROWSEL_N_PINS; i++)
+    for (auto i = 0u; i < pins.rowsel_n_pins; i++)
     {
-        gpio_init(ROWSEL_BASE_PIN + i);
-        gpio_set_function(ROWSEL_BASE_PIN + i, GPIO_FUNC_SIO);
-        gpio_set_dir(ROWSEL_BASE_PIN + i, true);
-        gpio_put(ROWSEL_BASE_PIN + i, 0);
+        gpio_init(pins.rowsel_base_pin + i);
+        gpio_set_function(pins.rowsel_base_pin + i, GPIO_FUNC_SIO);
+        gpio_set_dir(pins.rowsel_base_pin + i, true);
+        gpio_put(pins.rowsel_base_pin + i, 0);
     }
 
-    gpio_init(CLK_PIN);
-    gpio_set_function(CLK_PIN, GPIO_FUNC_SIO);
-    gpio_set_dir(CLK_PIN, true);
-    gpio_put(CLK_PIN, LOW);
+    gpio_init(pins.clk_pin);
+    gpio_set_function(pins.clk_pin, GPIO_FUNC_SIO);
+    gpio_set_dir(pins.clk_pin, true);
+    gpio_put(pins.clk_pin, LOW);
 
-    gpio_init(STROBE_PIN);
-    gpio_set_function(STROBE_PIN, GPIO_FUNC_SIO);
-    gpio_set_dir(STROBE_PIN, true);
-    gpio_put(CLK_PIN, LOW);
+    gpio_init(pins.strobe_pin);
+    gpio_set_function(pins.strobe_pin, GPIO_FUNC_SIO);
+    gpio_set_dir(pins.strobe_pin, true);
+    gpio_put(pins.clk_pin, LOW);
 
-    gpio_init(OEN_PIN);
-    gpio_set_function(OEN_PIN, GPIO_FUNC_SIO);
-    gpio_set_dir(OEN_PIN, true);
-    gpio_put(OEN_PIN, LOW);
+    gpio_init(pins.oen_pin);
+    gpio_set_function(pins.oen_pin, GPIO_FUNC_SIO);
+    gpio_set_dir(pins.oen_pin, true);
+    gpio_put(pins.oen_pin, LOW);
 }
 
-void RUL6024_write_register(uint16_t value, uint8_t position)
+void RUL6024_write_register(const Hub75PinConfig &pins, uint32_t matrix_panel_width, uint16_t value, uint8_t position)
 {
-    gpio_put(STROBE_PIN, LOW);
+    gpio_put(pins.strobe_pin, LOW);
     sleep_us(10);
 
-    uint8_t threshold = MATRIX_PANEL_WIDTH - position;
-    for (auto i = 0u; i < MATRIX_PANEL_WIDTH; i++)
+    uint8_t threshold = matrix_panel_width - position;
+    for (auto i = 0u; i < matrix_panel_width; i++)
     {
         auto j = i % 16;
         bool b = value & (1 << j);
 
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(DATA_BASE_PIN, b);
-        gpio_put((DATA_BASE_PIN + 1), b);
-        gpio_put((DATA_BASE_PIN + 2), b);
-        gpio_put((DATA_BASE_PIN + 3), b);
-        gpio_put((DATA_BASE_PIN + 4), b);
-        gpio_put((DATA_BASE_PIN + 5), b);
+        gpio_put(pins.data_base_pin, b);
+        gpio_put((pins.data_base_pin + 1), b);
+        gpio_put((pins.data_base_pin + 2), b);
+        gpio_put((pins.data_base_pin + 3), b);
+        gpio_put((pins.data_base_pin + 4), b);
+        gpio_put((pins.data_base_pin + 5), b);
 
         // Assert strobe/latch if i > threshold
         // This somehow indicates to the FM6126A which register we want to write :|
-        gpio_put(STROBE_PIN, i > threshold);
+        gpio_put(pins.strobe_pin, i > threshold);
         sleep_us(10);
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
     }
 }
 
-void RUL6024_write_command(uint8_t command)
+void RUL6024_write_command(const Hub75PinConfig &pins, uint32_t matrix_panel_width, uint8_t command)
 {
     // The chip contains a simple 16-bit shift register. The grayscale value and configuration
     // value are latched into the shift register (the data transmitted to the chip first is the high bit
@@ -93,143 +93,143 @@ void RUL6024_write_command(uint8_t command)
     case CMD_RESET_OEN:
         // The reset signal of the time-sharing display function is 1 LE width first, followed by 2 LE widths.
 
-        gpio_put(OEN_PIN, HIGH);
+        gpio_put(pins.oen_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
-        gpio_put(STROBE_PIN, LOW); // clk    --_--
-        sleep_us(10);              // LE     _____
-                                   // OE     ---__
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, LOW);
+        gpio_put(pins.strobe_pin, LOW); // clk    --_--
+        sleep_us(10);                  // LE     _____
+                                        // OE     ---__
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
 
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(STROBE_PIN, HIGH);
+        gpio_put(pins.strobe_pin, HIGH);
         sleep_us(10);
-        // gpio_put(OEN_PIN, LOW);
+        // gpio_put(pins.oen_pin, LOW);
         // sleep_us(10);
 
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
 
-        gpio_put(STROBE_PIN, LOW);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.strobe_pin, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
 
-        // gpio_put(OEN_PIN, HIGH);
+        // gpio_put(pins.oen_pin, HIGH);
         // sleep_us(10);
 
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(OEN_PIN, LOW);
-        sleep_us(10);
-
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.oen_pin, LOW);
         sleep_us(10);
 
-        gpio_put(CLK_PIN, LOW);
-        gpio_put(STROBE_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(OEN_PIN, HIGH);
+
+        gpio_put(pins.clk_pin, LOW);
+        gpio_put(pins.strobe_pin, HIGH);
+        sleep_us(10);
+        gpio_put(pins.oen_pin, HIGH);
 
         // LE set to high for 2 clock cycle
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(STROBE_PIN, LOW);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.strobe_pin, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
         break;
     case CMD_DATA_LATCH:
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(STROBE_PIN, HIGH);
+        gpio_put(pins.strobe_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(CLK_PIN, HIGH);
+        gpio_put(pins.clk_pin, HIGH);
         sleep_us(10);
-        gpio_put(CLK_PIN, LOW);
+        gpio_put(pins.clk_pin, LOW);
         sleep_us(10);
-        gpio_put(STROBE_PIN, LOW);
+        gpio_put(pins.strobe_pin, LOW);
         sleep_us(10);
-        gpio_put(OEN_PIN, LOW);
+        gpio_put(pins.oen_pin, LOW);
         break;
     case CMD_WREG1:
-        gpio_put(CLK_PIN, LOW);
-        gpio_put(STROBE_PIN, LOW);
-        gpio_put(OEN_PIN, HIGH);
+        gpio_put(pins.clk_pin, LOW);
+        gpio_put(pins.strobe_pin, LOW);
+        gpio_put(pins.oen_pin, HIGH);
         sleep_us(10);
 
         for (auto i = 0; i <= CMD_WREG1; i++)
         {
-            gpio_put(CLK_PIN, HIGH);
+            gpio_put(pins.clk_pin, HIGH);
             sleep_us(10);
             if (i == 0)
             {
-                gpio_put(STROBE_PIN, HIGH);
+                gpio_put(pins.strobe_pin, HIGH);
                 sleep_us(10);
             }
-            gpio_put(CLK_PIN, LOW);
+            gpio_put(pins.clk_pin, LOW);
             sleep_us(10);
         }
 
-        RUL6024_write_register(WREG1, 12);
+        RUL6024_write_register(pins, matrix_panel_width, WREG1, 12);
 
-        gpio_put(OEN_PIN, LOW);
+        gpio_put(pins.oen_pin, LOW);
         sleep_us(10);
 
         break;
     case CMD_WREG2:
-        gpio_put(OEN_PIN, HIGH);
-        gpio_put(CLK_PIN, LOW);
-        gpio_put(STROBE_PIN, LOW);
+        gpio_put(pins.oen_pin, HIGH);
+        gpio_put(pins.clk_pin, LOW);
+        gpio_put(pins.strobe_pin, LOW);
         sleep_us(10);
 
         for (auto i = 0; i <= CMD_WREG2; i++)
         {
-            gpio_put(CLK_PIN, HIGH);
+            gpio_put(pins.clk_pin, HIGH);
             sleep_us(10);
             if (i == 0)
             {
-                gpio_put(STROBE_PIN, HIGH);
+                gpio_put(pins.strobe_pin, HIGH);
                 sleep_us(10);
             }
-            gpio_put(CLK_PIN, LOW);
+            gpio_put(pins.clk_pin, LOW);
             sleep_us(10);
         }
 
-        RUL6024_write_register(WREG2, 12);
+        RUL6024_write_register(pins, matrix_panel_width, WREG2, 12);
 
-        gpio_put(OEN_PIN, LOW);
+        gpio_put(pins.oen_pin, LOW);
         sleep_us(10);
         break;
     }
 }
 
-void RUL6024_setup()
+void RUL6024_setup(const Hub75PinConfig &pins, uint32_t matrix_panel_width)
 {
-    RUL6024_init_register();
+    RUL6024_init_register(pins);
 
-    RUL6024_write_command(CMD_WREG1);
-    RUL6024_write_command(CMD_WREG2);
+    RUL6024_write_command(pins, matrix_panel_width, CMD_WREG1);
+    RUL6024_write_command(pins, matrix_panel_width, CMD_WREG2);
 
-    RUL6024_write_command(CMD_DATA_LATCH);
+    RUL6024_write_command(pins, matrix_panel_width, CMD_DATA_LATCH);
     // RESET_OEN is required after writing WREG2
-    RUL6024_write_command(CMD_RESET_OEN);
+    RUL6024_write_command(pins, matrix_panel_width, CMD_RESET_OEN);
 }
