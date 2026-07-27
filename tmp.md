@@ -1,21 +1,3 @@
-What I like about the changes:
-
-1. vast reduction of "defines" and preprocessor macros
-2. compile time checks done via Template (e.g. constexpr)
-3. move from C to C++ to ease instantiation of multiple driver instances
-4. The management of PIOs and IRQs has changed fundamentally
-  I have to figure out claiming and unclaiming of PIOs and SMs
-  I have to check global irq management
-
-What has to be done
-
-1. cie.py has to be adapted
-   
-
-Questions:
-
-Does the Pico C-SDK support CCMAKE_CXX_STANDARD 20 ?
-
 
 
 hub75.tpp
