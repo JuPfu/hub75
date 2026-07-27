@@ -464,20 +464,27 @@ void Hub75Driver<Cfg>::configure_pio()
 
         PIO candidate = pio_get_instance(pio_index);
 
+        static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+        static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin);
+
         // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
         // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
         // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
-        bool stream_ok = hub75_claim_on_pio(candidate, [&]
+        bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
                                                   &hub75_bitplane_stream_program,
                                                   &pio_config_.data_pio,
                                                   &pio_config_.sm_data,
                                                   &pio_config_.data_prog_offs,
-                                                  Cfg.pins.data_base_pin,
-                                                  Cfg.pins.clk_pin - Cfg.pins.data_base_pin + 1, true); });
+                                                  stream_lo,
+                                                  stream_hi - stream_lo + 1,
+                                                  true); });
 
         if (stream_ok)
         {
+            static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+            static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+
             // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
             // level (see hub75_row_program_init), so there is only one row program.
             bool row_ok = hub75_claim_on_pio(candidate, [&]
@@ -486,8 +493,9 @@ void Hub75Driver<Cfg>::configure_pio()
                                                    &pio_config_.row_pio,
                                                    &pio_config_.sm_row,
                                                    &pio_config_.row_prog_offs,
-                                                   Cfg.pins.rowsel_base_pin,
-                                                   Cfg.pins.oen_pin - Cfg.pins.rowsel_base_pin + 1, true); });
+                                                   row_lo,
+                                                   row_hi - row_lo + 1,
+                                                   true); });
 
             if (row_ok)
             {
