@@ -46,10 +46,9 @@ latch_guard_wait:
     jmp x-- latch_guard_wait side 0b10
 
     ; -------------------------------------------------------------------------
-    ; 2. LATCH: clean pulse (HIGH + LOW) - freeze data
+    ; 2. LATCH: clean pulse (HIGH followed by LOW in register stabilisation)
     ; -------------------------------------------------------------------------
-    nop         [3]     side 0b11   ; STB=1, OE=1  (Latch HIGH)
-    mov x, y    [3]     side 0b10   ; STB=0, OE=1  (Latch LOW)
+    mov x, y    [3]     side 0b11   ; STB=1, OE=1  (Latch HIGH)
 
     ; -------------------------------------------------------------------------
     ; 3. LATCH SETTLE: allow internal register stabilisation
@@ -138,27 +137,25 @@ dark_loop:
     ; -------------------------------------------------------------------------
     wait 1 irq 0        side 0b11   ; OEn=1 (panel OFF)
 
-    mov x, y            side 0b11
+    mov x, y            side 0b11   ; OEn=1 (panel OFF)
 latch_guard_wait:
     jmp x-- latch_guard_wait side 0b11
 
     ; -------------------------------------------------------------------------
-    ; 2. LATCH: clean pulse (HIGH + LOW) - freeze data
+    ; 2. LATCH: clean pulse (HIGH followed by LOW in register stabilisation)
     ; -------------------------------------------------------------------------
-    nop         [3]     side 0b10   ; STB=1, OE=1  (Latch HIGH)
-    nop         [3]     side 0b11   ; STB=0, OE=1  (Latch LOW)
+    mov x, y    [3]     side 0b10   ; STB=1, OE=0  (Latch HIGH)
 
     ; -------------------------------------------------------------------------
     ; 3. LATCH SETTLE: allow internal register stabilisation
     ; -------------------------------------------------------------------------
-    mov x, y            side 0b11
 wait_latch_settle:
-    jmp x-- wait_latch_settle side 0b11
+    jmp x-- wait_latch_settle side 0b11 ; STB=0, OE=1  (Latch LOW)
 
     ; -------------------------------------------------------------------------
     ; 4. PREFETCH next row data (parallel to blanking)
     ; -------------------------------------------------------------------------
-    irq nowait 1        side 0b11
+    irq nowait 1        side 0b11       ; STB=1, OE=1  (Latch HIGH)
 
     ; -------------------------------------------------------------------------
     ; 5. ADDRESSING + t_addr: set row AFTER latch is fully stable, then
