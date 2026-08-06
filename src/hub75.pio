@@ -49,12 +49,11 @@ latch_guard_wait:
     ; 2. LATCH: clean pulse (HIGH + LOW) - freeze data
     ; -------------------------------------------------------------------------
     nop         [3]     side 0b11   ; STB=1, OE=1  (Latch HIGH)
-    nop         [3]     side 0b10   ; STB=0, OE=1  (Latch LOW)
+    mov x, y    [3]     side 0b10   ; STB=0, OE=1  (Latch LOW)
 
     ; -------------------------------------------------------------------------
     ; 3. LATCH SETTLE: allow internal register stabilisation
     ; -------------------------------------------------------------------------
-    mov x, y            side 0b10
 wait_latch_settle:
     jmp x-- wait_latch_settle side 0b10
 
@@ -248,13 +247,11 @@ bitstream_loop:
     ; --- PIXEL DATA SHIFTING ---
     ; Pull 6 bits (R0, G0, B0, R1, G1, B1) and apply to pins. 
     ; [1] adds a small setup delay before the rising clock edge.
-    out pins, 6    [1]      side 0 ; CLK ↓
+    out pins, 6    [2]      side 0 ; CLK ↓
 
     ; Discard the remaining 2 bits of the byte (padding) to trigger DMA auto-pull
-    out null, 2             side 0 ; CLK ↓
-
-    ; Pulse the clock high to shift the data into the panel's shift registers
-    nop            [3]      side 1 ; CLK ↑, [3] extends the hold time
+    ; and pulse the clock high to shift the data into the panel's shift registers
+    out null, 2    [3]      side 1 ; CLK ↑, [3] extends the hold time
 
     ; Loop until full row transferred
     jmp x--, bitstream_loop side 0 ; CLK ↓
@@ -308,33 +305,29 @@ bitstream_loop:
 .define BITPLANES 10         ; Alias - valid for 10 and for 8 BITPLANES!
 
 .wrap_target  
-                             ; first word R10G10B10 or R8G8B8       
-public shift0:               ; Pixel Red0 Green0 Blue0 (8 or 10 bit format)
+    set x, 1                 ; loop counter
+
+                             ; first word R10G10B10 or R8G8B8    
+                             ; followed by second word R10G10B10 or R8G8B8 in second loop iteration
+                             ; pre-shift left to current bitplane n if n nonzero
+                             ; else no pre-shift necessary      
+public shift:                ; Pixel Red0 Green0 Blue0 (8 or 10 bit format)
     pull                     ; Instruction gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
                              ; pre-shift left to current bitplane n if n nonzero
                              ; else no pre-shift necessary
-    in osr, 1                ; shift right into ISR register first OSR bit: Red0
+    in osr, 1                ; shift right into ISR register first OSR bit: Red0 
+                             ; second iteration: shift right into ISR register first OSR bit:  Red1 Blue0 Green0 RED0
     out null, BITPLANES      ; shift to green bit
 
     in osr, 1                ; shift right into ISR register first OSR bit:  Green0 RED0
+                             ; second iteration: shift right into ISR register first OSR bit: Green1 Red1 Blue0 Green0 RED0
     out null, BITPLANES      ; shift to blue bit
 
     in osr, 1                ; shift right into ISR register first OSR bit: Blue0 Green0 RED0
+                             ; second iteration: shift right into ISR register first OSR bit: Blue1 Green1 Red1 Blue0 Green0 RED0
     out null, 32             ; Discard rest to trigger auto-pull
-
-                             ; second word R10G10B10 or R8G8B8 
-                             ; pre-shift left to current bitplane n if n nonzero
-                             ; else no pre-shift necessary   
-public shift1:               ; Pixel Red1 Green1 Blue1 (8 or 10 bit format)
-    pull                     ; Instruction gets patched to `out null, n` if n nonzero (otherwise the PULL is required for fencing)
-    in osr, 1                ; shift right into ISR register first OSR bit:  Red1 Blue0 Green0 RED0
-    out null, BITPLANES      ; shift to green bit
-
-    in osr, 1                ; shift right into ISR register first OSR bit: Green1 Red1 Blue0 Green0 RED0
-    out null, BITPLANES      ; shift to blue bit
-
-    in osr, 1                ; shift right into ISR register first OSR bit: Blue1 Green1 Red1 Blue0 Green0 RED0
-    out null, 32             ; Discard rest to trigger auto-pull
+    
+    jmp x-- shift
 
     in null, 2               ; shift right and after 4 loops auto push four bytes (each byte looks like 00B1G1R1B0G0R0) from ISR into the RX FIFO
 
@@ -362,7 +355,6 @@ static inline void hub75_bitplane_setup_set_shift(PIO pio, uint sm, uint offset,
         instr = pio_encode_pull(false, true); // blocking PULL
     else
         instr = pio_encode_out(pio_null, shamt);
-    pio->instr_mem[offset + hub75_bitplane_setup_offset_shift0] = instr;
-    pio->instr_mem[offset + hub75_bitplane_setup_offset_shift1] = instr;
+    pio->instr_mem[offset + hub75_bitplane_setup_offset_shift] = instr;
 }
 %}
