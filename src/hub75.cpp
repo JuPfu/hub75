@@ -739,27 +739,16 @@ static void configure_pio(bool inverted_stb)
         panic("Failed to claim PIO SM for hub75_bitplane_stream_program\n");
     }
 
-    if (inverted_stb)
-    {
-        pio_config.row_pio = pio_config.data_pio;
-        pio_config.sm_row = pio_claim_unused_sm(pio_config.data_pio, true);
-        pio_config.row_prog_offs = pio_add_program(pio_config.data_pio, &hub75_row_inverted_program);
-    }
-    else
-    {
-        pio_config.row_pio = pio_config.data_pio;
-        pio_config.sm_row = pio_claim_unused_sm(pio_config.data_pio, true);
-        pio_config.row_prog_offs = pio_add_program(pio_config.data_pio, &hub75_row_program);
-    }
+    pio_config.row_pio = pio_config.data_pio;
+    pio_config.sm_row = pio_claim_unused_sm(pio_config.data_pio, true);
+    pio_config.row_prog_offs = pio_add_program(pio_config.data_pio, &hub75_row_program);
 
     hub75_bitplane_stream_program_init(pio_config.data_pio, pio_config.sm_data, pio_config.data_prog_offs, DATA_BASE_PIN, CLK_PIN, PanelConfig::BITPLANE_STREAM_LENGTH);
 
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     // base_latch_wait_cycles passed as parameter to hub75_row program
-    if (inverted_stb)
-        hub75_row_inverted_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, hub75_timing_config.latch_cycles);
-    else
-        hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, hub75_timing_config.latch_cycles);
+
+    hub75_row_program_init(pio_config.row_pio, pio_config.sm_row, pio_config.row_prog_offs, ROWSEL_BASE_PIN, ROWSEL_N_PINS, STROBE_PIN, hub75_timing_config.latch_cycles, inverted_stb);
 
     // State machine for "parallelized" building of the bit-plane structure
     if (!pio_claim_free_sm_and_add_program(

@@ -87,7 +87,7 @@ dark_loop:
 .wrap
 
 % c-sdk {
-    static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch)
+    static inline void hub75_row_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch, bool inverted_stb)
     {
         pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
         pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
@@ -97,6 +97,12 @@ dark_loop:
 
         pio_gpio_init(pio, latch_base_pin);     // aka STROBE pin
         pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
+
+        if ( inverted_stb) {
+            // Inverts the STROBE (latch) pin output at the GPIO pad level.
+            // The PIO SM continues to output standard active-HIGH pulses, but the physical pin outputs active-LOW signals to the panel!
+            gpio_set_outover(STROBE_PIN, GPIO_OVERRIDE_INVERT);
+        }
 
         pio_sm_config c = hub75_row_program_get_default_config(offset);
         sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
@@ -108,102 +114,6 @@ dark_loop:
 
         // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
         // Load wait_cycles into Y-register (t_latch)
-        pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
-        pio_sm_put(pio, sm, t_latch);
-
-        pio_sm_set_enabled(pio, sm, true);
-    }
-%}
-
-; =============================================================================
-; PROGRAM: hub75_row_inverted
-; =============================================================================
-; Same functionality as hub75_row, but with inverted latch timing.
-; Required for panels where STB polarity or timing differs.
-;
-.program hub75_row_inverted
-
-.side_set 2
-
-; Bit 0: LATCH (STB)
-; Bit 1: OEn (active LOW: 0=ON, 1=OFF)
-
-    ; --- INITIALISATION (executed once at start-up) ---
-    irq nowait 1        side 0b10   ; Kick off pixel streamer for the very first row
-    
-.wrap_target
-    ; -------------------------------------------------------------------------
-    ; 1. SYNC: wait until pixel data fully shifted
-    ; -------------------------------------------------------------------------
-    wait 1 irq 0        side 0b11   ; OEn=1 (panel OFF)
-
-    mov x, y            side 0b11   ; OEn=1 (panel OFF)
-latch_guard_wait:
-    jmp x-- latch_guard_wait side 0b11
-
-    ; -------------------------------------------------------------------------
-    ; 2. LATCH: clean pulse (HIGH followed by LOW in register stabilisation)
-    ; -------------------------------------------------------------------------
-    mov x, y    [3]     side 0b10   ; STB=1, OE=0  (Latch HIGH)
-
-    ; -------------------------------------------------------------------------
-    ; 3. LATCH SETTLE: allow internal register stabilisation
-    ; -------------------------------------------------------------------------
-wait_latch_settle:
-    jmp x-- wait_latch_settle side 0b11 ; STB=0, OE=1  (Latch LOW)
-
-    ; -------------------------------------------------------------------------
-    ; 4. PREFETCH next row data (parallel to blanking)
-    ; -------------------------------------------------------------------------
-    irq nowait 1        side 0b11       ; STB=1, OE=1  (Latch HIGH)
-
-    ; -------------------------------------------------------------------------
-    ; 5. ADDRESSING + t_addr: set row AFTER latch is fully stable, then
-    ;    consume the rest of the same packed word as the address-settle delay
-    ; -------------------------------------------------------------------------
-    out pins, 5          side 0b11   ; Output A–E row address (low 5 bits of packed word)
-    out x, 27            side 0b11   ; load t_addr delay (upper 27 bits) into X register
-addr_wait:
-    jmp x-- addr_wait side 0b11
-
-    ; -------------------------------------------------------------------------
-    ; 6. DISPLAY (BCM ON phase)
-    ; -------------------------------------------------------------------------
-    out x, 32           side 0b11   ; load lit_cycles
-lit_loop:
-    jmp x-- lit_loop    side 0b01   ; OE=0 → LEDs ON
-
-    ; -------------------------------------------------------------------------
-    ; 7. BLANKING (BCM OFF phase)
-    ; -------------------------------------------------------------------------
-    out x, 32           side 0b11   ; load dark_cycles
-dark_loop:
-    jmp x-- dark_loop   side 0b11   ; OE=1 → LEDs OFF
-
-.wrap
-
-% c-sdk {
-    static inline void hub75_row_inverted_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch)
-    {
-        pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
-        pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
-
-        for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
-            pio_gpio_init(pio, i);
-            
-        pio_gpio_init(pio, latch_base_pin);     // aka STROBE pin
-        pio_gpio_init(pio, latch_base_pin + 1); // OEn pin
-
-        pio_sm_config c = hub75_row_inverted_program_get_default_config(offset);
-        sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
-        sm_config_set_sideset_pins(&c, latch_base_pin); // STROBE pin and OEn pin
-        sm_config_set_in_shift(&c, true, true, 32);
-        sm_config_set_out_shift(&c, true, true, 32);
-
-        pio_sm_init(pio, sm, offset, &c);
-
-        // Part of Pimoronis anti ghosting solution https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-        // Load wait_cycles into Y-register
         pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
         pio_sm_put(pio, sm, t_latch);
 
@@ -244,7 +154,7 @@ bitstream_loop:
     ; --- PIXEL DATA SHIFTING ---
     ; Pull 6 bits (R0, G0, B0, R1, G1, B1) and apply to pins. 
     ; [1] adds a small setup delay before the rising clock edge.
-    out pins, 6    [2]      side 0 ; CLK ↓
+    out pins, 6    [3]      side 0 ; CLK ↓
 
     ; Discard the remaining 2 bits of the byte (padding) to trigger DMA auto-pull
     ; and pulse the clock high to shift the data into the panel's shift registers
