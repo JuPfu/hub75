@@ -95,13 +95,13 @@ static const uint8_t BCM_SEQUENCE[] = {
 constexpr uint8_t bcm_sequence_length = sizeof(BCM_SEQUENCE) / sizeof(uint8_t);
 
 constexpr float SM_CLOCKDIV = (SM_CLOCKDIV_FACTOR < 1.0f) ? 1.0f : SM_CLOCKDIV_FACTOR;
-static uint8_t frame_buffer1[(TOTAL_PIXELS >> 1) * bcm_sequence_length] __attribute__((aligned(4)));
-static uint8_t frame_buffer2[(TOTAL_PIXELS >> 1) * bcm_sequence_length] __attribute__((aligned(4)));
+alignas(4) static uint8_t frame_buffer1[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
+alignas(4) static uint8_t frame_buffer2[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
 
-static row_cmd_t row_cmd_buffer1[PanelConfig::SCAN_DEPTH * bcm_sequence_length] __attribute__((aligned(4)));
-static row_cmd_t row_cmd_buffer2[PanelConfig::SCAN_DEPTH * bcm_sequence_length] __attribute__((aligned(4)));
+alignas(4) static row_cmd_t row_cmd_buffer1[PanelConfig::SCAN_DEPTH * bcm_sequence_length];
+alignas(4) static row_cmd_t row_cmd_buffer2[PanelConfig::SCAN_DEPTH * bcm_sequence_length];
 
-static uint32_t rgb_buffer[TOTAL_PIXELS] __attribute__((aligned(4)));
+static uint32_t rgb_buffer[TOTAL_PIXELS];
 
 static void configure_pio(bool);
 static void setup_dma_transfers();
@@ -1017,7 +1017,7 @@ __attribute__((optimize("unroll-loops"))) void update(
         panic(error_msg);
     }
 
-    __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
+    uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
 #if ROW_MAPPING == ROW_MAP_STANDARD
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
