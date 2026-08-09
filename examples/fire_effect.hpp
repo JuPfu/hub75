@@ -9,11 +9,10 @@ class FireEffect : public PicoGraphics_PenRGB888
 private:
     bool landscape = true;
 
-    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
     float heat_[W * H]{};
 
 public:
-    FireEffect() : PicoGraphics_PenRGB888(W, H, pixel_buf_) {}
+    FireEffect() : PicoGraphics_PenRGB888(W, H, nullptr) {}
 
     void set(int x, int y, float v)
     {

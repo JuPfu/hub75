@@ -40,9 +40,9 @@ public:
 template <uint32_t W, uint32_t H>
 void FireEffect<W, H>::burn()
 {
-    for (int y = 0; y < (int)H; y++)
+    for (uint32_t y = 0; y < H; y++)
     {
-        for (int x = 0; x < (int)W; x++)
+        for (uint32_t x = 0; x < W; x++)
         {
             float value = get(x, y);
 
@@ -81,7 +81,7 @@ void FireEffect<W, H>::burn()
     }
 
     // clear the bottom row and then add a new fire seed to it
-    for (int x = 0; x < (int)W; x++)
+    for (uint32_t x = 0; x < W; x++)
     {
         set(x, H - 1, 0.0f);
     }
