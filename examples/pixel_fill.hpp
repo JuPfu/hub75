@@ -8,7 +8,6 @@ template <uint32_t W, uint32_t H>
 class PixelFill : public PicoGraphics_PenRGB888
 {
 private:
-    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
 
     int i = 0;
     int j = 0;
@@ -23,7 +22,7 @@ private:
     }
 
 public:
-    explicit PixelFill() : PicoGraphics_PenRGB888(W, H, pixel_buf_)
+    explicit PixelFill() : PicoGraphics_PenRGB888(W, H, nullptr)
     {
         set_pen(0);
         clear();

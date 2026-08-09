@@ -98,7 +98,7 @@ target_sources(hub75_demo PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/analog_clock.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.hpp
-        # ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp

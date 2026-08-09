@@ -14,14 +14,12 @@ template <uint32_t W, uint32_t H>
 class HueValueSpectrum : public PicoGraphics_PenRGB888
 {
 private:
-    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
-
     float reciprocal_width = 1.0f / W;
     float reciprocal_height = 1.0f / H;
     float PI2 = 2.0f * M_PI;
 
 public:
-    explicit HueValueSpectrum() : PicoGraphics_PenRGB888(W, H, pixel_buf_) {}
+    explicit HueValueSpectrum() : PicoGraphics_PenRGB888(W, H, nullptr) {}
 
     void drawShades()
     {
