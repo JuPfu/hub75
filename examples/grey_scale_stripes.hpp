@@ -28,10 +28,10 @@ public:
     void drawStripes()
     {
         // grey stripes in different shades all over the panel
-        for (int y = 0; y < (int)H; ++y)
+        for (uint32_t y = 0; y < H; ++y)
         {
             uint32_t grey = (uint8_t)((y * 255) / (H - 1));
-            for (int x = 0; x < (int)W; ++x)
+            for (uint32_t x = 0; x < W; ++x)
             {
                 drawPixel(x, y, (grey << 16) | (grey << 8) | grey);
             }
