@@ -70,23 +70,16 @@ target_include_directories(hub75 PRIVATE
 
 pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
 
-
-# Add demo executable. Everything that is only required for the demo remains here.
-add_executable(hub75_demo hub75_demo.cpp )
-
-pico_set_program_name(hub75_demo "hub75_demo")
-pico_set_program_version(hub75_demo "3.1")
-
-pico_set_float_implementation(hub75_demo pico)
-
-target_compile_definitions(hub75_demo PRIVATE
+# target_compile_definitions are PUBLIC so any target that links "hub75" (e.g. hub75_demo or hub75_demo_dual below, or a
+# consumer project's own executable) automatically inherits the exact same panel configuration.
+target_compile_definitions(hub75 PUBLIC
     # PICO_RP2350A=0         # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     USE_PICO_GRAPHICS=true   # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     HUB75_MULTICORE=true     # use core1 for the hub75 driver
 )
 
 # Add demo executable. Everything that is only required for the demo remains here.
-add_executable(hub75_demo hub75_demo.cpp)
+add_executable(hub75_demo hub75_demo.cpp )
 
 pico_set_program_name(hub75_demo "hub75_demo")
 pico_set_program_version(hub75_demo "3.1")
@@ -101,11 +94,15 @@ add_subdirectory(common)
 add_subdirectory(libraries)
 
 target_sources(hub75_demo PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/analog_clock.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/hue_value_spectrum.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/rotator.hpp
         )
 
 target_link_libraries(hub75_demo PRIVATE
@@ -149,20 +146,11 @@ target_sources(hub75_demo_dual PRIVATE
         )
 
 target_link_libraries(hub75_demo_dual PRIVATE
-        pico_stdlib
-        pico_multicore
-        pico_aon_timer
-        hardware_pio
-        hardware_dma
-        hardware_vreg
-        pico_graphics)
+        hub75)
 
 target_include_directories(hub75_demo_dual PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/include
-        ${CMAKE_CURRENT_LIST_DIR}/src
+        ${CMAKE_CURRENT_LIST_DIR}/examples
 )
-
-pico_generate_pio_header(hub75_demo_dual ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
 
 pico_add_extra_outputs(hub75_demo_dual)
 print_size_info(hub75_demo_dual)
