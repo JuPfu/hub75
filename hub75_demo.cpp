@@ -31,13 +31,13 @@ constexpr Hub75Config panel_cfg{
         .rotation = Hub75Rotation::DEG_0,
     },
     .pins = {
-        .data_base_pin = 0,
+        .data_base_pin = 30,
         .data_n_pins = 6,
-        .rowsel_base_pin = 6,
+        .rowsel_base_pin = 36,
         .rowsel_n_pins = 5,
-        .clk_pin = 11,
-        .strobe_pin = 12,
-        .oen_pin = 13,
+        .clk_pin = 41,
+        .strobe_pin = 42,
+        .oen_pin = 43,
     },
     .color = {
         .bitplanes = 10,
@@ -46,7 +46,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = false,
+    .frame_rate_debug = true,
 };
 
 using Panel = Hub75Driver<panel_cfg>;

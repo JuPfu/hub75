@@ -14,11 +14,11 @@
 constexpr Hub75Config panel_cfg_a{
     .panel = {
         .matrix_panel_width = 64,
-        .matrix_panel_height = 32,
-        .chain_rows = 3,
+        .matrix_panel_height = 64,
+        .chain_rows = 1,
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
-        .panel_kind = RowMapping::S31,
+        .panel_kind = RowMapping::Standard,
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
@@ -29,13 +29,13 @@ constexpr Hub75Config panel_cfg_a{
         .rotation = Hub75Rotation::DEG_90,
     },
     .pins = {
-        .data_base_pin = 0,
+        .data_base_pin = 30,
         .data_n_pins = 6,
-        .rowsel_base_pin = 6,
+        .rowsel_base_pin = 36,
         .rowsel_n_pins = 3,
-        .clk_pin = 11,
-        .strobe_pin = 12,
-        .oen_pin = 13,
+        .clk_pin = 41,
+        .strobe_pin = 42,
+        .oen_pin = 43,
     },
     .color = {
         .bitplanes = 10,
@@ -44,7 +44,7 @@ constexpr Hub75Config panel_cfg_a{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = false,
+    .frame_rate_debug = true,
 };
 
 // Instance B - same color config as A, wired starting 14 pins further along so the two
@@ -52,11 +52,11 @@ constexpr Hub75Config panel_cfg_a{
 constexpr Hub75Config panel_cfg_b{
     .panel = {
         .matrix_panel_width = 64,
-        .matrix_panel_height = 32,
-        .chain_rows = 5,
+        .matrix_panel_height = 64,
+        .chain_rows = 1,
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
-        .panel_kind = RowMapping::S31,
+        .panel_kind = RowMapping::Standard,
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
