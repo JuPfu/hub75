@@ -15,11 +15,13 @@ template <uint32_t W, uint32_t H>
 class AntialiasedLine : public PicoGraphics_PenRGB888
 {
 private:
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
+
     uint32_t color_brightness(uint32_t color, float brightness);
     float fPartOfNumber(float x);
 
 public:
-    explicit AntialiasedLine() : PicoGraphics_PenRGB888(W, H, nullptr) {}
+    explicit AntialiasedLine() : PicoGraphics_PenRGB888(W, H, pixel_buf_) {}
 
     void drawLine(float x1, float y1, float x2, float y2, uint32_t color);
 };

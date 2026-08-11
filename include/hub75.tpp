@@ -482,34 +482,16 @@ void Hub75Driver<Cfg>::configure_pio()
 
         if (stream_ok)
         {
-            static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
-            static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
-
-            bool row_ok;
-            if constexpr (Cfg.panel.inverted_stb)
-            {
-                row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
-                                            { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                  &hub75_row_inverted_program,
-                                                  &pio_config_.row_pio,
-                                                  &pio_config_.sm_row,
-                                                  &pio_config_.row_prog_offs,
-                                                  row_lo,
-                                                  row_hi - row_lo + 1,
-                                                  true); });
-            }
-            else
-            {
-                row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                                            { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                  &hub75_row_program,
-                                                  &pio_config_.row_pio,
-                                                  &pio_config_.sm_row,
-                                                  &pio_config_.row_prog_offs,
-                                                  row_lo,
-                                                  row_hi - row_lo + 1,
-                                                  true); });
-            }
+            // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
+            // level (see hub75_row_program_init), so there is only one row program.
+            bool row_ok = hub75_claim_on_pio(candidate, [&]
+                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                   &hub75_row_program,
+                                                   &pio_config_.row_pio,
+                                                   &pio_config_.sm_row,
+                                                   &pio_config_.row_prog_offs,
+                                                   Cfg.pins.rowsel_base_pin,
+                                                   Cfg.pins.oen_pin - Cfg.pins.rowsel_base_pin + 1, true); });
 
             if (row_ok)
             {
@@ -526,18 +508,16 @@ void Hub75Driver<Cfg>::configure_pio()
     if (!placed)
     {
         panic("Failed to find a PIO block with room for hub75_bitplane_stream_program + "
-              "hub75_row%s_program (checked all %d blocks)\n",
-              Cfg.panel.inverted_stb ? "_inverted" : "", (int)NUM_PIOS);
+              "hub75_row_program (checked all %d blocks)\n",
+              (int)NUM_PIOS);
     }
 
     hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
 
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    // base_latch_wait_cycles passed as parameter to hub75_row program
-    if constexpr (Cfg.panel.inverted_stb)
-        hub75_row_inverted_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles);
-    else
-        hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles);
+    // base_latch_wait_cycles passed as parameter to hub75_row program.
+    // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
+    hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
 
     // State machine for "parallelized" building of the bit-plane structure. No IRQ/GPIO use
     // (see src/hub75.pio), so unlike stream/row it isn't restricted to any particular block or
