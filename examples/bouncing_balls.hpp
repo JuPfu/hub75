@@ -2,7 +2,6 @@
 
 #include "../libraries/pico_graphics/pico_graphics.hpp"
 #include "../libraries/bitmap_fonts/font14_outline_data.hpp"
-
 #include <random>
 
 using namespace pimoroni;
@@ -15,11 +14,13 @@ private:
     {
         float x;
         float y;
-        uint r;
+        uint8_t r;
         float dx;
         float dy;
         Pen pen;
     };
+
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
 
     std::vector<mPoint> mShapes;
 
@@ -31,7 +32,7 @@ private:
     void mCreateShapes(int quantityOfBalls);
 
 public:
-    explicit BouncingBalls(uint quantityOfBalls = 10) : PicoGraphics_PenRGB888(W, H, nullptr)
+    explicit BouncingBalls(uint quantityOfBalls = 10) : PicoGraphics_PenRGB888(W, H, pixel_buf_)
     {
         mCreateShapes(quantityOfBalls);
 
@@ -66,24 +67,20 @@ void BouncingBalls<W, H>::bounce()
         shape.x += shape.dx;
         shape.y += shape.dy;
 
-        if (shape.x - shape.r < 0)
-        {
+        if (shape.x - shape.r < 0) {
             shape.dx = -shape.dx;
             shape.x = shape.r;
         }
-        else if (shape.x + shape.r >= bound_w)
-        {
+        else if (shape.x + shape.r >= bound_w) {
             shape.dx = -shape.dx;
             shape.x = bound_w - shape.r;
         }
 
-        if (shape.y - shape.r < 0)
-        {
+        if (shape.y - shape.r < 0) {
             shape.dy = -shape.dy;
             shape.y = shape.r;
         }
-        else if (shape.y + shape.r >= bound_h)
-        {
+        else if (shape.y + shape.r >= bound_h) {
             shape.dy = -shape.dy;
             shape.y = bound_h - shape.r;
         }
@@ -99,15 +96,15 @@ void BouncingBalls<W, H>::bounce()
 template <uint32_t W, uint32_t H>
 void BouncingBalls<W, H>::mCreateShapes(int quantityOfBalls)
 {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> rand_x(0, bounds.w - 1);
-    std::uniform_int_distribution<int> rand_y(0, bounds.h - 1);
-    std::uniform_int_distribution<int> rand_r(bounds.w >= 64 ? 2 : 1, bounds.w >= 64 ? 6 : 3);
-    std::uniform_real_distribution<float> rand_speed(-2.0f, 2.0f);
-    std::uniform_int_distribution<int> rand_color(0, 255);
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    static std::uniform_int_distribution<int> rand_x(0, bounds.w - 1);
+    static std::uniform_int_distribution<int> rand_y(0, bounds.h - 1);
+    static std::uniform_int_distribution<int> rand_r(bounds.w >= 64 ? 2 : 1, bounds.w >= 64 ? 6 : 3);
+    static std::uniform_real_distribution<float> rand_speed(-2.0f, 2.0f);
+    static std::uniform_int_distribution<int> rand_color(0, 255);
 
-    for (uint i = 0; i < quantityOfBalls; i++)
+    for (uint8_t i = 0; i < quantityOfBalls; i++)
     {
         mShapes.emplace_back(mPoint{
             static_cast<float>(rand_x(gen)),
@@ -115,7 +112,7 @@ void BouncingBalls<W, H>::mCreateShapes(int quantityOfBalls)
             static_cast<uint8_t>(rand_r(gen)),
             rand_speed(gen),
             rand_speed(gen),
-            create_pen(rand_color(gen), rand_color(gen), rand_color(gen))});
+            create_pen(rand_color(gen), rand_color(gen), rand_color(gen))
+        });
     }
 }
-

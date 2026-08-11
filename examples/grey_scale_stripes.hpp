@@ -10,6 +10,8 @@ class GreyScaleStripes : public PicoGraphics_PenRGB888
 {
 
 private:
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
+
     void drawPixel(int x, int y, uint32_t color)
     {
         set_pen(color);
@@ -17,7 +19,7 @@ private:
     }
 
 public:
-    explicit GreyScaleStripes() : PicoGraphics_PenRGB888(W, H, nullptr)
+    explicit GreyScaleStripes() : PicoGraphics_PenRGB888(W, H, pixel_buf_)
     {
         set_pen(0);
         clear();
