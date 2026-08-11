@@ -100,12 +100,11 @@ target_sources(hub75_demo PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/hue_value_spectrum.hpp
-
-
+        ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
+        ${CMAKE_CURRENT_LIST_DIR}/examples/rotator.hpp
         ${CMAKE_CURRENT_LIST_DIR}/hub75_demo.cpp
         )
 
