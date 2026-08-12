@@ -31,13 +31,13 @@ constexpr Hub75Config panel_cfg{
         .rotation = Hub75Rotation::DEG_0,
     },
     .pins = {
-        .data_base_pin = 0,
+        .data_base_pin = 30,
         .data_n_pins = 6,
-        .rowsel_base_pin = 6,
+        .rowsel_base_pin = 36,
         .rowsel_n_pins = 5,
-        .clk_pin = 11,
-        .strobe_pin = 12,
-        .oen_pin = 13,
+        .clk_pin = 41,
+        .strobe_pin = 42,
+        .oen_pin = 43,
     },
     .color = {
         .bitplanes = 10,
@@ -46,7 +46,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = false,
+    .frame_rate_debug = true,
 };
 
 using Panel = Hub75Driver<panel_cfg>;
@@ -220,7 +220,8 @@ int main()
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
-    if (demo_index < 0) {
+    if (demo_index < 0)
+    {
         demo_index = 0;
         add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
     }
@@ -228,8 +229,8 @@ int main()
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
-    float hz = 100.0f;
-    float ms = 1000.0f / hz;
+    const float fps = 100.0f;
+    const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel
     driver.setBasisBrightness(8);
@@ -239,6 +240,8 @@ int main()
     driver.setIntensity(intensity);
 
     float step = -0.005f;
+
+    absolute_time_t next_frame = make_timeout_time_ms((uint32_t)frame_delay_ms);
 
     while (true)
     {
@@ -306,7 +309,7 @@ int main()
         {
             step = -step;
         }
-
-        sleep_ms(ms); // hz updates per second - the HUB75 driver is running independently usually with far more than 200Hz (see README.md)
+        sleep_until(next_frame);
+        next_frame = delayed_by_ms(next_frame, (uint32_t)frame_delay_ms);
     }
 }
