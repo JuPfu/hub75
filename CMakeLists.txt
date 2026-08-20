@@ -39,6 +39,21 @@ project(hub75_demo C CXX ASM)
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
 
+# ====================================================================================
+# Panel / driver configuration
+#
+
+set(PANEL_GENERIC 0)
+set(PANEL_FM6126A 1)
+set(PANEL_RUL6024 2)
+
+set(ROW_MAP_STANDARD 0) # Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
+set(ROW_MAP_SPLIT 1)    # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+set(ROW_MAP_S31 2)      # S31 mapping. Four-way interleaved quarter mapping mostly used for high brightness or outdoor panels, sometimes also advertised as '1/8 scan'.
+
+set(CHAIN_MODE_SERPENTINE 0)
+set(CHAIN_MODE_RASTER 1)
+
 # Add library. This is the core HUB75 driver.
 add_library(hub75 STATIC)
 
@@ -68,32 +83,15 @@ target_include_directories(hub75 PRIVATE
 
 pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
 
-
-# Add demo executable. Everything that is only required for the demo remains here.
-add_executable(hub75_demo hub75_demo.cpp )
-
-pico_set_program_name(hub75_demo "hub75_demo")
-pico_set_program_version(hub75_demo "3.1")
-
-pico_set_float_implementation(hub75_demo pico)
-
-set(PANEL_GENERIC 0)
-set(PANEL_FM6126A 1)
-set(PANEL_RUL6024 2)
-
-set(ROW_MAP_STANDARD 0) # Standard HUB75 mapping. Two rows per address. Used by the majority of 1/16-scan indoor panels.
-set(ROW_MAP_SPLIT 1)    # Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-set(ROW_MAP_S31 2)      # S31 mapping. Four-way interleaved quarter mapping mostly used for high brightness or outdoor panels, sometimes also advertised as '1/8 scan'.
-
-set(CHAIN_MODE_SERPENTINE 0)
-set(CHAIN_MODE_RASTER 1)
-
 # No need to modify preprocessor defines in hub75.cpp - instead set their values here.
+#
+# target_compile_definitions arePUBLIC so any target that links "hub75" (e.g. hub75_demo below, or a
+# consumer project's own executable) automatically inherits the exact same panel configuration.
 #
 # Example:
 # Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
 # Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
-target_compile_definitions(hub75_demo PRIVATE
+target_compile_definitions(hub75 PUBLIC
     # PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
@@ -124,6 +122,14 @@ target_compile_definitions(hub75_demo PRIVATE
     FRAME_RATE=false            # for testing and debugging purpose only: output frame rate information (printf) in monitor - set to `false` for production
 )
 
+# Add demo executable. Everything that is only required for the demo remains here.
+add_executable(hub75_demo hub75_demo.cpp)
+
+pico_set_program_name(hub75_demo "hub75_demo")
+pico_set_program_version(hub75_demo "3.1")
+
+pico_set_float_implementation(hub75_demo pico)
+
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(hub75_demo 0)
 pico_enable_stdio_usb(hub75_demo 1)
@@ -132,7 +138,6 @@ add_subdirectory(common)
 add_subdirectory(libraries)
 
 target_sources(hub75_demo PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.cpp
@@ -141,21 +146,11 @@ target_sources(hub75_demo PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
         ${CMAKE_CURRENT_LIST_DIR}/examples/hue_value_spectrum.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/hub75_demo.cpp
         )
 
-# Add the standard library to the build
 target_link_libraries(hub75_demo PRIVATE
-        pico_stdlib
-        pico_multicore
-        pico_aon_timer
-        hardware_pio
-        hardware_dma
-        hardware_vreg
-        pico_graphics)
+        hub75)
 
 if(PICO_CYW43_SUPPORTED)
     target_link_libraries(hub75_demo PRIVATE
@@ -164,13 +159,7 @@ endif()
 
 # Add the standard include files to the build
 target_include_directories(hub75_demo PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/include
-        ${CMAKE_CURRENT_LIST_DIR}/src
         ${CMAKE_CURRENT_LIST_DIR}/examples
 )
 
-pico_generate_pio_header(hub75_demo ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
-
-
 pico_add_extra_outputs(hub75_demo)
-
