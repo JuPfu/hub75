@@ -1140,7 +1140,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     // Single panel, with display rotation support.
     //
     // index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
-    // We decompose each into (dx, dy) and redirect through rotated_src_index().
+    // decompose each into (dx, dy) and redirect through rotated_src_index().
 
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
@@ -1161,7 +1161,9 @@ __attribute__((optimize("unroll-loops"))) void update(
 
     constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
 
-    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+    size_t fb_index = 0;
+
+    for (int j = 0; j < total_pairs; ++j)
     {
         // Panel-side flat index (destination address in display space).
         // Single-panel case: this index is always within [0, W*H), so a
@@ -1169,8 +1171,8 @@ __attribute__((optimize("unroll-loops"))) void update(
         const int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
         const int32_t index2 = index + HALF_PANEL_OFFSET;
 
-        rgb_buffer[fb_index] = LUT_MAPPING(src[rotated_src_index(index % W, index / W, W, H)]);
-        rgb_buffer[fb_index + 1] = LUT_MAPPING(src[rotated_src_index(index2 % W, index2 / W, W, H)]);
+        rgb_buffer[fb_index++] = LUT_MAPPING(src[rotated_src_index(index % W, index / W, W, H)]);
+        rgb_buffer[fb_index++] = LUT_MAPPING(src[rotated_src_index(index2 % W, index2 / W, W, H)]);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -1180,14 +1182,35 @@ __attribute__((optimize("unroll-loops"))) void update(
     }
 #else
     // P10 chained — with display rotation support.
-    static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
 
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
 
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
+    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+    constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
+
+    // Always 4 by construction (HALF_PAIRS == MATRIX_PANEL_WIDTH / 4);
+    // spelled out via MATRIX_PANEL_WIDTH/HALF_PAIRS to keep the relationship
+    // to the single-panel formula explicit rather than a bare magic number.
+    constexpr int NUM_OCTANTS = MATRIX_PANEL_WIDTH / HALF_PAIRS;
+    constexpr int NUM_ADDRESSES = MATRIX_PANEL_HEIGHT / NUM_OCTANTS;
+
+    static_assert(NUM_ADDRESSES == PanelConfig::SCAN_DEPTH,
+                  "ROW_MAP_SPLIT requires ROWSEL_N_PINS chosen so that "
+                  "PanelConfig::SCAN_DEPTH == MATRIX_PANEL_HEIGHT / 4 "
+                  "(this panel family addresses 4 column-octants per row-select address)");
+
     size_t fb_index = 0;
 
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
+    for (int address = 0; address < NUM_ADDRESSES; ++address)
     {
         for (int v = 0; v < CHAIN_ROWS; ++v)
         {
@@ -1195,44 +1218,41 @@ __attribute__((optimize("unroll-loops"))) void update(
 
             for (int h = 0; h < CHAIN_COLS; ++h)
             {
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
+                const int phys_h = reverse ? (CHAIN_COLS - 1 - h) : h;
 
-                const int32_t row_ptr[4] = {
-                    row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[2] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[3] * PanelConfig::stride_to_paired_row,
-                };
-
-                // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
-                // Decompose fully (dx_base AND dy) per scan group — 4 of eachvper (row, v, h) triplet
-                const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
-                const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
-
-                if (reverse)
+                for (int octant = 0; octant < NUM_OCTANTS; ++octant)
                 {
-                    // Serpentine physical 180° correction:
-                    //   - scan row reversed  → map_panel_row
-                    //   - i reversed         → below
-                    //   - scan group order   → p counts 3..0
-                    // DISPLAY_ROTATION composited independently via rot_lut().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    const int line = address * NUM_OCTANTS + octant;
+
+                    for (int counter = 0; counter < COLUMN_PAIRS; ++counter)
                     {
-                        for (int p = 3; p >= 0; --p)
+                        // Panel-native split-half addressing — identical formula
+                        // to the single-panel branch above, evaluated per (line, counter)
+                        // instead of the flat j counter (line*COLUMN_PAIRS + counter == j).
+                        const int32_t local_index = !(counter & PAIR_HALF_BIT) ? (line << PAIR_HALF_SHIFT) + counter : GROUP_ROW_OFFSET + (line << PAIR_HALF_SHIFT) + (counter - HALF_PAIRS);
+                        const int32_t local_index2 = local_index + HALF_PANEL_OFFSET;
+
+                        int local_row = local_index / MATRIX_PANEL_WIDTH;
+                        int local_col = local_index % MATRIX_PANEL_WIDTH;
+                        int local_row2 = local_index2 / MATRIX_PANEL_WIDTH;
+                        int local_col2 = local_index2 % MATRIX_PANEL_WIDTH;
+
+                        if (reverse)
                         {
-                            rgb_buffer[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
+                            // 180° source mirror only — write order/slot stays fixed.
+                            local_row = MATRIX_PANEL_HEIGHT - 1 - local_row;
+                            local_col = MATRIX_PANEL_WIDTH - 1 - local_col;
+                            local_row2 = MATRIX_PANEL_HEIGHT - 1 - local_row2;
+                            local_col2 = MATRIX_PANEL_WIDTH - 1 - local_col2;
                         }
-                    }
-                }
-                else
-                {
-                    // Normal orientation
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        for (int p = 0; p < 4; ++p)
-                        {
-                            rgb_buffer[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
-                        }
+
+                        const int dx = phys_h * MATRIX_PANEL_WIDTH + local_col;
+                        const int dy = v * MATRIX_PANEL_HEIGHT + local_row;
+                        const int dx2 = phys_h * MATRIX_PANEL_WIDTH + local_col2;
+                        const int dy2 = v * MATRIX_PANEL_HEIGHT + local_row2;
+
+                        rgb_buffer[fb_index++] = rot_lut(src, dx, dy, 0, W, H);
+                        rgb_buffer[fb_index++] = rot_lut(src, dx2, dy2, 0, W, H);
                     }
                 }
             }
@@ -1523,13 +1543,15 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 
     constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
 
-    for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+    size_t fb_index = 0;
+
+    for (int j = 0; j < total_pairs; ++j)
     {
         const int32_t pf = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
         const int32_t pf2 = pf + HALF_PANEL_OFFSET_PX;
 
-        rgb_buffer[fb_index] = rot_lut_rgb(src, pf % W, pf / W, 0, W, H);
-        rgb_buffer[fb_index + 1] = rot_lut_rgb(src, pf2 % W, pf2 / W, 0, W, H);
+        rgb_buffer[fb_index++] = rot_lut_rgb(src, pf % W, pf / W, 0, W, H);
+        rgb_buffer[fb_index++] = rot_lut_rgb(src, pf2 % W, pf2 / W, 0, W, H);
 
         if (++counter >= COLUMN_PAIRS)
         {
@@ -1539,14 +1561,32 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     }
 #else
     // P10 chained — with display rotation support (BGR byte layout).
-    static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
 
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
 
+    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
+    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
+    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
+    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+    constexpr int HALF_PANEL_OFFSET_PX = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE; // pixels, not bytes
+
+    constexpr int NUM_OCTANTS = MATRIX_PANEL_WIDTH / HALF_PAIRS; // always 4
+    constexpr int NUM_ADDRESSES = MATRIX_PANEL_HEIGHT / NUM_OCTANTS;
+
+    static_assert(NUM_ADDRESSES == PanelConfig::SCAN_DEPTH,
+                  "ROW_MAP_SPLIT requires ROWSEL_N_PINS chosen so that "
+                  "PanelConfig::SCAN_DEPTH == MATRIX_PANEL_HEIGHT / 4 "
+                  "(this panel family addresses 4 column-octants per row-select address)");
+
     size_t fb_index = 0;
 
-    for (int row = 0; row < PanelConfig::SCAN_DEPTH; ++row)
+    for (int address = 0; address < NUM_ADDRESSES; ++address)
     {
         for (int v = 0; v < CHAIN_ROWS; ++v)
         {
@@ -1554,46 +1594,41 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 
             for (int h = 0; h < CHAIN_COLS; ++h)
             {
-                const int32_t row_base = map_panel_row(row, v, h, reverse);
+                const int phys_h = reverse ? (CHAIN_COLS - 1 - h) : h;
 
-                // Pixel-domain row pointers (no byte multiply yet — rot_lut_rgb performs the *3 conversion internally after rotation).
-                const int32_t row_ptr[4] = {
-                    row_base + scan_map[0] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[1] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[2] * PanelConfig::stride_to_paired_row,
-                    row_base + scan_map[3] * PanelConfig::stride_to_paired_row,
-                };
-
-                // row_ptr[p] is only guaranteed W-aligned when CHAIN_COLS == 1.
-                // Decompose fully (dx_base AND dy) once per scan group.
-                const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
-                const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
-
-                if (reverse)
+                for (int octant = 0; octant < NUM_OCTANTS; ++octant)
                 {
-                    // 180° rotation
-                    //
-                    // reverse:
-                    //   - scan row       (map_panel_row)
-                    //   - traversal      (reverse i)
-                    //   - scan group     (reverse p)
-                    // DISPLAY_ROTATION composited independently via rot_lut_rgb().
-                    for (int i = MATRIX_PANEL_WIDTH - 1; i >= 0; --i)
+                    const int line = address * NUM_OCTANTS + octant;
+
+                    for (int counter = 0; counter < COLUMN_PAIRS; ++counter)
                     {
-                        for (int p = 3; p >= 0; --p)
+                        // Panel-native split-half addressing — identical formula
+                        // to the single-panel branch above, evaluated per (line, counter)
+                        // instead of the flat j counter (line*COLUMN_PAIRS + counter == j).
+                        const int32_t local_pf = !(counter & PAIR_HALF_BIT) ? (line << PAIR_HALF_SHIFT) + counter : GROUP_ROW_OFFSET + (line << PAIR_HALF_SHIFT) + (counter - HALF_PAIRS);
+                        const int32_t local_pf2 = local_pf + HALF_PANEL_OFFSET_PX;
+
+                        int local_row = local_pf / MATRIX_PANEL_WIDTH;
+                        int local_col = local_pf % MATRIX_PANEL_WIDTH;
+                        int local_row2 = local_pf2 / MATRIX_PANEL_WIDTH;
+                        int local_col2 = local_pf2 % MATRIX_PANEL_WIDTH;
+
+                        if (reverse)
                         {
-                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base[p], dy[p], i, W, H);
+                            // 180° source mirror only — write order/slot stays fixed.
+                            local_row = MATRIX_PANEL_HEIGHT - 1 - local_row;
+                            local_col = MATRIX_PANEL_WIDTH - 1 - local_col;
+                            local_row2 = MATRIX_PANEL_HEIGHT - 1 - local_row2;
+                            local_col2 = MATRIX_PANEL_WIDTH - 1 - local_col2;
                         }
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < MATRIX_PANEL_WIDTH; ++i)
-                    {
-                        for (int p = 0; p < 4; ++p)
-                        {
-                            rgb_buffer[fb_index++] = rot_lut_rgb(src, dx_base[p], dy[p], i, W, H);
-                        }
+
+                        const int dx = phys_h * MATRIX_PANEL_WIDTH + local_col;
+                        const int dy = v * MATRIX_PANEL_HEIGHT + local_row;
+                        const int dx2 = phys_h * MATRIX_PANEL_WIDTH + local_col2;
+                        const int dy2 = v * MATRIX_PANEL_HEIGHT + local_row2;
+
+                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
+                        rgb_buffer[fb_index++] = rot_lut_rgb(src, dx2, dy2, 0, W, H);
                     }
                 }
             }
