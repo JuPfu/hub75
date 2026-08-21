@@ -1,0 +1,92 @@
+<svg width="680" height="460" viewBox="0 0 680 460" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>How one address's row of pixel data is built column-octant by column-octant, with the interleaved R,G,B word for one column (ROW_MAP_SPLIT)</title>
+<desc>Four octant containers spanning the panel's 32 columns in 8-column chunks, each split into two write steps for its two row pairs, with one column of step 1 zoomed in below to show that R0 G0 B0 for row 0 and R8 G8 B8 for row 8 are shifted out together as one six-value word per clock.</desc>
+<style>
+  .bg { fill: #ffffff; }
+  .container { fill: none; stroke: #888780; stroke-width: 1; stroke-dasharray: 3 3; }
+  .step { fill: #EEEDFE; stroke: #534AB7; stroke-width: 1; }
+  .chip-a { fill: #EEEDFE; stroke: #534AB7; stroke-width: 1; }
+  .chip-b { fill: #AFA9EC; stroke: #26215C; stroke-width: 1; }
+  .highlight { fill: none; stroke: #5F5E5A; stroke-width: 1.5; }
+  .title { fill: #2C2C2A; font: 500 14px sans-serif; }
+  .sub { fill: #5F5E5A; font: 400 12px sans-serif; }
+  .label { fill: #26215C; font: 400 12px sans-serif; }
+  .label-a { fill: #3C3489; font: 400 12px sans-serif; }
+  .label-b { fill: #26215C; font: 400 12px sans-serif; }
+  .caption { fill: #5F5E5A; font: 400 12px sans-serif; }
+  .arrowline { stroke: #5F5E5A; stroke-width: 1; fill: none; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1e1e1e; }
+    .container { stroke: #B4B2A9; }
+    .step, .chip-a { fill: #3C3489; stroke: #AFA9EC; }
+    .chip-b { fill: #534AB7; stroke: #7F77DD; }
+    .highlight { stroke: #D3D1C7; }
+    .title { fill: #F1EFE8; }
+    .sub { fill: #D3D1C7; }
+    .label { fill: #CECBF6; }
+    .label-a { fill: #CECBF6; }
+    .label-b { fill: #EEEDFE; }
+    .caption { fill: #D3D1C7; }
+    .arrowline { stroke: #D3D1C7; }
+  }
+</style>
+<rect class="bg" x="0" y="0" width="680" height="460"/>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" class="arrowline"/>
+  </marker>
+</defs>
+<line class="arrowline" x1="46" y1="30" x2="630" y2="30" marker-end="url(#arrow)"/>
+<text class="sub" x="340" y="18" text-anchor="middle">Write order for address 0 (cols 0-31 of rows 0, 4, 8, 12)</text>
+
+<g>
+<rect class="container" x="41" y="45" width="140" height="165" rx="10"/>
+<text class="title" x="111" y="63" text-anchor="middle">Octant 0</text>
+<text class="sub" x="111" y="78" text-anchor="middle">cols 0-7</text>
+<rect class="step" x="51" y="90" width="120" height="48" rx="6"/><text class="label" x="111" y="114" text-anchor="middle" dominant-baseline="central">rows 0 &amp; 8</text>
+<rect class="step" x="51" y="146" width="120" height="48" rx="6"/><text class="label" x="111" y="170" text-anchor="middle" dominant-baseline="central">rows 4 &amp; 12</text>
+<rect class="highlight" x="90" y="90" width="20" height="104" rx="3"/>
+</g>
+<g>
+<rect class="container" x="194" y="45" width="140" height="165" rx="10"/>
+<text class="title" x="264" y="63" text-anchor="middle">Octant 1</text>
+<text class="sub" x="264" y="78" text-anchor="middle">cols 8-15</text>
+<rect class="step" x="204" y="90" width="120" height="48" rx="6"/><text class="label" x="264" y="114" text-anchor="middle" dominant-baseline="central">rows 0 &amp; 8</text>
+<rect class="step" x="204" y="146" width="120" height="48" rx="6"/><text class="label" x="264" y="170" text-anchor="middle" dominant-baseline="central">rows 4 &amp; 12</text>
+</g>
+<g>
+<rect class="container" x="347" y="45" width="140" height="165" rx="10"/>
+<text class="title" x="417" y="63" text-anchor="middle">Octant 2</text>
+<text class="sub" x="417" y="78" text-anchor="middle">cols 16-23</text>
+<rect class="step" x="357" y="90" width="120" height="48" rx="6"/><text class="label" x="417" y="114" text-anchor="middle" dominant-baseline="central">rows 0 &amp; 8</text>
+<rect class="step" x="357" y="146" width="120" height="48" rx="6"/><text class="label" x="417" y="170" text-anchor="middle" dominant-baseline="central">rows 4 &amp; 12</text>
+</g>
+<g>
+<rect class="container" x="500" y="45" width="140" height="165" rx="10"/>
+<text class="title" x="570" y="63" text-anchor="middle">Octant 3</text>
+<text class="sub" x="570" y="78" text-anchor="middle">cols 24-31</text>
+<rect class="step" x="510" y="90" width="120" height="48" rx="6"/><text class="label" x="570" y="114" text-anchor="middle" dominant-baseline="central">rows 0 &amp; 8</text>
+<rect class="step" x="510" y="146" width="120" height="48" rx="6"/><text class="label" x="570" y="170" text-anchor="middle" dominant-baseline="central">rows 4 &amp; 12</text>
+</g>
+
+<text class="sub" x="100" y="222" text-anchor="middle">&#8595; zoomed below</text>
+<text class="caption" x="340" y="240" text-anchor="middle">Same 8 columns written twice per octant, once per row pair, before moving to the next octant</text>
+
+<g>
+<rect class="container" x="140" y="255" width="400" height="140" rx="10"/>
+<text class="title" x="340" y="275" text-anchor="middle">Octant 0, step 1 — one column, one CLK pulse</text>
+<line class="arrowline" x1="155" y1="288" x2="525" y2="288" marker-end="url(#arrow)"/>
+
+<rect class="chip-a" x="152" y="298" width="56" height="40" rx="6"/><text class="label-a" x="180" y="318" text-anchor="middle" dominant-baseline="central">R0</text>
+<rect class="chip-a" x="216" y="298" width="56" height="40" rx="6"/><text class="label-a" x="244" y="318" text-anchor="middle" dominant-baseline="central">G0</text>
+<rect class="chip-a" x="280" y="298" width="56" height="40" rx="6"/><text class="label-a" x="308" y="318" text-anchor="middle" dominant-baseline="central">B0</text>
+<rect class="chip-b" x="344" y="298" width="56" height="40" rx="6"/><text class="label-b" x="372" y="318" text-anchor="middle" dominant-baseline="central">R8</text>
+<rect class="chip-b" x="408" y="298" width="56" height="40" rx="6"/><text class="label-b" x="436" y="318" text-anchor="middle" dominant-baseline="central">G8</text>
+<rect class="chip-b" x="472" y="298" width="56" height="40" rx="6"/><text class="label-b" x="500" y="318" text-anchor="middle" dominant-baseline="central">B8</text>
+
+<text class="sub" x="340" y="358" text-anchor="middle">pins: DATA_BASE_PIN .. DATA_BASE_PIN+5</text>
+</g>
+
+<text class="caption" x="340" y="415" text-anchor="middle">Step 2 of each octant repeats this pattern with rows 4 &amp; 12</text>
+<text class="caption" x="340" y="430" text-anchor="middle">(R4 G4 B4, then R12 G12 B12) — same column, same word structure</text>
+</svg>

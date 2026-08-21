@@ -1,0 +1,53 @@
+<svg width="680" height="300" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Row-select addresses and the physical rows they drive (ROW_MAP_SPLIT, 32x16 example)</title>
+<style>
+  .bg { fill: #ffffff; }
+  .container { fill: none; stroke: #888780; stroke-width: 1; stroke-dasharray: 3 3; }
+  .chip { fill: #EEEDFE; stroke: #534AB7; stroke-width: 1; }
+  .title { fill: #2C2C2A; font: 500 14px sans-serif; }
+  .label { fill: #26215C; font: 400 12px sans-serif; }
+  .caption { fill: #5F5E5A; font: 400 12px sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1e1e1e; }
+    .container { stroke: #B4B2A9; }
+    .chip { fill: #3C3489; stroke: #AFA9EC; }
+    .title { fill: #F1EFE8; }
+    .label { fill: #CECBF6; }
+    .caption { fill: #D3D1C7; }
+  }
+</style>
+<rect class="bg" x="0" y="0" width="680" height="300"/>
+<g>
+<rect class="container" x="41" y="60" width="140" height="195" rx="10"/>
+<text class="title" x="111" y="82" text-anchor="middle">Address 0</text>
+<rect class="chip" x="51" y="100" width="120" height="26" rx="6"/><text class="label" x="111" y="117" text-anchor="middle">Row 0</text>
+<rect class="chip" x="51" y="134" width="120" height="26" rx="6"/><text class="label" x="111" y="151" text-anchor="middle">Row 4</text>
+<rect class="chip" x="51" y="168" width="120" height="26" rx="6"/><text class="label" x="111" y="185" text-anchor="middle">Row 8</text>
+<rect class="chip" x="51" y="202" width="120" height="26" rx="6"/><text class="label" x="111" y="219" text-anchor="middle">Row 12</text>
+</g>
+<g>
+<rect class="container" x="194" y="60" width="140" height="195" rx="10"/>
+<text class="title" x="264" y="82" text-anchor="middle">Address 1</text>
+<rect class="chip" x="204" y="100" width="120" height="26" rx="6"/><text class="label" x="264" y="117" text-anchor="middle">Row 1</text>
+<rect class="chip" x="204" y="134" width="120" height="26" rx="6"/><text class="label" x="264" y="151" text-anchor="middle">Row 5</text>
+<rect class="chip" x="204" y="168" width="120" height="26" rx="6"/><text class="label" x="264" y="185" text-anchor="middle">Row 9</text>
+<rect class="chip" x="204" y="202" width="120" height="26" rx="6"/><text class="label" x="264" y="219" text-anchor="middle">Row 13</text>
+</g>
+<g>
+<rect class="container" x="347" y="60" width="140" height="195" rx="10"/>
+<text class="title" x="417" y="82" text-anchor="middle">Address 2</text>
+<rect class="chip" x="357" y="100" width="120" height="26" rx="6"/><text class="label" x="417" y="117" text-anchor="middle">Row 2</text>
+<rect class="chip" x="357" y="134" width="120" height="26" rx="6"/><text class="label" x="417" y="151" text-anchor="middle">Row 6</text>
+<rect class="chip" x="357" y="168" width="120" height="26" rx="6"/><text class="label" x="417" y="185" text-anchor="middle">Row 10</text>
+<rect class="chip" x="357" y="202" width="120" height="26" rx="6"/><text class="label" x="417" y="219" text-anchor="middle">Row 14</text>
+</g>
+<g>
+<rect class="container" x="500" y="60" width="140" height="195" rx="10"/>
+<text class="title" x="570" y="82" text-anchor="middle">Address 3</text>
+<rect class="chip" x="510" y="100" width="120" height="26" rx="6"/><text class="label" x="570" y="117" text-anchor="middle">Row 3</text>
+<rect class="chip" x="510" y="134" width="120" height="26" rx="6"/><text class="label" x="570" y="151" text-anchor="middle">Row 7</text>
+<rect class="chip" x="510" y="168" width="120" height="26" rx="6"/><text class="label" x="570" y="185" text-anchor="middle">Row 11</text>
+<rect class="chip" x="510" y="202" width="120" height="26" rx="6"/><text class="label" x="570" y="219" text-anchor="middle">Row 15</text>
+</g>
+<text class="caption" x="340" y="278" text-anchor="middle">Each address lights 4 rows at once: base, base+ROWS_PER_GROUP, base+H/2, base+ROWS_PER_GROUP+H/2</text>
+</svg>

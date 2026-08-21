@@ -6,7 +6,7 @@
 > |---|---|
 > | `HUB75_MULTIPLEX_2_ROWS` (formerly `HUB75_DEFAULT` / `HUB75`) | `ROW_MAP_STANDARD` |
 > | `HUB75_P10_3535_16X32_4S` | `ROW_MAP_SPLIT` |
-> | `HUB75_P3_1415_16S_64X64_S31` | `ROW_MAP_S31` |
+> | `HUB75_P3_1415_16S_64X64_S31` | `ROW_MAP_STANDARD` |
 >
 > Update your `CMakeLists.txt` compile definitions accordingly.
 
@@ -30,9 +30,9 @@
   - [Pixel Mapping Defines — Choosing the Right One for Your Panel](#pixel-mapping-defines--choosing-the-right-one-for-your-panel)
     - [Why This Mapping Step Exists](#why-this-mapping-step-exists)
     - [The Three Defines at a Glance](#the-three-defines-at-a-glance)
-    - [`ROW_MAP_S31` — Standard Two-Row Multiplexing](#row_map_s31--standard-two-row-multiplexing)
+    - [`ROW_MAP_STANDARD` — Standard Two-Row Multiplexing](#row_map_standard--standard-two-row-multiplexing)
     - [`ROW_MAP_SPLIT` — Outdoor P10 Panel, Four-Row Multiplexing](#row_map_split--outdoor-p10-panel-four-row-multiplexing)
-    - [`ROW_MAP_S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing](#row_map_s31--outdoor-p3-6464-panel-four-row-multiplexing)
+    - [`ROW_MAP_STANDARD` — Outdoor P3 64×64 Panel, Four-Row Multiplexing](#row_map_standard--outdoor-p3-6464-panel-four-row-multiplexing)
     - [How to Select the Correct Define — Decision Guide](#how-to-select-the-correct-define--decision-guide)
     - [What Happens When You Set One of These Defines](#what-happens-when-you-set-one-of-these-defines)
     - [Important Notes](#important-notes)
@@ -139,7 +139,7 @@
   - [7. When Nothing Makes Sense Anymore 😄](#7-when-nothing-makes-sense-anymore-)
 - [Boards](#boards)
   - [Overview](#overview-3)
-  - [1. P3QD-64x64-21 / P3-64x64-2012-21A-1.0](#1-p3qd-64x64-21--p3-64x64-2012-21a-10)
+  - [1. P3QD-64x64-21 / P3-64x64-2012-21A-1.0 (`ROW_MAP_STANDARD`)](#1-p3qd-64x64-21--p3-64x64-2012-21a-10-row_map_standard)
     - [Hardware](#hardware)
     - [Pixel Mapping](#pixel-mapping-1)
     - [CMakeLists.txt](#cmakeliststxt)
@@ -147,7 +147,13 @@
     - [Hardware](#hardware-1)
     - [Pixel Mapping](#pixel-mapping-2)
     - [CMakeLists.txt](#cmakeliststxt-1)
-  - [3. QP3 Outdoor / P3-1415 (`ROW_MAP_S31`)](#3-qp3-outdoor--p3-1415-row_map_s31)
+    - [`ROW_MAP_STANDARD` — pixel mapping topology](#row_map_standard--pixel-mapping-topology)
+      - [1. Which rows share an address](#1-which-rows-share-an-address)
+      - [2. How one address's row gets written](#2-how-one-addresss-row-gets-written)
+      - [3. Formula reference](#3-formula-reference)
+      - [4. Chained panels (`CHAIN_COLS`/`CHAIN_ROWS` \> 1)](#4-chained-panels-chain_colschain_rows--1)
+      - [5. Comparison with `ROW_MAP_SPLIT`](#5-comparison-with-row_map_split)
+  - [3. QP3 Outdoor / P3-1415 (`ROW_MAP_STANDARD`)](#3-qp3-outdoor--p3-1415-row_map_standard)
     - [Hardware](#hardware-2)
     - [Pixel Mapping](#pixel-mapping-3)
     - [CMakeLists.txt](#cmakeliststxt-2)
@@ -155,6 +161,12 @@
     - [Hardware](#hardware-3)
     - [Pixel Mapping](#pixel-mapping-4)
     - [CMakeLists.txt](#cmakeliststxt-3)
+    - [`ROW_MAP_SPLIT` — pixel mapping topology](#row_map_split--pixel-mapping-topology)
+      - [1. Which rows share an address](#1-which-rows-share-an-address-1)
+      - [2. How one address's row gets built, column by column](#2-how-one-addresss-row-gets-built-column-by-column)
+      - [3. Formula reference](#3-formula-reference-1)
+      - [4. Chained panels (`CHAIN_COLS`/`CHAIN_ROWS` \> 1)](#4-chained-panels-chain_colschain_rows--1-1)
+      - [5. Configuration requirement](#5-configuration-requirement)
   - [Template for a New Board](#template-for-a-new-board)
 
 
@@ -250,7 +262,7 @@ set(PICO_BOARD pico2 CACHE STRING "Board type")
 # set(PICO_PLATFORM rp2350)
 # set(PICO_BOARD none CACHE STRING "Board type")
 
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     # PICO_RP2350A=0            # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=32      # your matrix panel height
@@ -262,7 +274,7 @@ target_compile_definitions(hub75 PRIVATE
     CLK_PIN=11                  # GPIO pin for CLK
     STROBE_PIN=12               # GPIO pin for STROBE (LATCH)
     OEN_PIN=13                  # GPIO for OE pin
-    ROW_MAPPING=ROW_MAP_S31     # row/buffer mapping topology - default is ROW_MAP_S31 other values are ROW_MAP_SPLIT and ROW_MAP_S31
+    ROW_MAPPING=ROW_MAP_STANDARD     # row/buffer mapping topology - default is ROW_MAP_STANDARD other values are ROW_MAP_SPLIT and ROW_MAP_STANDARD
     ...
 )
 ```
@@ -278,7 +290,7 @@ Most compilation settings can and should be configured by specifying the appropr
 set(PICO_PLATFORM rp2350)
 set(PICO_BOARD none CACHE STRING "Board type")
 
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
     MATRIX_PANEL_HEIGHT=64      # your matrix panel height
@@ -415,7 +427,7 @@ set(PICO_BOARD none CACHE STRING "Board type")
 # Example:
 # Settings for a RP2350B microcontroller with GPIO pins spanning from 30 to 43.
 # Beware to set `PICO_PLATFORM rp2350` and `PICO_BOARD none` prior to `include(pico_sdk_import.cmake)`
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     PICO_RP2350A=0              # PICO_RP2350A=0` means not a RP2350A but a RP2350B microcontroller - uncomment for RP235xB microcontroller only!
     USE_PICO_GRAPHICS=true      # set to false if you use hub75 as a library - any reference to pico_graphics is removed
     MATRIX_PANEL_WIDTH=64       # your matrix panel width
@@ -448,7 +460,7 @@ target_compile_definitions(hub75 PRIVATE
 A minimal configuration for the default RP2350A wiring (GPIO 0–13) only needs to override what differs from the defaults, for example:
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=32
     MATRIX_PANEL_HEIGHT=16
     ROWSEL_N_PINS=3
@@ -469,7 +481,7 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 The three defines below tell the `update()` / `update_bgr()` method how to reorder pixels from
 your application's linear source buffer into the shift-register order that your physical panel
 expects. **Exactly one of them must be active at a time.** If none is set, the driver defaults
-to `ROW_MAP_S31`.
+to `ROW_MAP_STANDARD`.
 
 > ⚠️ Setting the wrong mapping define is one of the most common configuration mistakes.
 > The panel will light up, but the image will look scrambled, interleaved, or repeated
@@ -498,9 +510,9 @@ extra cost.
 
 | Define | Rows lit simultaneously | Typical scan notation | Typical panel dimensions | Address lines needed |
 |---|:---:|---|---|:---:|
-| `ROW_MAP_S31` | 2 | 1/8 S, 1/16 S, 1/32 S | 32×16 / 64×32 / 64×64 | 3 / 4 / 5 |
+| `ROW_MAP_STANDARD` | 2 | 1/8 S, 1/16 S, 1/32 S | 32×16 / 64×32 / 64×64 | 3 / 4 / 5 |
 | `ROW_MAP_SPLIT` | 4 | 1/4 S | 32×16 outdoor | 2 |
-| `ROW_MAP_S31` | 4 | 1/16 S | 64×64 outdoor | 4 |
+| `ROW_MAP_STANDARD` | 4 | 1/16 S | 64×64 outdoor | 4 |
 
 > 💡 The number of address lines (`ROWSEL_N_PINS`) must match the selected mapping.
 > See [Step 2 — Scan Rate and Rows Lit Simultaneously](#step-2--scan-rate-and-rows-lit-simultaneously)
@@ -508,7 +520,7 @@ extra cost.
 
 ---
 
-### `ROW_MAP_S31` — Standard Two-Row Multiplexing
+### `ROW_MAP_STANDARD` — Standard Two-Row Multiplexing
 
 **Use this for the vast majority of HUB75 panels.** It is the correct choice whenever exactly
 **two rows** of the panel are driven at the same time — one from the upper half and one from
@@ -544,29 +556,29 @@ for (size_t fb = 0, j = 0; fb < total_pixels; fb += 2, ++j) {
 
 ```cmake
 # 64×64 standard panel, 1/32 scan (2 rows lit, 5 address pins)
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
     ROWSEL_N_PINS=5
-    # ROW_MAP_S31 is the default — no explicit define required
+    # ROW_MAP_STANDARD is the default — no explicit define required
 )
 
 # 64×32 standard panel, 1/16 scan (2 rows lit, 4 address pins)
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=32
     ROWSEL_N_PINS=4
 )
 
 # 32×16 standard panel, 1/8 scan (2 rows lit, 3 address pins)
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=32
     MATRIX_PANEL_HEIGHT=16
     ROWSEL_N_PINS=3
 )
 ```
 
-> 💡 `ROW_MAP_S31` is the **default**. You do not need to add it to
+> 💡 `ROW_MAP_STANDARD` is the **default**. You do not need to add it to
 > `CMakeLists.txt` unless you are switching back from one of the other defines.
 
 ---
@@ -609,7 +621,7 @@ draws from the first or the second half of the available column pairs, and the
 
 ```cmake
 # 32×16 outdoor panel, 1/4 scan (4 rows lit, 2 address pins)
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=32
     MATRIX_PANEL_HEIGHT=16
     ROW_MAPPING=ROW_MAP_SPLIT
@@ -625,7 +637,7 @@ target_compile_definitions(hub75 PRIVATE
 
 ---
 
-### `ROW_MAP_S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing
+### `ROW_MAP_STANDARD` — Outdoor P3 64×64 Panel, Four-Row Multiplexing
 
 Use this for the **QP3 outdoor 64×64** panel (1415 / 1.4 mm LED pitch, 1/16 scan) and
 panels with the same internal wiring convention — sometimes labelled `-16S-` on a 64-tall
@@ -666,10 +678,10 @@ scan-row pairing of this panel family.
 
 ```cmake
 # 64×64 outdoor P3 panel, 1/16 scan (4 rows lit, 4 address pins)
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
-    ROW_MAPPING=ROW_MAP_S31
+    ROW_MAPPING=ROW_MAP_STANDARD
     ROWSEL_N_PINS=4
     SM_CLOCKDIV_FACTOR=2.75f      # recommended starting value for this panel family
     PANEL_TYPE=PANEL_GENERIC
@@ -678,7 +690,7 @@ target_compile_definitions(hub75 PRIVATE
 
 > ⚠️ A 64×64 panel with a `-16S-` label **could also be a standard two-row panel** at
 > 1/32 scan that the manufacturer labelled inconsistently. If this define produces a
-> scrambled image, try `ROW_MAP_S31` with `ROWSEL_N_PINS=5` instead.
+> scrambled image, try `ROW_MAP_STANDARD` with `ROWSEL_N_PINS=5` instead.
 
 ---
 
@@ -687,19 +699,19 @@ target_compile_definitions(hub75 PRIVATE
 ```
 Does your panel label contain "-16S-" or "-32S-" on a 64-tall panel
 with 5 address pins (A–E)?
-    └─ Yes → ROW_MAP_S31  (standard 1/32 scan, 2 rows lit)
+    └─ Yes → ROW_MAP_STANDARD  (standard 1/32 scan, 2 rows lit)
 
 Does your panel label contain "-16S-" on a 64-tall panel
 with 4 address pins (A–D)?
-    └─ Yes → ROW_MAP_S31  (4 rows lit)
-              If image is still scrambled, try ROW_MAP_S31
+    └─ Yes → ROW_MAP_STANDARD  (4 rows lit)
+              If image is still scrambled, try ROW_MAP_STANDARD
 
 Does your panel label contain "-4S-" and the panel is 32 × 16
 with 2 address pins (A, B)?
     └─ Yes → ROW_MAP_SPLIT
 
 For any other panel, or when uncertain:
-    └─ Start with ROW_MAP_S31 — it covers the majority of panels.
+    └─ Start with ROW_MAP_STANDARD — it covers the majority of panels.
        If the image is stable but scrambled or interleaved, try the others.
 ```
 
@@ -707,10 +719,10 @@ For any other panel, or when uncertain:
 
 | Address pins on connector | Panel height | Rows lit simultaneously | Define to try first |
 |:---:|:---:|:---:|---|
-| 5 (A–E) | 64 | 2 | `ROW_MAP_S31` |
-| 4 (A–D) | 64 | 2 | `ROW_MAP_S31` (e.g. 64×32) |
-| 4 (A–D) | 64 | 4 | `ROW_MAP_S31` |
-| 3 (A–C) | 16 | 2 | `ROW_MAP_S31` |
+| 5 (A–E) | 64 | 2 | `ROW_MAP_STANDARD` |
+| 4 (A–D) | 64 | 2 | `ROW_MAP_STANDARD` (e.g. 64×32) |
+| 4 (A–D) | 64 | 4 | `ROW_MAP_STANDARD` |
+| 3 (A–C) | 16 | 2 | `ROW_MAP_STANDARD` |
 | 2 (A, B) | 16 | 4 | `ROW_MAP_SPLIT` |
 
 ---
@@ -738,7 +750,7 @@ mapping.
 ### Important Notes
 
 - **Exactly one define must be active.** The preprocessor guard in `hub75.hpp` defaults to
-  `ROW_MAP_S31` if none is defined. Defining more than one will cause a
+  `ROW_MAP_STANDARD` if none is defined. Defining more than one will cause a
   compile-time error.
 
 - **`ROWSEL_N_PINS` must match the mapping.** The number of address lines is not derived
@@ -755,7 +767,7 @@ mapping.
   solid-colour or stripe test pattern — change **one parameter at a time**.
 
 - **`SM_CLOCKDIV_FACTOR` may need adjustment for 4-row panels.** Panels using
-  `ROW_MAP_SPLIT` or `ROW_MAP_S31` sometimes exhibit ghosting
+  `ROW_MAP_SPLIT` or `ROW_MAP_STANDARD` sometimes exhibit ghosting
   or flicker at full PIO speed. Start with `SM_CLOCKDIV_FACTOR=1.0f` and increase
   (e.g. `2.0f`, `2.75f`) if artefacts appear. See
   [Step 6 — State Machine Clock Divider](#step-6--state-machine-clock-divider-sm_clockdiv).
@@ -1184,7 +1196,7 @@ static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
 CCM is configured exclusively through `target_compile_definitions` — no source file edits are required beyond the one-line change to `pack_lut_rgb_`.
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     # ... existing defines ...
     SEPARATE_CIE_CHANNELS=true   # required — CCM needs per-channel LUTs
 
@@ -1410,7 +1422,7 @@ Use `CHAIN_MODE_RASTER` only if your physical cable layout already compensates f
 The example below configures a **2×3 array** of 64×64 panels (total virtual display: 192×128 pixels):
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=64         # width of one physical panel
     MATRIX_PANEL_HEIGHT=64        # height of one physical panel
     CHAIN_COLS=3                  # 3 panels side-by-side per chain row
@@ -1521,7 +1533,7 @@ All three supported panel mapping modes work with chained configurations:
 |---|---|
 | `HUB75` (default) | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
 | `ROW_MAP_SPLIT` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
-| `ROW_MAP_S31` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
+| `ROW_MAP_STANDARD` | ✔ all `CHAIN_ROWS` × `CHAIN_COLS` combinations |
 
 ---
 
@@ -1566,7 +1578,7 @@ Rotation is set once, at compile time, and applies to the whole display — incl
 Set `DISPLAY_ROTATION` in `CMakeLists.txt`:
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     DISPLAY_ROTATION=90   # 0 (default), 90, 180, or 270
 )
 ```
@@ -1778,16 +1790,16 @@ When no `target_compile_definitions` entry is provided for a given define, the d
 // Set your panel
 //
 // Example:
-// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define ROW_MAP_S31 should be correct
+// The P3-64*64-32S-V2.0 is a standard Hub75 panel with two rows multiplexed, so define ROW_MAP_STANDARD should be correct
 //
-// #define ROW_MAP_S31      // default - two rows lit simultaneously
+// #define ROW_MAP_STANDARD      // default - two rows lit simultaneously
 // #define ROW_MAP_SPLIT     // four rows lit simultaneously (can be defined via CMake)
-// #define ROW_MAP_S31 // four rows lit simultaneously
+// #define ROW_MAP_STANDARD // four rows lit simultaneously
 //
-// Default to ROW_MAP_S31 if no multiplexing mode is defined
+// Default to ROW_MAP_STANDARD if no multiplexing mode is defined
 // Only define default if none of the mapping modes are already defined
-#if !defined(ROW_MAP_S31) && !defined(ROW_MAP_SPLIT) && !defined(ROW_MAP_S31)
-#define ROW_MAP_S31 // two rows lit simultaneously
+#if !defined(ROW_MAP_STANDARD) && !defined(ROW_MAP_SPLIT) && !defined(ROW_MAP_STANDARD)
+#define ROW_MAP_STANDARD // two rows lit simultaneously
 #endif
 
 // If panel type FM6126A or panel type RUL6024 is selected, an initialisation sequence is sent to the panel
@@ -1901,10 +1913,10 @@ The hub75 driver deduces the number of multiplexed rows from the following rule.
 
 So, the number of multiplexed lines in both examples is $2$, even though the scan parameters (-32S- and -16S-) differ. Internally, the driver uses the number of multiplexed rows to resolve this ambiguity.
 
-In both examples you should choose **ROW_MAP_S31** 
+In both examples you should choose **ROW_MAP_STANDARD** 
 
 ```c
-#define ROW_MAP_S31
+#define ROW_MAP_STANDARD
 ```
 
 For panels **ROW_MAP_SPLIT** the calculation looks like this (the number of rows can easily be counted on the panel 😊):
@@ -1915,13 +1927,13 @@ For panels **ROW_MAP_SPLIT** the calculation looks like this (the number of rows
 
 In summary, the number of address lines on this board is $2$ which corresponds to $4$ rows being multiplexed.
 
-> ⚠️ The multiplexing define (e.g. `ROW_MAP_S31`) does **two things**:
+> ⚠️ The multiplexing define (e.g. `ROW_MAP_STANDARD`) does **two things**:
 > 
 > 1. it defines how many rows are multiplexed **and** 
 > 
 > 2. selects the corresponding pixel mapping
 > 
-> The same applies to `ROW_MAP_SPLIT` and `ROW_MAP_S31`.
+> The same applies to `ROW_MAP_SPLIT` and `ROW_MAP_STANDARD`.
 
 ---
 
@@ -1933,7 +1945,7 @@ This driver provides **predefined mapping modes** for known layouts.
 
 If unsure:
 
-* start with `ROW_MAP_S31`
+* start with `ROW_MAP_STANDARD`
 * if the image looks scrambled, try another mapping
 
 ---
@@ -1947,7 +1959,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
-#define ROW_MAP_S31
+#define ROW_MAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
 // That is 32 = 2 to the power of 5 - we need 5 row select pins  
 #define ROWSEL_N_PINS 5
@@ -1957,7 +1969,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 32
 
-#define ROW_MAP_S31
+#define ROW_MAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
@@ -1966,7 +1978,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 // Example for a 32×16 panel (1/8 scan) - 2 rows lit simultaneously
 #define MATRIX_PANEL_WIDTH 32
 #define MATRIX_PANEL_HEIGHT 16
-#define ROW_MAP_S31
+#define ROW_MAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 8 rows to be adressed via row select.
 // That is 8 equals 2 to the power of 3 - we need 3 row select pins  
 #define ROWSEL_N_PINS 3
@@ -1976,7 +1988,7 @@ The examples below cover the most common panel types. For each one, only `MATRIX
 #define MATRIX_PANEL_WIDTH 64
 #define MATRIX_PANEL_HEIGHT 64
 
-#define ROW_MAP_S31
+#define ROW_MAP_STANDARD
 // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
 // That is 16 equals = 2 to the power of 4 - we need 4 row select pins  
 #define ROWSEL_N_PINS 4
@@ -2008,7 +2020,7 @@ Here an example for a **P3-64*64-32S-V2.0** panel.
 
 // The 32S in the panel name refers to (1/32 scan) - 2 rows lit simultaneously 
 // We can try the standard pixel mapping - maybe we are lucky and the pixel mapping fits
-#define ROW_MAP_S31
+#define ROW_MAP_STANDARD
 // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
 // That is 32 equals 2 to the power of 5 -> we need 5 row select pins (as might be printed on the panel backside - A, B, C, D, E)
 #define ROWSEL_N_PINS 5
@@ -2151,9 +2163,9 @@ This usually indicates a **pixel mapping mismatch**.
 * Try a different mapping define:
 
   ```cpp
-  #define ROW_MAP_S31
+  #define ROW_MAP_STANDARD
   // #define ROW_MAP_SPLIT
-  // #define ROW_MAP_S31
+  // #define ROW_MAP_STANDARD
   ```
 
 ### Typical symptoms
@@ -2261,9 +2273,10 @@ Follow this **minimal recovery procedure**:
 
 1. Use the simplest known-good configuration:
 
-   ```cpp
-  ROW_MAPPING=ROW_MAP_S31 # row/buffer mapping topology - default is ROW_MAP_S31
-   ```
+    ```cpp
+    ROW_MAPPING=ROW_MAP_STANDARD # row/buffer mapping topology - default is ROW_MAP_STANDARD
+    ```
+
 
 2. Verify:
 
@@ -2290,14 +2303,14 @@ This section lists every LED matrix panel used during development and testing of
 
 | # | Panel label | Dimensions | Scan / rows lit | Pixel mapping define | Driver chip(s) | `PANEL_TYPE` |
 |:---:|---|:---:|:---:|---|---|---|
-| [1](#1-p3qd-64x64-21--p3-64x64-2012-21a-10) | P3QD-64x64-21 | 64 × 64 | 1/32 S · 2 rows | `ROW_MAP_S31` | RUC7258D, FM6124DJ | `PANEL_GENERIC` |
-| [2](#2-p3-64x64-32s-v20--2310p3) | P3-64x64-32S-V2.0 | 64 × 64 | 1/32 S · 2 rows | `ROW_MAP_S31` | RUC7258D, RUL6024 | `PANEL_RUL6024` |
-| [3](#3-qp3-outdoor--p3-1415-rowmap_s31) | QP3 Outdoor P3-1415 | 64 × 64 | 1/16 S · 4 rows | `ROW_MAP_S31` | DP5125D | `PANEL_GENERIC` |
+| [1](#1-p3qd-64x64-21--p3-64x64-2012-21a-10) | P3QD-64x64-21 | 64 × 64 | 1/32 S · 2 rows | `ROW_MAP_STANDARD` | RUC7258D, FM6124DJ | `PANEL_GENERIC` |
+| [2](#2-p3-64x64-32s-v20--2310p3) | P3-64x64-32S-V2.0 | 64 × 64 | 1/32 S · 2 rows | `ROW_MAP_STANDARD` | RUC7258D, RUL6024 | `PANEL_RUL6024` |
+| [3](#3-qp3-outdoor--p3-1415-rowmap_s31) | QP3 Outdoor P3-1415 | 64 × 64 | 1/16 S · 4 rows | `ROW_MAP_STANDARD` | DP5125D | `PANEL_GENERIC` |
 | [4](#4-p10-smd-16x32-b--rowmap_split) | P10-SMD-16x32-b | 16 × 32 | 1/4 S · 4 rows | `ROW_MAP_SPLIT` | DP5020B | `PANEL_GENERIC` |
 
 ---
 
-## 1. P3QD-64x64-21 / P3-64x64-2012-21A-1.0
+## 1. P3QD-64x64-21 / P3-64x64-2012-21A-1.0 (`ROW_MAP_STANDARD`)
 
 ### Hardware
 
@@ -2314,12 +2327,12 @@ This section lists every LED matrix panel used during development and testing of
 ### Pixel Mapping
 
 Standard two-row multiplexing. Upper and lower halves are interleaved column by column.
-Use `ROW_MAP_S31` (this is also the default when no mapping define is set).
+Use `ROW_MAP_STANDARD` (this is also the default when no mapping define is set).
 
 ### CMakeLists.txt
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=64           # panel width in pixels
     MATRIX_PANEL_HEIGHT=64          # panel height in pixels
     DATA_BASE_PIN=0                 # first colour data GPIO (R0)
@@ -2329,6 +2342,7 @@ target_compile_definitions(hub75 PRIVATE
     CLK_PIN=11
     STROBE_PIN=12
     OEN_PIN=13
+    ROW_MAPPING=ROW_MAP_STANDARD
     PANEL_TYPE=PANEL_GENERIC
     INVERTED_STB=false
     SM_CLOCKDIV_FACTOR=1.0f
@@ -2342,8 +2356,7 @@ target_compile_definitions(hub75 PRIVATE
 )
 ```
 
-> 💡 `ROW_MAP_S31` is the driver default and does not need to be listed
-> explicitly unless you are switching from a different mapping.
+> 💡 `ROW_MAP_STANDARD` is the driver default and does not need to be listed explicitly unless you are switching from a different mapping.
 
 ---
 
@@ -2375,7 +2388,7 @@ mapping itself is identical to `PANEL_GENERIC` panels.
 ### CMakeLists.txt
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
     DATA_BASE_PIN=0
@@ -2398,9 +2411,91 @@ target_compile_definitions(hub75 PRIVATE
 )
 ```
 
+### `ROW_MAP_STANDARD` — pixel mapping topology
+
+Standard addressing (`ROW_MAPPING=ROW_MAP_STANDARD`) is the simpler of the two schemes and the one most indoor HUB75 panels use. 
+Each row-select address lights exactly `ROWS_IN_PARALLEL` rows at once — 2 for the common case — and the panel's full width is written in a single continuous pass,
+with no column splitting. This section uses a 64×32 panel at 1:16 scan (`ROWSEL_N_PINS=4`, 16 addresses, `ROWS_IN_PARALLEL=2`) as a concrete example
+- scale the numbers to your own `MATRIX_PANEL_WIDTH`/`MATRIX_PANEL_HEIGHT`/`ROWSEL_N_PINS`.
+
+#### 1. Which rows share an address
+
+Each row-select address drives exactly 2 rows, `SCAN_DEPTH` apart.
+
+| Address | Rows driven simultaneously |
+|---|---|
+| 0 | 0, 16 |
+| 1 | 1, 17 |
+| ⋮ | ⋮ |
+| 15 | 15, 31 |
+
+<img src="assets/standard-addressing-row-groups.svg" alt="Sixteen row-select addresses, each driving two physical rows 16 rows apart" width="680">
+
+In general: `address = row % SCAN_DEPTH`, and the rows for address `A` are `A + p * rows_per_bank` for `p = 0 .. ROWS_IN_PARALLEL-1`, where
+`rows_per_bank = SCAN_DEPTH` and `ROWS_IN_PARALLEL = MATRIX_PANEL_HEIGHT / SCAN_DEPTH`. Most panels use `ROWS_IN_PARALLEL=2` (one address, top half + bottom half paired),
+but the driver supports more banks if your panel needs them.
+
+#### 2. How one address's row gets written
+
+Unlike `ROW_MAP_SPLIT`, a single address's data is **not** split into column bands. The driver sweeps the entire `MATRIX_PANEL_WIDTH` in one
+continuous left-to-right pass — but what actually goes out on the wire for each column isn't a single pixel, it's **two whole RGB triplets
+interleaved into one word**: `R0 G0 B0` for the top row of the pair, immediately followed by `R1 G1 B1` for its paired row `SCAN_DEPTH` rows below.
+That six-value word is what gets shifted out on a single `CLK` pulse, onto the six consecutive GPIO pins starting at `DATA_BASE_PIN`
+(`DATA_N_PINS=6`) — then the sweep advances to the next column and repeats.
+
+<img src="assets/standard-addressing-sweep.svg" alt="One address's row written in a single continuous left-to-right sweep across the full panel width, with one column zoomed in to show the R0 G0 B0 R1 G1 B1 word shifted out per CLK pulse" width="680">
+
+So for address 0 in the example above, the actual bytes that stream out, column by column, look like:
+
+```
+col 0:  R0 G0 B0 R1 G1 B1   (row 0's pixel, then row 16's pixel)
+col 1:  R0 G0 B0 R1 G1 B1
+col 2:  R0 G0 B0 R1 G1 B1
+ ...
+col 63: R0 G0 B0 R1 G1 B1
+```
+
+— 64 six-value words, one per `CLK` pulse, before `STROBE`/`LATCH` fires and the row-select address advances.
+
+#### 3. Formula reference
+
+```cpp
+ROWS_IN_PARALLEL = MATRIX_PANEL_HEIGHT / SCAN_DEPTH   // typically 2
+rows_per_bank     = SCAN_DEPTH                        // step between paired rows
+
+// for row-select address `row`, bank `p` (0 .. ROWS_IN_PARALLEL-1):
+dy = row + p * rows_per_bank
+
+// column sweep — single continuous pass, no splitting. Each iteration of
+// the inner loop shifts out one full R,G,B triplet for bank p's pixel at
+// this column; with ROWS_IN_PARALLEL=2 that's R0 G0 B0 R1 G1 B1 per CLK,
+// on the DATA_N_PINS consecutive pins starting at DATA_BASE_PIN:
+for i in 0 .. MATRIX_PANEL_WIDTH-1:        // one CLK pulse per iteration
+    for p in 0 .. ROWS_IN_PARALLEL-1:      // R,G,B triplet per bank, same CLK
+        shift_out(R, G, B) = pixel(column = i, row = dy)
+```
+
+#### 4. Chained panels (`CHAIN_COLS`/`CHAIN_ROWS` > 1)
+
+For a given address, each panel's full width is written contiguously before the stream moves to the next panel in the chain. Serpentine
+(`CHAIN_MODE_SERPENTINE`) 180° rows reverse the column sweep direction (`i` counts down instead of up) and negate the bank offset
+(`dy = dy_base - p * rows_per_bank`) so the *source* content comes out right-side-up — the row-select address progression itself is never
+reversed, since that's a hardware timing signal shared by the whole chain.
+
+#### 5. Comparison with `ROW_MAP_SPLIT`
+
+| | `ROW_MAP_STANDARD` | `ROW_MAP_SPLIT` |
+|---|---|---|
+| Rows per address | `ROWS_IN_PARALLEL` (typically 2) | 4 |
+| Row spacing | Single fixed step (`SCAN_DEPTH`) | Two nested steps (`ROWS_PER_GROUP` and `MATRIX_PANEL_HEIGHT/2`) |
+| Row sweep | One continuous pass, full width | Split into 4 column octants per address |
+| Typical panels | Most indoor panels | P10-style outdoor panels with split upper/lower-half addressing |
+
+See the `ROW_MAP_SPLIT` section above for the corresponding schematics on that scheme.
+
 ---
 
-## 3. QP3 Outdoor / P3-1415 (`ROW_MAP_S31`)
+## 3. QP3 Outdoor / P3-1415 (`ROW_MAP_STANDARD`)
 
 ### Hardware
 
@@ -2416,20 +2511,16 @@ target_compile_definitions(hub75 PRIVATE
 
 ### Pixel Mapping
 
-This panel uses a non-standard four-row multiplexing layout. The 64 rows are divided
-into four equal quarters; each scan cycle drives one row from each quarter
-simultaneously. The shift buffer is filled in a two-pass pattern per scan line:
-second and fourth quarter pixels first (even output slots), then first and third quarter
-pixels (odd output slots, offset by `2 × MATRIX_PANEL_WIDTH`).
+This panel uses a non-standard four-row multiplexing layout. The 64 rows are divided into four equal quarters; each scan cycle drives one row from each quarter simultaneously.
+The shift buffer is filled in a two-pass pattern per scan line: second and fourth quarter pixels first (even output slots), then first and third quarter pixels
+(odd output slots, offset by `2 × MATRIX_PANEL_WIDTH`).
 
-Set `ROW_MAP_S31`. Do **not** use `ROW_MAP_S31` for this
+Set `ROW_MAP_STANDARD`. Do **not** use `ROW_MAP_STANDARD` for this
 panel — despite what the `-16S-` label might suggest for a 64-row panel, this is a
 4-row simultaneous design, not 2-row.
 
-> ⚠️ **Tested with RP2350B (GPIO 30–43).** The example below uses the RP2350B pin
-> mapping. For a standard Pico / RP2040 substitute `DATA_BASE_PIN=0`,
-> `ROWSEL_BASE_PIN=6`, `CLK_PIN=11`, `STROBE_PIN=12`, `OEN_PIN=13` and remove the
-> `PICO_RP2350A=0` line.
+> ⚠️ **Tested with RP2350B (GPIO 30–43).** The example below uses the RP2350B pin mapping. 
+> For a standard Pico / RP2040 substitute `DATA_BASE_PIN=0`,`ROWSEL_BASE_PIN=6`, `CLK_PIN=11`, `STROBE_PIN=12`, `OEN_PIN=13` and remove the `PICO_RP2350A=0` line.
 
 ### CMakeLists.txt
 
@@ -2444,12 +2535,12 @@ set(PICO_BOARD none CACHE STRING "Board type")
 Then add the compile definitions:
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     PICO_RP2350A=0                  # RP2350B — omit for RP2350A or RP2040
     USE_PICO_GRAPHICS=true          # false = use hub75 as a pure library
     MATRIX_PANEL_WIDTH=64
     MATRIX_PANEL_HEIGHT=64
-    ROW_MAPPING=ROW_MAP_S31          # non-standard 4-row pixel mapping
+    ROW_MAPPING=ROW_MAP_STANDARD    # non-standard 4-row pixel mapping
     DATA_BASE_PIN=30                # RP2350B GPIO block starts at 30
     DATA_N_PINS=6
     ROWSEL_BASE_PIN=36              # RP2350B address pins start at 36
@@ -2472,9 +2563,8 @@ target_compile_definitions(hub75 PRIVATE
 
 **Recommended system clock:** 266 MHz (`set_sys_clock_khz(266000, true)` in `main.c`).
 
-> 💡 If ghosting or flicker appears, try increasing `SM_CLOCKDIV_FACTOR` in steps
-> of 0.25 (e.g. `3.0f`, `3.5f`). Panels from different batches of the same model
-> sometimes tolerate slightly different timing.
+> 💡 If ghosting or flicker appears, try increasing `SM_CLOCKDIV_FACTOR` in steps of 0.25 (e.g. `3.0f`, `3.5f`). 
+> Panels from different batches of the same model sometimes tolerate slightly different timing.
 
 ---
 
@@ -2494,11 +2584,9 @@ target_compile_definitions(hub75 PRIVATE
 
 ### Pixel Mapping
 
-Four-row multiplexing with a column-pair interleave scheme. The 16 rows are divided into
-four vertical quarters of 4 rows each. Pixels are placed into the shift buffer in
-column-pair groups; a selector bit derived from the panel width determines whether a
-pair slot draws from the first or second half of the column pairs within the current
-scan group.
+Four-row multiplexing with a column-pair interleave scheme. The 16 rows are divided into four vertical quarters of 4 rows each. 
+Pixels are placed into the shift buffer in column-pair groups; a selector bit derived from the panel width determines whether a
+pair slot draws from the first or second half of the column pairs within the current scan group.
 
 Set `ROW_MAP_SPLIT`. Note that although both this panel and board 3 light
 4 rows simultaneously, their internal wiring conventions differ — these two defines are
@@ -2507,7 +2595,7 @@ Set `ROW_MAP_SPLIT`. Note that although both this panel and board 3 light
 ### CMakeLists.txt
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=32
     MATRIX_PANEL_HEIGHT=16
     ROW_MAPPING=ROW_MAP_SPLIT       # 4-row outdoor panel pixel mapping
@@ -2531,9 +2619,96 @@ target_compile_definitions(hub75 PRIVATE
 )
 ```
 
-> 💡 P10 outdoor panels are electrically robust and typically tolerate a wide range
-> of clock divider settings. Start at `SM_CLOCKDIV_FACTOR=1.0f` and only adjust if
-> you observe ghosting on bright content.
+> 💡 P10 outdoor panels are electrically robust and typically tolerate a wide range of clock divider settings. 
+> Start at `SM_CLOCKDIV_FACTOR=1.0f` and only adjust if you observe ghosting on bright content.
+
+### `ROW_MAP_SPLIT` — pixel mapping topology
+
+Split-half addressing (`ROW_MAPPING=ROW_MAP_SPLIT`) does not scan the panel the way `ROW_MAP_STANDARD` does. A standard panel lights 2 rows per
+row-select address and sweeps the full panel width in one pass. A split-half panel lights **4 rows per address**, and builds up one address's full row
+width in four separate 8-column-wide passes rather than one continuous sweep. This section walks through that structure using a 32×16 panel with
+`ROWSEL_N_PINS=2` (4 addresses) as a concrete example — scale the numbers to your own `MATRIX_PANEL_WIDTH`/`MATRIX_PANEL_HEIGHT`/`ROWSEL_N_PINS`.
+
+#### 1. Which rows share an address
+
+Each row-select address drives 4 physical rows simultaneously: the address itself, plus three fixed offsets.
+
+| Address | Rows driven simultaneously |
+|---|---|
+| 0 | 0, 4, 8, 12 |
+| 1 | 1, 5, 9, 13 |
+| 2 | 2, 6, 10, 14 |
+| 3 | 3, 7, 11, 15 |
+
+<img src="assets/split-addressing-row-groups.svg" alt="Four row-select addresses, each driving four physical rows spaced apart by ROWS_PER_GROUP and half the panel height" width="680">
+
+In general: `address = row % 4`, and the four rows for a given address `A`
+are `A`, `A + ROWS_PER_GROUP`, `A + MATRIX_PANEL_HEIGHT/2`, and
+`A + ROWS_PER_GROUP + MATRIX_PANEL_HEIGHT/2`, where
+`ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS`.
+
+#### 2. How one address's row gets built, column by column
+
+For a *single* address, the full-width row is not written in one sweep.
+It's split into `NUM_OCTANTS` (always 4) column bands, each `MATRIX_PANEL_WIDTH / 4` columns wide. Within each band, one row-pair's
+data is written first, then the other row-pair's — both covering the *same* columns. And just as in `ROW_MAP_STANDARD`, each column write isn't
+a single pixel: it's the row-pair's two RGB triplets interleaved into one word — `R0 G0 B0` then `R8 G8 B8` for step 1, `R4 G4 B4` then
+`R12 G12 B12` for step 2 — shifted out together on one `CLK` pulse, onto the `DATA_N_PINS` (6) consecutive pins starting at `DATA_BASE_PIN`.
+
+<img src="assets/split-addressing-octant-writes.svg" alt="One address's row built in four 8-column octants, each containing two write steps for its two row pairs, with one column zoomed in to show the R0 G0 B0 R8 G8 B8 word shifted out per CLK pulse" width="680">
+
+So for octant 0's step 1 (rows 0 and 8), the bytes streamed out look like:
+
+```
+col 0:  R0 G0 B0 R8 G8 B8   (row 0's pixel, then row 8's pixel)
+col 1:  R0 G0 B0 R8 G8 B8
+ ...
+col 7:  R0 G0 B0 R8 G8 B8
+```
+
+— 8 six-value words for step 1, then 8 more for step 2 (rows 4 and 12, same 8 columns), before the stream moves to octant 1.
+
+#### 3. Formula reference
+
+```cpp
+COLUMN_PAIRS       = MATRIX_PANEL_WIDTH / 2
+HALF_PAIRS         = COLUMN_PAIRS / 2                       // octant width = MATRIX_PANEL_WIDTH / 4
+ROWS_PER_GROUP     = MATRIX_PANEL_HEIGHT / SCAN_GROUPS
+GROUP_ROW_OFFSET   = ROWS_PER_GROUP * MATRIX_PANEL_WIDTH
+HALF_PANEL_OFFSET  = (MATRIX_PANEL_HEIGHT / 2) * MATRIX_PANEL_WIDTH
+NUM_OCTANTS        = MATRIX_PANEL_WIDTH / HALF_PAIRS         // always 4
+
+// address = which of the 4 row-select lines is active
+// octant  = which 8-column-wide band of the row is currently being shifted out
+address = line / NUM_OCTANTS
+octant  = line % NUM_OCTANTS
+
+// each counter step within an octant shifts out one interleaved word —
+// R,G,B for the row-pair's first row, then R,G,B for its paired row —
+// on the DATA_N_PINS consecutive pins starting at DATA_BASE_PIN:
+for counter in 0 .. COLUMN_PAIRS-1:        // one CLK pulse per iteration
+    row_pair = (counter < HALF_PAIRS) ? {address, address + HEIGHT/2}
+                                       : {address + ROWS_PER_GROUP, address + ROWS_PER_GROUP + HEIGHT/2}
+    shift_out(R, G, B) = pixel(row_pair.first,  column)
+    shift_out(R, G, B) = pixel(row_pair.second, column)
+```
+
+#### 4. Chained panels (`CHAIN_COLS`/`CHAIN_ROWS` > 1)
+
+For a given address, each panel's full width (all `NUM_OCTANTS` octants) is written contiguously before the stream moves to the next panel in the
+chain — the same panel-then-next-panel ordering used by `ROW_MAP_STANDARD`/`ROW_MAP_S31`. Serpentine (`CHAIN_MODE_SERPENTINE`)
+180° rows only mirror which *source* pixel is fetched for a given shift-register slot; they never change the write order itself.
+
+#### 5. Configuration requirement
+
+This addressing scheme requires `ROWSEL_N_PINS` to be chosen so that `PanelConfig::SCAN_DEPTH == MATRIX_PANEL_HEIGHT / 4` — i.e. exactly 4 addresses' 
+worth of row-select lines for every 16 physical rows. This is enforced by a `static_assert` in the `ROW_MAP_SPLIT` code paths; a
+mismatched `ROWSEL_N_PINS` fails at compile time rather than producing a scrambled image.
+
+> **Note:** this structure was derived empirically — by tracing the validated single-panel addressing formula rather than from a datasheet —
+> so it correctly documents *what the driver does and why the pixel order looks the way it does*, but the deeper hardware rationale (e.g. whether
+> the 8-column octant size lines up with column-driver IC boundaries on a specific panel model) is inferred, not confirmed. Worth cross-referencing
+> against your panel's datasheet if you need that level of detail.
 
 ---
 
@@ -2561,19 +2736,19 @@ and add a row to the [overview table](#overview) at the top of this section.
 
 <Brief description of why this mapping applies and any gotchas.>
 
-Use `<ROW_MAP_S31 | ROW_MAP_SPLIT | ROW_MAP_S31>`.
+Use `<ROW_MAP_STANDARD | ROW_MAP_SPLIT | ROW_MAP_S31>`.
 
 ### CMakeLists.txt
 
 ```cmake
-target_compile_definitions(hub75 PRIVATE
+target_compile_definitions(hub75 PUBLIC
     MATRIX_PANEL_WIDTH=<W>
     MATRIX_PANEL_HEIGHT=<H>
     ROW_MAPPING=<row_mapping>      # pixel mapping topology — see Step 3
     DATA_BASE_PIN=<pin>
     DATA_N_PINS=6
     ROWSEL_BASE_PIN=<pin>
-    ROWSEL_N_PINS=<n>               # log₂(H / rows_lit_simultaneously)
+    ROWSEL_N_PINS=<n>              # log₂(H / rows_lit_simultaneously)
     CLK_PIN=<pin>
     STROBE_PIN=<pin>
     OEN_PIN=<pin>

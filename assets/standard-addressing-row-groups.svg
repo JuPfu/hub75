@@ -1,0 +1,51 @@
+<svg width="680" height="260" viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Row-select addresses and the physical rows they drive (ROW_MAP_STANDARD, 64x32 / 1:16 scan example)</title>
+<style>
+  .bg { fill: #ffffff; }
+  .container { fill: none; stroke: #888780; stroke-width: 1; stroke-dasharray: 3 3; }
+  .chip { fill: #E1F5EE; stroke: #0F6E56; stroke-width: 1; }
+  .title { fill: #2C2C2A; font: 500 14px sans-serif; }
+  .label { fill: #04342C; font: 400 12px sans-serif; }
+  .caption { fill: #5F5E5A; font: 400 12px sans-serif; }
+  .ellipsis { fill: #5F5E5A; font: 500 20px sans-serif; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1e1e1e; }
+    .container { stroke: #B4B2A9; }
+    .chip { fill: #085041; stroke: #5DCAA5; }
+    .title { fill: #F1EFE8; }
+    .label { fill: #9FE1CB; }
+    .caption { fill: #D3D1C7; }
+    .ellipsis { fill: #D3D1C7; }
+  }
+</style>
+<rect class="bg" x="0" y="0" width="680" height="260"/>
+
+<g>
+<rect class="container" x="48" y="60" width="135" height="130" rx="10"/>
+<text class="title" x="115" y="82" text-anchor="middle">Address 0</text>
+<rect class="chip" x="58" y="95" width="115" height="30" rx="6"/><text class="label" x="115" y="114" text-anchor="middle">Row 0</text>
+<rect class="chip" x="58" y="135" width="115" height="30" rx="6"/><text class="label" x="115" y="154" text-anchor="middle">Row 16</text>
+</g>
+
+<g>
+<rect class="container" x="198" y="60" width="135" height="130" rx="10"/>
+<text class="title" x="265" y="82" text-anchor="middle">Address 1</text>
+<rect class="chip" x="208" y="95" width="115" height="30" rx="6"/><text class="label" x="265" y="114" text-anchor="middle">Row 1</text>
+<rect class="chip" x="208" y="135" width="115" height="30" rx="6"/><text class="label" x="265" y="154" text-anchor="middle">Row 17</text>
+</g>
+
+<g>
+<rect class="container" x="348" y="60" width="135" height="130" rx="10"/>
+<text class="ellipsis" x="415" y="132" text-anchor="middle">&#8942;</text>
+<text class="caption" x="415" y="172" text-anchor="middle">addresses 2-14</text>
+</g>
+
+<g>
+<rect class="container" x="498" y="60" width="135" height="130" rx="10"/>
+<text class="title" x="565" y="82" text-anchor="middle">Address 15</text>
+<rect class="chip" x="508" y="95" width="115" height="30" rx="6"/><text class="label" x="565" y="114" text-anchor="middle">Row 15</text>
+<rect class="chip" x="508" y="135" width="115" height="30" rx="6"/><text class="label" x="565" y="154" text-anchor="middle">Row 31</text>
+</g>
+
+<text class="caption" x="340" y="220" text-anchor="middle">Each address lights exactly 2 rows: address R and address R + SCAN_DEPTH (SCAN_DEPTH = 16 here)</text>
+</svg>
