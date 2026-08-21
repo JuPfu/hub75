@@ -1136,51 +1136,7 @@ __attribute__((optimize("unroll-loops"))) void update(
 #endif // CHAIN_COLS
 #elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // Single panel, with display rotation support.
-    //
-    // index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
-    // decompose each into (dx, dy) and redirect through rotated_src_index().
 
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
-
-    int line = 0;
-    int counter = 0;
-
-    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
-    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
-
-    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
-    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
-
-    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
-    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
-    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-    constexpr int HALF_PANEL_OFFSET = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE;
-
-    constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
-
-    size_t fb_index = 0;
-
-    for (int j = 0; j < total_pairs; ++j)
-    {
-        // Panel-side flat index (destination address in display space).
-        // Single-panel case: this index is always within [0, W*H), so a
-        // direct %/ decomposition (not the row_base-based rot_lut helper) is the natural fit here.
-        const int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
-        const int32_t index2 = index + HALF_PANEL_OFFSET;
-
-        rgb_buffer[fb_index++] = LUT_MAPPING(src[rotated_src_index(index % W, index / W, W, H)]);
-        rgb_buffer[fb_index++] = LUT_MAPPING(src[rotated_src_index(index2 % W, index2 / W, W, H)]);
-
-        if (++counter >= COLUMN_PAIRS)
-        {
-            counter = 0;
-            ++line;
-        }
-    }
-#else
     // P10 chained — with display rotation support.
 
     constexpr int W = DISPLAY_WIDTH;
@@ -1258,7 +1214,6 @@ __attribute__((optimize("unroll-loops"))) void update(
             }
         }
     }
-#endif
 #elif ROW_MAPPING == ROW_MAP_S31
     // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
@@ -1519,47 +1474,7 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 #endif
 #elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // Single panel, with display rotation support (BGR byte layout).
-    //
-    // pf / pf2 are flat pixel indices (no byte multiply). rot_lut_rgb() applies
-    // rotated_src_index() and the *3 byte conversion internally.
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
-    int line = 0;
-    int counter = 0;
-
-    constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
-    constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
-
-    constexpr int PAIR_HALF_BIT = HALF_PAIRS;
-    constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
-
-    constexpr int ROW_STRIDE = MATRIX_PANEL_WIDTH;
-    constexpr int ROWS_PER_GROUP = MATRIX_PANEL_HEIGHT / SCAN_GROUPS;
-    constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-    constexpr int HALF_PANEL_OFFSET_PX = (MATRIX_PANEL_HEIGHT >> 1) * ROW_STRIDE; // pixels, not bytes
-
-    constexpr int total_pairs = (MATRIX_PANEL_WIDTH * MATRIX_PANEL_HEIGHT) >> 1;
-
-    size_t fb_index = 0;
-
-    for (int j = 0; j < total_pairs; ++j)
-    {
-        const int32_t pf = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
-        const int32_t pf2 = pf + HALF_PANEL_OFFSET_PX;
-
-        rgb_buffer[fb_index++] = rot_lut_rgb(src, pf % W, pf / W, 0, W, H);
-        rgb_buffer[fb_index++] = rot_lut_rgb(src, pf2 % W, pf2 / W, 0, W, H);
-
-        if (++counter >= COLUMN_PAIRS)
-        {
-            counter = 0;
-            ++line;
-        }
-    }
-#else
     // P10 chained — with display rotation support (BGR byte layout).
 
     constexpr int W = DISPLAY_WIDTH;
@@ -1634,7 +1549,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
             }
         }
     }
-#endif
 #elif ROW_MAPPING == ROW_MAP_S31
     // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
     //
