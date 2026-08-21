@@ -1224,98 +1224,74 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
     }
     else if constexpr (Cfg.panel.panel_kind == RowMapping::Split)
     {
-        if constexpr (Cfg.panel.chain_cols == 1 && Cfg.panel.chain_rows == 1)
+        // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
+
+        constexpr int COLUMN_PAIRS = Cfg.panel.matrix_panel_width >> 1;
+        constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
+
+        constexpr int PAIR_HALF_BIT = HALF_PAIRS;
+        constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
+
+        constexpr int ROW_STRIDE = Cfg.panel.matrix_panel_width;
+        constexpr int ROWS_PER_GROUP = Cfg.panel.matrix_panel_height / SCAN_GROUPS;
+        constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
+        constexpr int HALF_PANEL_OFFSET = (Cfg.panel.matrix_panel_height >> 1) * ROW_STRIDE;
+
+        // Always 4 by construction (HALF_PAIRS == MATRIX_PANEL_WIDTH / 4);
+        // spelled out via MATRIX_PANEL_WIDTH/HALF_PAIRS to keep the relationship
+        // to the single-panel formula explicit rather than a bare magic number.
+        constexpr int NUM_OCTANTS = Cfg.panel.matrix_panel_width / HALF_PAIRS;
+        constexpr int NUM_ADDRESSES = Cfg.panel.matrix_panel_height / NUM_OCTANTS;
+
+        static_assert(NUM_ADDRESSES == static_cast<int>(SCAN_DEPTH),
+                      "ROW_MAP_SPLIT requires ROWSEL_N_PINS chosen so that "
+                      "PanelConfig::SCAN_DEPTH == Cfg.panel.matrix_panel_height / 4 "
+                      "(this panel family addresses 4 column-octants per row-select address)");
+
+        size_t fb_index = 0;
+
+        for (int address = 0; address < NUM_ADDRESSES; ++address)
         {
-            // Single panel, with display rotation support.
-            //
-            // `index` and `index + HALF_PANEL_OFFSET` are flat pixel indices in [0, W*H).
-            // We decompose each into (dx, dy) and redirect through rotated_src_index().
-            int line = 0;
-            int counter = 0;
-
-            constexpr int COLUMN_PAIRS = Cfg.panel.matrix_panel_width >> 1;
-            constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
-
-            constexpr int PAIR_HALF_BIT = HALF_PAIRS;
-            constexpr int PAIR_HALF_SHIFT = __builtin_ctz(HALF_PAIRS);
-
-            constexpr int ROW_STRIDE = Cfg.panel.matrix_panel_width;
-            constexpr int ROWS_PER_GROUP = Cfg.panel.matrix_panel_height / SCAN_GROUPS;
-            constexpr int GROUP_ROW_OFFSET = ROWS_PER_GROUP * ROW_STRIDE;
-            constexpr int HALF_PANEL_OFFSET = (Cfg.panel.matrix_panel_height >> 1) * ROW_STRIDE;
-
-            constexpr int total_pairs = (Cfg.panel.matrix_panel_width * Cfg.panel.matrix_panel_height) >> 1;
-
-            for (int j = 0, fb_index = 0; j < total_pairs; ++j, fb_index += 2)
+            for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); ++v)
             {
-                // Panel-side flat index (destination address in display space). Single-panel
-                // case: this index is always within [0, W*H), so a direct %/ decomposition
-                // (not the row_base-based rot_lut helper) is the natural fit here.
-                const int32_t index = !(j & PAIR_HALF_BIT) ? j - (line << PAIR_HALF_SHIFT) : GROUP_ROW_OFFSET + j - ((line + 1) << PAIR_HALF_SHIFT);
-                const int32_t index2 = index + HALF_PANEL_OFFSET;
+                const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
 
-                rgb_buffer_[fb_index] = pack_lut_rgb(src[rotated_src_index(index % W, index / W, W, H)]);
-                rgb_buffer_[fb_index + 1] = pack_lut_rgb(src[rotated_src_index(index2 % W, index2 / W, W, H)]);
-
-                if (++counter >= COLUMN_PAIRS)
+                for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); ++h)
                 {
-                    counter = 0;
-                    ++line;
-                }
-            }
-        }
-        else
-        {
-            // P10 chained, with display rotation support.
-            static constexpr uint8_t scan_map[4] = {0, 1, 2, 3};
+                    const int phys_h = reverse ? (static_cast<int>(Cfg.panel.chain_cols) - 1 - h) : h;
 
-            size_t fb_index = 0;
-
-            for (int row = 0; row < static_cast<int>(SCAN_DEPTH); ++row)
-            {
-                for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); ++v)
-                {
-                    const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
-
-                    for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); ++h)
+                    for (int octant = 0; octant < NUM_OCTANTS; ++octant)
                     {
-                        const int32_t row_base = map_panel_row(row, v, h, reverse);
+                        const int line = address * NUM_OCTANTS + octant;
 
-                        const int32_t row_ptr[4] = {
-                            row_base + scan_map[0] * stride_to_paired_row,
-                            row_base + scan_map[1] * stride_to_paired_row,
-                            row_base + scan_map[2] * stride_to_paired_row,
-                            row_base + scan_map[3] * stride_to_paired_row,
-                        };
-
-                        // row_ptr[p] is only guaranteed W-aligned when chain_cols == 1.
-                        // Decompose fully (dx_base AND dy) - 4 of each per (row, v, h) triplet
-                        const int dx_base[4] = {row_ptr[0] % W, row_ptr[1] % W, row_ptr[2] % W, row_ptr[3] % W};
-                        const int dy[4] = {row_ptr[0] / W, row_ptr[1] / W, row_ptr[2] / W, row_ptr[3] / W};
-
-                        if (reverse)
+                        for (int counter = 0; counter < COLUMN_PAIRS; ++counter)
                         {
-                            // Serpentine physical 180 deg correction:
-                            //   - scan row reversed  -> map_panel_row
-                            //   - i reversed         -> below
-                            //   - scan group order   -> p counts 3..0
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
+                            // Panel-native split-half addressing — identical formula to the single-panel branch above, evaluated per (line, counter)
+                            // instead of the flat j counter (line*COLUMN_PAIRS + counter == j).
+                            const int32_t local_index = !(counter & PAIR_HALF_BIT) ? (line << PAIR_HALF_SHIFT) + counter : GROUP_ROW_OFFSET + (line << PAIR_HALF_SHIFT) + (counter - HALF_PAIRS);
+                            const int32_t local_index2 = local_index + HALF_PANEL_OFFSET;
+
+                            int local_row = local_index / Cfg.panel.matrix_panel_width;
+                            int local_col = local_index % Cfg.panel.matrix_panel_width;
+                            int local_row2 = local_index2 / Cfg.panel.matrix_panel_width;
+                            int local_col2 = local_index2 % Cfg.panel.matrix_panel_width;
+
+                            if (reverse)
                             {
-                                for (int p = 3; p >= 0; --p)
-                                {
-                                    rgb_buffer_[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
-                                }
+                                // 180° source mirror only — write order/slot stays fixed.
+                                local_row = Cfg.panel.matrix_panel_height - 1 - local_row;
+                                local_col = Cfg.panel.matrix_panel_width - 1 - local_col;
+                                local_row2 = Cfg.panel.matrix_panel_height - 1 - local_row2;
+                                local_col2 = Cfg.panel.matrix_panel_width - 1 - local_col2;
                             }
-                        }
-                        else
-                        {
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
-                            {
-                                for (int p = 0; p < 4; ++p)
-                                {
-                                    rgb_buffer_[fb_index++] = rot_lut(src, dx_base[p], dy[p], i, W, H);
-                                }
-                            }
+
+                            const int dx = phys_h * Cfg.panel.matrix_panel_width + local_col;
+                            const int dy = v * Cfg.panel.matrix_panel_height + local_row;
+                            const int dx2 = phys_h * Cfg.panel.matrix_panel_width + local_col2;
+                            const int dy2 = v * Cfg.panel.matrix_panel_height + local_row2;
+
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx, dy, 0, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx2, dy2, 0, W, H);
                         }
                     }
                 }
