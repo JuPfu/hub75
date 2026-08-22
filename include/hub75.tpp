@@ -961,104 +961,59 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
     }
     else // RowMapping::S31
     {
-        if constexpr (Cfg.panel.chain_cols == 1 && Cfg.panel.chain_rows == 1)
+        // P3 chained, with display rotation support (BGR byte layout). U-Type Serpentine
+
+        size_t fb_index = 0;
+
+        for (int row = 0; row < SCAN_DEPTH; row++)
         {
-            // Single panel, with display rotation support (BGR byte layout).
-            // quarter1..quarter4 are flat pixel-index counters (no *3). rot_lut_rgb() applies
-            // rotated_src_index() and the byte conversion internally.
-            constexpr uint total_pixels = Cfg.panel.matrix_panel_width * Cfg.panel.matrix_panel_height;
-            constexpr uint line_width = LINE_OFFSET;
-
-            constexpr uint quarter = (total_pixels >> 2) * 3; // number of pixels in a quarter of the panel
-
-            uint quarter1 = 0 * quarter; // rows in quarter1  0-15
-            uint quarter2 = 1 * quarter; // rows in quarter2  16-31
-            uint quarter3 = 2 * quarter; // rows in quarter3  32-47
-            uint quarter4 = 3 * quarter; // rows in quarter4  48-63
-
-            uint p = 0; // per line pixel counter
-            uint line = 0;
-            uint32_t *dst = rgb_buffer_;
-
-            while (line < (Cfg.panel.matrix_panel_height >> 2))
+            for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++)
             {
-                dst[0] = rot_lut_rgb(src, quarter2 % W, quarter2 / W, 0, W, H);
-                ++quarter2;
-                dst[1] = rot_lut_rgb(src, quarter4 % W, quarter4 / W, 0, W, H);
-                ++quarter4;
-                dst[line_width + 0] = rot_lut_rgb(src, quarter1 % W, quarter1 / W, 0, W, H);
-                ++quarter1;
-                dst[line_width + 1] = rot_lut_rgb(src, quarter3 % W, quarter3 / W, 0, W, H);
-                ++quarter3;
+                const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
 
-                dst += 2;
-                p++;
-
-                // End of logical row
-                if (p == Cfg.panel.matrix_panel_width)
+                for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++)
                 {
-                    p = 0;
-                    line++;
-                    dst += line_width; // advance to next scan-row pair
-                }
-            }
-        }
-        else
-        {
-            // P3 chained, with display rotation support (BGR byte layout). U-Type Serpentine
-            // Chaining, same topology as the DEFAULT chained branch above.
-            size_t fb_index = 0;
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-            for (int row = 0; row < SCAN_DEPTH; row++)
-            {
-                for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++)
-                {
-                    const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
+                    // S31 quarter-row layout (pixel domain - rot_lut_rgb converts to bytes)
+                    const int32_t sign = reverse ? -1 : 1;
+                    const int32_t base0 = row_base + sign * 0 * stride_to_paired_row;
+                    const int32_t base1 = row_base + sign * 1 * stride_to_paired_row;
+                    const int32_t base2 = row_base + sign * 2 * stride_to_paired_row;
+                    const int32_t base3 = row_base + sign * 3 * stride_to_paired_row;
 
-                    for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++)
+                    // baseN is only guaranteed W-aligned when chain_cols == 1.
+                    // Decompose fully (dx_base AND dy) once per quarter-row.
+                    const int dx_base0 = base0 % W, dy0 = base0 / W;
+                    const int dx_base1 = base1 % W, dy1 = base1 / W;
+                    const int dx_base2 = base2 % W, dy2 = base2 / W;
+                    const int dx_base3 = base3 % W, dy3 = base3 / W;
+
+                    if (reverse)
                     {
-                        const int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                        // S31 quarter-row layout (pixel domain - rot_lut_rgb converts to bytes)
-                        const int32_t sign = reverse ? -1 : 1;
-                        const int32_t base0 = row_base + sign * 0 * stride_to_paired_row;
-                        const int32_t base1 = row_base + sign * 1 * stride_to_paired_row;
-                        const int32_t base2 = row_base + sign * 2 * stride_to_paired_row;
-                        const int32_t base3 = row_base + sign * 3 * stride_to_paired_row;
-
-                        // baseN is only guaranteed W-aligned when chain_cols == 1.
-                        // Decompose fully (dx_base AND dy) once per quarter-row.
-                        const int dx_base0 = base0 % W, dy0 = base0 / W;
-                        const int dx_base1 = base1 % W, dy1 = base1 / W;
-                        const int dx_base2 = base2 % W, dy2 = base2 / W;
-                        const int dx_base3 = base3 % W, dy3 = base3 / W;
-
-                        if (reverse)
+                        for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
-                            }
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
-                            }
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
                         }
-                        else
+                        for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
-                            }
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
+                        {
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                        }
 
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
-                            }
+                        for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
+                        {
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
@@ -1146,8 +1101,8 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
             //                       4 -> 5
             //
             // The connections between each of the panels remain unchanged, but now content of
-            // panels 2 and 3 is rotated 180 deg and panel 2 sits below panel 1, panel 3 below
-            // panel 0. The next U-turn positions panel 4 below panel 3 and panel 5 below panel 2.
+            // panels 2 and 3 is rotated 180 deg and panel 2 sits below panel 1, panel 3 below panel 0.
+            // The next U-turn positions panel 4 below panel 3 and panel 5 below panel 2.
             // We compensate the physical rotation with a software rotation.
 
             // NOTE: rows_per_bank is the step between paired rows *within a single panel's
@@ -1221,8 +1176,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
         constexpr int HALF_PANEL_OFFSET = (Cfg.panel.matrix_panel_height >> 1) * ROW_STRIDE;
 
         // Always 4 by construction (HALF_PAIRS == MATRIX_PANEL_WIDTH / 4);
-        // spelled out via MATRIX_PANEL_WIDTH/HALF_PAIRS to keep the relationship
-        // to the single-panel formula explicit rather than a bare magic number.
+        // spelled out via MATRIX_PANEL_WIDTH/HALF_PAIRS to keep the relationship to the single-panel formula explicit rather than a bare magic number.
         constexpr int NUM_OCTANTS = Cfg.panel.matrix_panel_width / HALF_PAIRS;
         constexpr int NUM_ADDRESSES = Cfg.panel.matrix_panel_height / NUM_OCTANTS;
 
@@ -1283,106 +1237,60 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
     }
     else // RowMapping::S31
     {
-        if constexpr (Cfg.panel.chain_cols == 1 && Cfg.panel.chain_rows == 1)
+        // P3 chained, with display rotation support.
+
+        size_t fb_index = 0;
+
+        for (int row = 0; row < static_cast<int>(SCAN_DEPTH); row++)
         {
-            // Single panel, with display rotation support.
-            //
-            // q1..q4 are flat pixel indices advancing sequentially. We decompose each into
-            // (dx, dy) and redirect through rotated_src_index(). Panel-side write order (dst
-            // pointer) is unchanged.
-            constexpr uint total_pixels = TOTAL_PIXELS;
-            constexpr uint line_offset = LINE_OFFSET;
-
-            constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
-
-            uint quarter1 = 0 * quarter; // rows in quarter1  0-15
-            uint quarter2 = 1 * quarter; // rows in quarter2  16-31
-            uint quarter3 = 2 * quarter; // rows in quarter3  32-47
-            uint quarter4 = 3 * quarter; // rows in quarter4  48-63
-
-            uint p = 0;    // per line pixel counter
-            uint line = 0; // Number of logical rows processed
-            uint32_t *dst = rgb_buffer_;
-
-            // Each iteration processes 4 physical rows (2 scan-row pairs)
-            while (line < (Cfg.panel.matrix_panel_height >> 2))
+            for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++)
             {
-                dst[0] = pack_lut_rgb(src[rotated_src_index(quarter2 % W, quarter2 / W, W, H)]);
-                ++quarter2;
-                dst[1] = pack_lut_rgb(src[rotated_src_index(quarter4 % W, quarter4 / W, W, H)]);
-                ++quarter4;
-                dst[line_offset + 0] = pack_lut_rgb(src[rotated_src_index(quarter1 % W, quarter1 / W, W, H)]);
-                ++quarter1;
-                dst[line_offset + 1] = pack_lut_rgb(src[rotated_src_index(quarter3 % W, quarter3 / W, W, H)]);
-                ++quarter3;
+                const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
 
-                dst += 2;
-
-                // End of logical row
-                if (++p >= Cfg.panel.matrix_panel_width)
+                for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++)
                 {
-                    p = 0;
-                    line++;
-                    dst += line_offset; // advance to next scan-row pair
-                }
-            }
-        }
-        else
-        {
-            // P3 chained, with display rotation support.
-            size_t fb_index = 0;
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-            for (int row = 0; row < static_cast<int>(SCAN_DEPTH); row++)
-            {
-                for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++)
-                {
-                    const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
+                    // S31 quarter-row layout
+                    const int32_t sign = reverse ? -1 : 1;
+                    const int32_t base0 = row_base + sign * 0 * stride_to_paired_row;
+                    const int32_t base1 = row_base + sign * 1 * stride_to_paired_row;
+                    const int32_t base2 = row_base + sign * 2 * stride_to_paired_row;
+                    const int32_t base3 = row_base + sign * 3 * stride_to_paired_row;
 
-                    for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++)
+                    const int dx_base0 = base0 % W, dy0 = base0 / W;
+                    const int dx_base1 = base1 % W, dy1 = base1 / W;
+                    const int dx_base2 = base2 % W, dy2 = base2 / W;
+                    const int dx_base3 = base3 % W, dy3 = base3 / W;
+
+                    if (reverse)
                     {
-                        const int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                        // S31 quarter-row layout
-                        const int32_t sign = reverse ? -1 : 1;
-                        const int32_t base0 = row_base + sign * 0 * stride_to_paired_row;
-                        const int32_t base1 = row_base + sign * 1 * stride_to_paired_row;
-                        const int32_t base2 = row_base + sign * 2 * stride_to_paired_row;
-                        const int32_t base3 = row_base + sign * 3 * stride_to_paired_row;
-
-                        const int dx_base0 = base0 % W, dy0 = base0 / W;
-                        const int dx_base1 = base1 % W, dy1 = base1 / W;
-                        const int dx_base2 = base2 % W, dy2 = base2 / W;
-                        const int dx_base3 = base3 % W, dy3 = base3 / W;
-
-                        if (reverse)
+                        // Serpentine physical 180 deg correction (chain topology):
+                        //   - scan row reversed    -> map_panel_row
+                        //   - i reversed           -> below
+                        //   - sign on quarter rows -> above
+                        for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            // Serpentine physical 180 deg correction (chain topology):
-                            //   - scan row reversed    -> map_panel_row
-                            //   - i reversed           -> below
-                            //   - sign on quarter rows -> above
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
-                            }
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
-                            }
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
                         }
-                        else
+                        for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
-                            }
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
-                            {
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
-                            }
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                        }
+                    }
+                    else
+                    {
+                        for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
+                        {
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                        }
+                        for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
+                        {
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
+                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
