@@ -1211,56 +1211,7 @@ __attribute__((optimize("unroll-loops"))) void update(
     }
 #elif ROW_MAPPING == ROW_MAP_S31
     // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
-#if CHAIN_COLS == 1 && CHAIN_ROWS == 1
-    // Single panel, with display rotation support.
-    //
-    // q1..q4 are flat pixel indices advancing sequentially.
-    // We decompose each into (dx, dy) and redirect through rotated_src_index().
-    // Panel-side write order (dst pointer) is unchanged.
-    {
-        constexpr int W = DISPLAY_WIDTH;
-        constexpr int H = DISPLAY_HEIGHT;
 
-        constexpr uint total_pixels = TOTAL_PIXELS;
-        constexpr uint line_offset = PanelConfig::LINE_OFFSET;
-
-        constexpr uint quarter = total_pixels >> 2; // number of pixels in a quarter of the panel
-
-        uint quarter1 = 0 * quarter; // rows in quarter1  0–15
-        uint quarter2 = 1 * quarter; // rows in quarter2  16–31
-        uint quarter3 = 2 * quarter; // rows in quarter3  32–47
-        uint quarter4 = 3 * quarter; // rows in quarter4  48–63
-
-        uint p = 0; // per line pixel counter
-
-        uint line = 0; // Number of logical rows processed
-
-        uint32_t *dst = rgb_buffer; // rgb_buffer write pointer
-
-        // Each iteration processes 4 physical rows (2 scan-row pairs)
-        while (line < (PanelConfig::HEIGHT >> 2))
-        {
-            dst[0] = LUT_MAPPING(src[rotated_src_index(quarter2 % W, quarter2 / W, W, H)]);
-            ++quarter2;
-            dst[1] = LUT_MAPPING(src[rotated_src_index(quarter4 % W, quarter4 / W, W, H)]);
-            ++quarter4;
-            dst[line_offset + 0] = LUT_MAPPING(src[rotated_src_index(quarter1 % W, quarter1 / W, W, H)]);
-            ++quarter1;
-            dst[line_offset + 1] = LUT_MAPPING(src[rotated_src_index(quarter3 % W, quarter3 / W, W, H)]);
-            ++quarter3;
-
-            dst += 2;
-
-            // End of logical row
-            if (++p >= PanelConfig::WIDTH)
-            {
-                p = 0;
-                line++;
-                dst += line_offset; // advance to next scan-row pair
-            }
-        }
-    }
-#else
     // P3 chained — with display rotation support.
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
@@ -1328,7 +1279,6 @@ __attribute__((optimize("unroll-loops"))) void update(
             }
         }
     }
-#endif
 #endif
     // Kick off building bitplanes from rgb_buffer to be written to frame_buffer
     dma_channel_set_write_addr(write_chan, frame_buffer, false);
