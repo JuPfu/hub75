@@ -1053,7 +1053,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
         panic(error_msg);
     }
 
-    __attribute__((aligned(4))) uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
+    uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
