@@ -1019,12 +1019,12 @@ __attribute__((optimize("unroll-loops"))) void update(
 
     uint32_t const *src = static_cast<uint32_t const *>(graphics->frame_buffer);
 
+    constexpr int W = DISPLAY_WIDTH;
+    constexpr int H = DISPLAY_HEIGHT;
+
 #if ROW_MAPPING == ROW_MAP_STANDARD
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support.
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     constexpr int rows_per_bank = H / PanelConfig::ROWS_IN_PARALLEL;
 
@@ -1071,10 +1071,6 @@ __attribute__((optimize("unroll-loops"))) void update(
     //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
     //    panel 5 below panel 2.
     //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
-    //
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     // NOTE: rows_per_bank is the step between paired rows *within a single
     // panel's SCAN_DEPTH*, not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two
@@ -1136,9 +1132,6 @@ __attribute__((optimize("unroll-loops"))) void update(
 #endif // CHAIN_COLS
 #elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
     constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
@@ -1213,8 +1206,6 @@ __attribute__((optimize("unroll-loops"))) void update(
     // S31 mapping. Four-way interleaved quarter mapping. Used by panels marketed as "...S31".
 
     // P3 chained — with display rotation support.
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     size_t fb_index = 0;
 
@@ -1297,15 +1288,15 @@ __attribute__((optimize("unroll-loops"))) void update(
  */
 __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 {
+    constexpr int W = DISPLAY_WIDTH;
+    constexpr int H = DISPLAY_HEIGHT;
+
 #if ROW_MAPPING == ROW_MAP_STANDARD
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // HUB75_MULTIPLEX_2_ROWS — single panel, with display rotation support (BGR byte layout).
     //
     // src is uint8_t* with 3 bytes per pixel: [B, G, R] at byte offset flat_idx*3.
     // Decompose the flat pixel index into (dx, dy) and use rot_lut_rgb(), which applies rotated_src_index() and multiplies by 3 internally.
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     constexpr int rows_per_bank = H / PanelConfig::ROWS_IN_PARALLEL;
 
@@ -1350,10 +1341,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     //    and panel 2 is positioned below panel 1 and panel 3 below panel 0. The next U-turn positions panel 4 below panel 3 and
     //    panel 5 below panel 2.
     //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
-    //
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     // Step between paired rows within a single panel's SCAN_DEPTH — not
     // DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two only coincide when CHAIN_ROWS == 1.
@@ -1419,9 +1406,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 #endif
 #elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     constexpr int COLUMN_PAIRS = MATRIX_PANEL_WIDTH >> 1;
     constexpr int HALF_PAIRS = COLUMN_PAIRS >> 1;
@@ -1516,9 +1500,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
     //    panel 5 below panel 2.
     //    We have to adapt the mapping of the src-data to compensate the physical rotation by doing a software rotation.
     //
-
-    constexpr int W = DISPLAY_WIDTH;
-    constexpr int H = DISPLAY_HEIGHT;
 
     size_t fb_index = 0;
 
