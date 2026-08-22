@@ -1137,8 +1137,6 @@ __attribute__((optimize("unroll-loops"))) void update(
 #elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
 
-    // P10 chained — with display rotation support.
-
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
 
@@ -1182,9 +1180,6 @@ __attribute__((optimize("unroll-loops"))) void update(
 
                     for (int counter = 0; counter < COLUMN_PAIRS; ++counter)
                     {
-                        // Panel-native split-half addressing — identical formula
-                        // to the single-panel branch above, evaluated per (line, counter)
-                        // instead of the flat j counter (line*COLUMN_PAIRS + counter == j).
                         const int32_t local_index = !(counter & PAIR_HALF_BIT) ? (line << PAIR_HALF_SHIFT) + counter : GROUP_ROW_OFFSET + (line << PAIR_HALF_SHIFT) + (counter - HALF_PAIRS);
                         const int32_t local_index2 = local_index + HALF_PANEL_OFFSET;
 
@@ -1219,8 +1214,8 @@ __attribute__((optimize("unroll-loops"))) void update(
 #if CHAIN_COLS == 1 && CHAIN_ROWS == 1
     // Single panel, with display rotation support.
     //
-    // q1..q4 are flat pixel indices advancing sequentially. We decompose each
-    // into (dx, dy) and redirect through rotated_src_index().
+    // q1..q4 are flat pixel indices advancing sequentially.
+    // We decompose each into (dx, dy) and redirect through rotated_src_index().
     // Panel-side write order (dst pointer) is unchanged.
     {
         constexpr int W = DISPLAY_WIDTH;
@@ -1475,8 +1470,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 #elif ROW_MAPPING == ROW_MAP_SPLIT
     // Split-half mapping. Four rows per address. Used by many P10 outdoor panels with split upper/lower-half addressing.
 
-    // P10 chained — with display rotation support (BGR byte layout).
-
     constexpr int W = DISPLAY_WIDTH;
     constexpr int H = DISPLAY_HEIGHT;
 
@@ -1517,9 +1510,6 @@ __attribute__((optimize("unroll-loops"))) void update_bgr(const uint8_t *src)
 
                     for (int counter = 0; counter < COLUMN_PAIRS; ++counter)
                     {
-                        // Panel-native split-half addressing — identical formula
-                        // to the single-panel branch above, evaluated per (line, counter)
-                        // instead of the flat j counter (line*COLUMN_PAIRS + counter == j).
                         const int32_t local_pf = !(counter & PAIR_HALF_BIT) ? (line << PAIR_HALF_SHIFT) + counter : GROUP_ROW_OFFSET + (line << PAIR_HALF_SHIFT) + (counter - HALF_PAIRS);
                         const int32_t local_pf2 = local_pf + HALF_PANEL_OFFSET_PX;
 
