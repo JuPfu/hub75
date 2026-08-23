@@ -810,74 +810,47 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
 
     if constexpr (Cfg.panel.panel_kind == RowMapping::Standard)
     {
-        if constexpr (Cfg.panel.chain_cols == 1 && Cfg.panel.chain_rows == 1)
+        // U-Type Serpentine Chaining (BGR byte layout). Step between paired rows within a
+        // single panel's SCAN_DEPTH - not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two only
+        // coincide when chain_rows == 1.
+        constexpr int rows_per_bank = SCAN_DEPTH;
+
+        size_t fb_index = 0;
+
+        for (int row = 0; row < rows_per_bank; row++)
         {
-            // Single panel, with display rotation support (BGR byte layout).
-            constexpr int rows_per_bank = H / ROWS_IN_PARALLEL;
-
-            int32_t fb_index = 0;
-            int dx = 0;
-            int row_in_bank = 0;
-
-            for (int32_t i = 0; i < stride_to_paired_row; ++i)
+            for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++)
             {
-                for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
+                const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
+
+                for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++)
                 {
-                    const int dy = p * rows_per_bank + row_in_bank;
-                    rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
-                }
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-                if (++dx == W)
-                {
-                    dx = 0;
-                    ++row_in_bank;
-                }
-            }
-        }
-        else
-        {
-            // U-Type Serpentine Chaining (BGR byte layout). Step between paired rows within a
-            // single panel's SCAN_DEPTH - not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two only
-            // coincide when chain_rows == 1.
-            constexpr int rows_per_bank = SCAN_DEPTH;
+                    // row_base (pixel-domain) is only guaranteed W-aligned when
+                    // chain_cols == 1; decompose fully once per (row, v, h).
+                    const int dx_base = row_base % W;
+                    const int dy_base = row_base / W;
 
-            size_t fb_index = 0;
-
-            for (int row = 0; row < rows_per_bank; row++)
-            {
-                for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++)
-                {
-                    const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) && (v & 1);
-
-                    for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++)
+                    if (reverse)
                     {
-                        const int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                        // row_base (pixel-domain) is only guaranteed W-aligned when
-                        // chain_cols == 1; decompose fully once per (row, v, h).
-                        const int dx_base = row_base % W;
-                        const int dy_base = row_base / W;
-
-                        if (reverse)
+                        for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
+                            for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
-                                for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
-                                {
-                                    const int dy = dy_base - p * rows_per_bank;
-                                    rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
-                                }
+                                const int dy = dy_base - p * rows_per_bank;
+                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
                             }
                         }
-                        else
+                    }
+                    else
+                    {
+                        for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
+                            for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
-                                for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
-                                {
-                                    const int dy = dy_base + p * rows_per_bank;
-                                    rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
-                                }
+                                const int dy = dy_base + p * rows_per_bank;
+                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1060,102 +1033,73 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
 
     if constexpr (Cfg.panel.panel_kind == RowMapping::Standard)
     {
-        if constexpr (Cfg.panel.chain_cols == 1 && Cfg.panel.chain_rows == 1)
+        // U-Type Serpentine Chaining.
+        //
+        // Example: six matrix panels of width 32 columns and height 32 rows are chained
+        // as: 0 -> 1 -> 2 -> 3 -> 4 -> 5. This results in a long matrix panel with 192
+        // columns and 32 rows. To get a rectangular 64x96 chained matrix panel instead,
+        // align the panels with unmodified connections:
+        //
+        //                       0 -> 1 U-turn to panel 2
+        //                            |
+        //                            v
+        //    U-turn to panel 4  3 <- 2
+        //                       |
+        //                       v
+        //                       4 -> 5
+        //
+        // The connections between each of the panels remain unchanged, but now content of
+        // panels 2 and 3 is rotated 180 deg and panel 2 sits below panel 1, panel 3 below panel 0.
+        // The next U-turn positions panel 4 below panel 3 and panel 5 below panel 2.
+        // We compensate the physical rotation with a software rotation.
+
+        // NOTE: rows_per_bank is the step between paired rows *within a single panel's
+        // SCAN_DEPTH*, not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two coincide only when
+        // chain_rows == 1. SCAN_DEPTH is the authoritative source.
+        constexpr int rows_per_bank = SCAN_DEPTH;
+
+        int32_t fb_index = 0;
+
+        for (int row = 0; row < rows_per_bank; row++) // row: current row
         {
-            // Single panel, with display rotation support.
-            constexpr int rows_per_bank = H / ROWS_IN_PARALLEL;
-
-            int32_t fb_index = 0;
-            int dx = 0;          // column:       0 .. W-1, then wraps
-            int row_in_bank = 0; // row within one bank: 0 .. rows_per_bank-1
-
-            for (int32_t i = 0; i < stride_to_paired_row; ++i)
+            for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++) // v: panel in row (vertical chain)
             {
-                for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
+                const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) ? (v & 1) : false;
+
+                for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++) // h: panel in column (horizontal chain)
                 {
-                    // dy = which display row: bank p starts at p * rows_per_bank
-                    const int dy = p * rows_per_bank + row_in_bank;
-                    rgb_buffer_[fb_index++] = pack_lut_rgb(src[rotated_src_index(dx, dy, W, H)]);
-                }
+                    // row_base: row offset for panel coordinates (v, h), reverse: U-turn descriptor
+                    const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-                // Advance column; roll over into next row-within-bank
-                if (++dx == W)
-                {
-                    dx = 0;
-                    ++row_in_bank; // at most H/ROWS_IN_PARALLEL increments total
-                }
-            }
-        }
-        else
-        {
-            // U-Type Serpentine Chaining.
-            //
-            // Example: six matrix panels of width 32 columns and height 32 rows are chained
-            // as: 0 -> 1 -> 2 -> 3 -> 4 -> 5. This results in a long matrix panel with 192
-            // columns and 32 rows. To get a rectangular 64x96 chained matrix panel instead,
-            // align the panels with unmodified connections:
-            //
-            //                       0 -> 1 U-turn to panel 2
-            //                            |
-            //                            v
-            //    U-turn to panel 4  3 <- 2
-            //                       |
-            //                       v
-            //                       4 -> 5
-            //
-            // The connections between each of the panels remain unchanged, but now content of
-            // panels 2 and 3 is rotated 180 deg and panel 2 sits below panel 1, panel 3 below panel 0.
-            // The next U-turn positions panel 4 below panel 3 and panel 5 below panel 2.
-            // We compensate the physical rotation with a software rotation.
+                    // row_base is only guaranteed W-aligned when chain_cols == 1
+                    // (phys_h * matrix_panel_width is otherwise a sub-row offset).
+                    const int dx_base = row_base % W;
+                    const int dy_base = row_base / W;
 
-            // NOTE: rows_per_bank is the step between paired rows *within a single panel's
-            // SCAN_DEPTH*, not DISPLAY_HEIGHT / ROWS_IN_PARALLEL. The two coincide only when
-            // chain_rows == 1. SCAN_DEPTH is the authoritative source.
-            constexpr int rows_per_bank = SCAN_DEPTH;
-
-            int32_t fb_index = 0;
-
-            for (int row = 0; row < rows_per_bank; row++) // row: current row
-            {
-                for (int v = 0; v < static_cast<int>(Cfg.panel.chain_rows); v++) // v: panel in row (vertical chain)
-                {
-                    const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) ? (v & 1) : false;
-
-                    for (int h = 0; h < static_cast<int>(Cfg.panel.chain_cols); h++) // h: panel in column (horizontal chain)
+                    if (reverse)
                     {
-                        // row_base: row offset for panel coordinates (v, h), reverse: U-turn descriptor
-                        const int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                        // row_base is only guaranteed W-aligned when chain_cols == 1
-                        // (phys_h * matrix_panel_width is otherwise a sub-row offset).
-                        const int dx_base = row_base % W;
-                        const int dy_base = row_base / W;
-
-                        if (reverse)
+                        // Serpentine physical 180 deg correction (chain topology):
+                        //   - scan row reversed  -> map_panel_row
+                        //   - i traversal        -> reversed below
+                        //   - multiplex ordering -> reversed below
+                        // Display rotation is composited independently via rot_lut().
+                        for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            // Serpentine physical 180 deg correction (chain topology):
-                            //   - scan row reversed  -> map_panel_row
-                            //   - i traversal        -> reversed below
-                            //   - multiplex ordering -> reversed below
-                            // Display rotation is composited independently via rot_lut().
-                            for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
+                            for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
-                                for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
-                                {
-                                    const int dy = dy_base - p * rows_per_bank;
-                                    rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
-                                }
+                                const int dy = dy_base - p * rows_per_bank;
+                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
                             }
                         }
-                        else
+                    }
+                    else
+                    {
+                        for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
+                            for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
-                                for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
-                                {
-                                    const int dy = dy_base + p * rows_per_bank;
-                                    rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
-                                }
+                                const int dy = dy_base + p * rows_per_bank;
+                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
                             }
                         }
                     }
