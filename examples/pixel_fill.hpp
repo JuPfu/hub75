@@ -4,17 +4,17 @@
 
 using namespace pimoroni;
 
+template <uint32_t W, uint32_t H>
 class PixelFill : public PicoGraphics_PenRGB888
 {
 private:
-    int w;
-    int h;
+    alignas(4) uint8_t pixel_buf_[W * H * sizeof(uint32_t)];
 
-    volatile int i = 0;
-    volatile int j = 0;
-    volatile int l = 0;
+    int i = 0;
+    int j = 0;
+    int l = 0;
 
-    volatile int index = 0;
+    int index = 0;
 
     void drawPixel(int x, int y, uint32_t color)
     {
@@ -23,11 +23,10 @@ private:
     }
 
 public:
-    explicit PixelFill(uint width = 32, uint height = 16) : PicoGraphics_PenRGB888(width, height, nullptr), w(width), h(height)
+    explicit PixelFill() : PicoGraphics_PenRGB888(W, H, pixel_buf_)
     {
         set_pen(0);
         clear();
-        setIntensity(1.0);
     }
 
     void fill()
@@ -37,11 +36,11 @@ public:
 
         drawPixel(j++, l, col[index]);
 
-        if (j >= w)
+        if (j >= (int)W)
         {
             j = 0;
             l++;
-            if (l >= h)
+            if (l >= (int)H)
                 l = 0;
             if ((l % 2) == 0)
                 index++;
