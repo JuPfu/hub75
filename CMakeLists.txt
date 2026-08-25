@@ -16,7 +16,7 @@ else()
     set(USERHOME $ENV{HOME})
 endif()
 set(sdkVersion 2.3.0)
-set(toolchainVersion 14_2_Rel1)
+set(toolchainVersion 15_2_Rel1)
 set(picotoolVersion 2.3.0)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
@@ -93,18 +93,6 @@ pico_enable_stdio_usb(hub75_demo 1)
 add_subdirectory(common)
 add_subdirectory(libraries)
 
-target_sources(hub75_demo PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/examples/analog_clock.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/antialiased_line.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/bouncing_balls.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/fire_effect.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/grey_scale_stripes.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/hue_value_spectrum.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/pixel_fill.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/rectangle.hpp
-        ${CMAKE_CURRENT_LIST_DIR}/examples/rotator.hpp
-        )
-
 target_link_libraries(hub75_demo PRIVATE
         hub75)
 
@@ -113,7 +101,7 @@ if(PICO_CYW43_SUPPORTED)
                           pico_cyw43_arch_none)
 endif()
 
-# Add the standard include files to the build
+# Add the example files to the build
 target_include_directories(hub75_demo PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/examples
 )
@@ -122,8 +110,7 @@ pico_add_extra_outputs(hub75_demo)
 print_size_info(hub75_demo)
 
 
-# Add dual-panel demo executable - two independent Hub75Driver instances, see
-# hub75_demo_dual.cpp for details.
+# Add dual-panel demo executable - two independent Hub75Driver instances, see hub75_demo_dual.cpp for details.
 add_executable(hub75_demo_dual hub75_demo_dual.cpp)
 
 pico_set_program_name(hub75_demo_dual "hub75_demo_dual")
@@ -137,13 +124,6 @@ target_compile_definitions(hub75_demo_dual PRIVATE
 
 pico_enable_stdio_uart(hub75_demo_dual 0)
 pico_enable_stdio_usb(hub75_demo_dual 1)
-
-target_sources(hub75_demo_dual PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/hub75_demo_dual.cpp
-        )
 
 target_link_libraries(hub75_demo_dual PRIVATE
         hub75)
