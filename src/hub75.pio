@@ -265,3 +265,77 @@ static inline void hub75_bitplane_setup_set_shift(PIO pio, uint sm, uint offset,
     pio->instr_mem[offset + hub75_bitplane_setup_offset_shift] = instr;
 }
 %}
+
+.program rul6024_write_register
+.wrap_target
+    ; ---- Phase 1: optional data shift-in, LE and CLK held low ----
+    pull block
+    out x, 32               ; x receives the display width subtracted by command signature (length)
+    set pins, 0b100 [7]     ; initialy clock and LE are low
+
+    ; ---- Phase 2: LE-encoded command, now committing whatever is in the shift register ----
+data_loop:
+    pull block
+    out pins, 6
+    set pins, 0b101 [7]      ; OE=1 LE=0 CLK=1  (data sampled on this rising edge)
+    set pins, 0b100 [7]      ; OE=1 LE=0 CLK=0
+    jmp x-- data_loop
+
+    ; ---- Phase 3: LE-encoded command, now committing the last command signature bits ----
+    pull block
+    out x, 32                ; x = (LE pulse count) - 1   e.g. 11->10 WREG1, 12->11 WREG2
+le_data_loop:
+    pull block
+    out pins, 6
+    set pins, 0b111 [7]      ; OE=1 LE=0 CLK=1  (data sampled on this rising edge)
+    set pins, 0b110 [7]      ; OE=1 LE=0 CLK=0
+    jmp x-- le_data_loop
+
+   ; ---- Phase 4: OE rising edge commits latch/status-reg into effect ----
+   ; set pins, 0b000 [7]      ; OE=0
+   ; set pins, 0b100 [7]      ; OE=1  <- the rising edge
+   ; set pins, 0b000 [7]      ; OE=0  (resting, enabled)
+.wrap
+
+%c-sdk {
+    static inline void rul6024_write_register_program_init(PIO pio, uint sm, uint offset,
+                                                               uint data_base_pin, uint clk_le_base_pin)
+    {
+        pio_sm_set_enabled(pio, sm, false);
+        pio_sm_clear_fifos(pio, sm);
+
+        pio_sm_set_consecutive_pindirs(pio, sm, data_base_pin, 6, true);
+        pio_sm_set_consecutive_pindirs(pio, sm, clk_le_base_pin, 3, true);
+        for (uint i = 0; i < 6; i++) pio_gpio_init(pio, data_base_pin + i);
+        pio_gpio_init(pio, clk_le_base_pin);
+        pio_gpio_init(pio, clk_le_base_pin + 1);
+        pio_gpio_init(pio, clk_le_base_pin + 2);
+
+        pio_sm_config c = rul6024_write_register_program_get_default_config(offset);
+        sm_config_set_out_pins(&c, data_base_pin, 6);
+        sm_config_set_set_pins(&c, clk_le_base_pin, 3);
+        sm_config_set_out_shift(&c, true, false, 32);   // shift_right=true, autopull off (all pulls explicit)
+        sm_config_set_clkdiv(&c, 2.0f);
+        sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+        pio_sm_init(pio, sm, offset, &c);
+        pio_sm_set_enabled(pio, sm, true);
+    }
+
+    static inline void rul6024_write_register(PIO pio, uint sm, uint32_t display_width, uint32_t cmd_signature, const uint32_t *dma_words)
+    {
+        printf("display_width=%u\n", display_width);
+        uint16_t data_length = display_width - cmd_signature;
+        printf("data_length=%u\n", data_length);
+        pio_sm_put_blocking(pio, sm, data_length - 1);
+        for (uint32_t i = 0; i < data_length; i++) {
+            pio_sm_put_blocking(pio, sm, dma_words[i]);
+        }
+        pio_sm_put_blocking(pio, sm, cmd_signature - 1);
+         printf("cmd_signature=%u\n", cmd_signature);
+        for (uint32_t i = data_length; i < data_length + cmd_signature; i++) {
+            pio_sm_put_blocking(pio, sm, dma_words[i]);
+        }
+        printf("rul6024_write_register for cmd=%d\n", cmd_signature);
+    }
+%}
