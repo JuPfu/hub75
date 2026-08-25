@@ -1,7 +1,3 @@
-#pragma once
-
-#include "hub75.hpp"
-
 // WREG1 components
 //
 // Name         Bit R1  Default  Description
@@ -28,7 +24,16 @@
 //                      0b0100
 #define R_V1P26 0b0100
 
-#define WREG1 R_UP | R_IGAIN | R_V0P3 | R_V1P26
+// #define WREG1 R_UP | R_IGAIN | R_V0P3 | R_V1P26
+// #define WREG1 0x3fb4
+// #define WREG1 0b1111111111111111 
+// #define WREG1 0xFFC0
+// #define WREG1 0b0000011111100000
+// #define WREG1 0xF800
+// #define WREG1 0b1111110111111111
+#define WREG1 0xFDFF
+
+
 
 // WREG2 components
 //
@@ -96,7 +101,12 @@
 //                       0b00
 #define R_OE 0b00
 
-#define WREG2 R_OE_CH | R_TDM | R_UPCTRL | R_FALL_TIME | R_LATCH | R_UPCH | R_EN_AM | ROUT2 | R_CLK_SDO | R_OE
+// #define WREG2 R_OE_CH | R_TDM | R_UPCTRL | R_FALL_TIME | R_LATCH | R_UPCH | R_EN_AM | ROUT2 | R_CLK_SDO | R_OE
+// 0000  0111 0110 1100 => 0X076C
+// #define WREG2 0x004C
+// #define WREG2 0b1111110111111111
+
+#define WREG2 0xFDFF
 
 #define HIGH 1
 #define LOW 0
@@ -106,7 +116,4 @@
 #define CMD_WREG1 11
 #define CMD_WREG2 12
 
-void RUL6024_setup(const Hub75PinConfig &pins, uint32_t matrix_panel_width);
-void RUL6024_write_command(const Hub75PinConfig &pins, uint32_t matrix_panel_width, uint8_t command);
-void RUL6024_write_register(const Hub75PinConfig &pins, uint32_t matrix_panel_width, uint16_t value, uint8_t position);
-void RUL6024_init_register(const Hub75PinConfig &pins);
+void rul6024_initialize();
