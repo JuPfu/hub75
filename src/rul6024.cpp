@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <cassert>
 #include <algorithm>
+#include <vector>
 
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
@@ -38,38 +39,57 @@ static Hub75Config cfg;
 // uint32_t per output CLK cycle, each holding a 6-bit value (one bit per
 // RGB sub-pixel lane) for that cycle. prepare_register_dma() produces
 // exactly `display_width` such words per register (display_width = one CLK
-// pulse per bit position, repeated across the whole daisy chain).
+// pulse per bit position, repeated across the whole daisy chain), where
 //
-// register_dma_buffer holds up to REGISTER_SLOT_COUNT such images
-// side-by-side, addressed by slot index rather than a hardcoded byte
-// offset — so the layout stays correct for any configured display_width
-// (MATRIX_PANEL_WIDTH * CHAIN_COLS), instead of only working for whichever
-// width happened to be used when the offsets were last hand-picked.
+//     display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols
+//
+// register_dma_buffer holds REGISTER_SLOT_COUNT such images side-by-side,
+// addressed by slot index rather than a hardcoded byte offset. There is no
+// compile-time cap on display_width: the buffer is sized in
+// ensure_register_dma_buffer_capacity() below, driven directly by the
+// display_width computed from whatever Hub75Config was actually passed to
+// rul6024_initialize() — so any panel/chain geometry gets a correctly
+// sized buffer, rather than only whichever width the constant happened to
+// be hand-picked for.
 // -----------------------------------------------------------------------------
 static constexpr uint32_t REGISTER_SLOT_WREG1 = 0;
 static constexpr uint32_t REGISTER_SLOT_WREG2 = 1;
-static constexpr uint32_t REGISTER_SLOT_TEST  = 2;  // only used under RUL6024_PROBE_RESERVED
+#ifdef RUL6024_PROBE_RESERVED
+static constexpr uint32_t REGISTER_SLOT_TEST  = 2;
 static constexpr uint32_t REGISTER_SLOT_COUNT = 3;
+#else
+static constexpr uint32_t REGISTER_SLOT_COUNT = 2;  // no TEST slot when not probing
+#endif
 
-// Largest display_width (MATRIX_PANEL_WIDTH * CHAIN_COLS) this driver is
-// built to support. Raise this — and register_dma_buffer's size follows
-// automatically — if a wider chain is ever configured. register_slot()'s
-// assert() below turns a mismatch into an immediate, loud failure instead
-// of silently corrupting the neighbouring slot the way fixed byte offsets
-// used to.
-static constexpr uint32_t RUL6024_MAX_DISPLAY_WIDTH = 64;
+// Backing storage for all REGISTER_SLOT_COUNT images, sized to exactly
+// REGISTER_SLOT_COUNT * display_width uint32_t entries by
+// ensure_register_dma_buffer_capacity() the moment display_width is known
+// (once per rul6024_initialize() call — not a per-frame allocation, so the
+// one-time heap use here is not a real-time concern).
+static std::vector<uint32_t> register_dma_buffer;
 
-static uint32_t register_dma_buffer[REGISTER_SLOT_COUNT * RUL6024_MAX_DISPLAY_WIDTH];
+// (Re)sizes register_dma_buffer for the given display_width. Must be called
+// before the first register_slot() use for that display_width — rul6024_setup()
+// does this as its first step, right after computing display_width from cfg.
+static void ensure_register_dma_buffer_capacity(uint32_t display_width)
+{
+    assert(display_width > 0);
+    assert(display_width % 16 == 0);  // prepare_register_dma() assumes an integral number of 16-bit chips
+    register_dma_buffer.assign(static_cast<size_t>(REGISTER_SLOT_COUNT) * display_width, 0);
+}
 
 // Returns a pointer to the start of `slot`'s region within
 // register_dma_buffer, sized for the given display_width. Centralizing this
 // (rather than repeating `slot * display_width` at each call site) means
-// there is exactly one place that can get the indexing wrong.
+// there is exactly one place that can get the indexing wrong. Requires
+// ensure_register_dma_buffer_capacity(display_width) to have already been
+// called for this display_width.
 static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 {
-    assert(display_width <= RUL6024_MAX_DISPLAY_WIDTH);
     assert(slot < REGISTER_SLOT_COUNT);
-    return &register_dma_buffer[slot * display_width];
+    size_t offset = static_cast<size_t>(slot) * display_width;
+    assert(offset + display_width <= register_dma_buffer.size());
+    return &register_dma_buffer[offset];
 }
 
 // -----------------------------------------------------------------------------
@@ -133,6 +153,10 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
 {
     uint32_t display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols;
 
+    // Must happen before any register_slot() call below: sizes
+    // register_dma_buffer for exactly this chain's display_width.
+    ensure_register_dma_buffer_capacity(display_width);
+
     uint32_t *wreg1_buf = register_slot(REGISTER_SLOT_WREG1, display_width);
     uint32_t *wreg2_buf = register_slot(REGISTER_SLOT_WREG2, display_width);
 
@@ -144,8 +168,8 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     // ---------------------------------------------------------------------
     // Optional: probe the undocumented "reserved" 4–10 command range.
     //
-    // Off by default (register_dma_buffer's REGISTER_SLOT_TEST simply goes
-    // unused when this isn't defined). Enable with
+    // Off by default (REGISTER_SLOT_TEST/its buffer space don't even exist
+    // when this isn't defined — see REGISTER_SLOT_COUNT above). Enable with
     // -DRUL6024_PROBE_RESERVED, edit test_data[] to the 16-bit value you
     // want tried for each register (index 0 = register 4, ... index 6 =
     // register 10), and observe the panel after each individual write —
