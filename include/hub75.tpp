@@ -38,7 +38,7 @@ void Hub75Driver<Cfg>::create()
     if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6126A)
         FM6126A_setup(Cfg.pins, Cfg.panel.matrix_panel_width);
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::RUL6024)
-        rul6024_initialize();
+        rul6024_initialize(Cfg);
 
     configure_pio();
     setup_dma_transfers();

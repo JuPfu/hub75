@@ -266,55 +266,116 @@ static inline void hub75_bitplane_setup_set_shift(PIO pio, uint sm, uint offset,
 }
 %}
 
+; =============================================================================
+; PROGRAM: rul6024_write_register
+; =============================================================================
+; Shifts a 16-bit "register" value into a chain of RUL6024 driver ICs and
+; issues an LE-length command telling the chain what that value means
+; (WR_REG1, WR_REG2, DATA_LATCH, ...). See rul6024.h for the full command
+; table and rul6024.cpp for how the C-side buffer is built.
+;
+; Pin roles ("set pins", 3 consecutive pins starting at clk_le_base_pin,
+; configured in rul6024_write_register_program_init below):
+;   bit0 (clk_le_base_pin + 0) = CLK   (shift clock)
+;   bit1 (clk_le_base_pin + 1) = LE    (a.k.a. STROBE — command-length pin)
+;   bit2 (clk_le_base_pin + 2) = OEN   (output enable, active LOW on the
+;                                       panel; this program deliberately
+;                                       holds it HIGH — blanked — for the
+;                                       whole configuration write so no
+;                                       write-glitch is ever visible on
+;                                       the physical display)
+; "out pins, 6" targets 6 consecutive data pins (data_base_pin..+5), one
+; bit per RGB sub-pixel lane, driven identically for every chip in the
+; chain (see prepare_register_dma() — the same 16-bit value is shifted
+; once per daisy-chained chip).
+;
+; Wire protocol, per call to rul6024_write_register() (C-SDK helper below):
+;
+;   Phase 1 (once): receive `data_length = display_width - cmd_signature`,
+;     the number of CLK pulses to send with LE held LOW.
+;   Phase 2 (data_loop, `data_length` iterations): shift the leading
+;     portion of the register image in with LE LOW. This is still real
+;     register data — the RUL6024 keeps shifting on every CLK pulse
+;     regardless of LE; LE only marks pulses for the *command signature*.
+;   Phase 3 (le_data_loop, `cmd_signature` iterations): shift the
+;     remaining `cmd_signature` pulses in with LE HIGH. Together with
+;     Phase 2 this clocks in exactly `display_width` bits total (one full
+;     pass through the chain), and the trailing run of `cmd_signature`
+;     LE-high pulses is what the chip decodes as the command (11 = WREG1,
+;     12 = WREG2, ...) once CLK stops toggling.
+;
+; Timing: sm_config_set_clkdiv(&c, 2.0f) below halves the PIO clock
+; relative to sys_clk. Each `set pins ... [7]` instruction then holds its
+; pin state for 8 PIO cycles (1 issue cycle + [7] delay cycles) before the
+; next `set`. If you ever change sys_clk or clkdiv, recompute the
+; resulting CLK high/low time and re-check it against the RUL6024's timing
+; spec (rise/fall + minimum pulse width) rather than assuming 8 cycles is
+; still enough margin.
 .program rul6024_write_register
 .wrap_target
-    ; ---- Phase 1: optional data shift-in, LE and CLK held low ----
+    ; ---- Phase 1: latch in the data/command split point for this write ----
     pull block
-    out x, 32               ; x receives the display width subtracted by command signature (length)
-    set pins, 0b100 [7]     ; initialy clock and LE are low
+    out x, 32               ; x = data_length - 1 (CLK pulses to send with LE low)
+    set pins, 0b100 [7]     ; OEN=1 (blanked), LE=0, CLK=0 — idle/rest state
 
-    ; ---- Phase 2: LE-encoded command, now committing whatever is in the shift register ----
+    ; ---- Phase 2: shift register data in, LE low (not yet part of the command signature) ----
 data_loop:
     pull block
-    out pins, 6
-    set pins, 0b101 [7]      ; OE=1 LE=0 CLK=1  (data sampled on this rising edge)
-    set pins, 0b100 [7]      ; OE=1 LE=0 CLK=0
+    out pins, 6              ; drive this cycle's 6 data lanes (1 bit/lane, all chips identical)
+    set pins, 0b101 [7]      ; OEN=1 LE=0 CLK=1  (chip samples data on this rising edge)
+    set pins, 0b100 [7]      ; OEN=1 LE=0 CLK=0
     jmp x-- data_loop
 
-    ; ---- Phase 3: LE-encoded command, now committing the last command signature bits ----
+    ; ---- Phase 3: shift the final cmd_signature bits in with LE held high ----
+    ;              (LE-high pulse *count*, not the data itself, selects the command)
     pull block
-    out x, 32                ; x = (LE pulse count) - 1   e.g. 11->10 WREG1, 12->11 WREG2
+    out x, 32                ; x = cmd_signature - 1   e.g. 11->10 for WREG1, 12->11 for WREG2
 le_data_loop:
     pull block
-    out pins, 6
-    set pins, 0b111 [7]      ; OE=1 LE=0 CLK=1  (data sampled on this rising edge)
-    set pins, 0b110 [7]      ; OE=1 LE=0 CLK=0
+    out pins, 6               ; still real shift-register data — LE doesn't gate data, only marks the command
+    set pins, 0b111 [7]      ; OEN=1 LE=1 CLK=1  (data sampled on this rising edge)
+    set pins, 0b110 [7]      ; OEN=1 LE=1 CLK=0
     jmp x-- le_data_loop
 
-   ; ---- Phase 4: OE rising edge commits latch/status-reg into effect ----
-   ; set pins, 0b000 [7]      ; OE=0
-   ; set pins, 0b100 [7]      ; OE=1  <- the rising edge
-   ; set pins, 0b000 [7]      ; OE=0  (resting, enabled)
+    ; ---- Phase 4 (might be disabled): OE rising-edge "commit" pulse ---- 
+    ; Testing (see rul6024.cpp) shows WREG1/WREG2 initialize reliably without it for this single-chain configuration.
+    ; I left it here, enabled, as it also does not seem to harm the initialisation.
+    set pins, 0b000 [7]      ; OEN=0
+    set pins, 0b100 [7]      ; OEN=1  <- the rising edge
+    set pins, 0b000 [7]      ; OEN=0  (resting, enabled)
 .wrap
 
 %c-sdk {
-    static inline void rul6024_write_register_program_init(PIO pio, uint sm, uint offset,
-                                                               uint data_base_pin, uint clk_le_base_pin)
+    // Configures GPIO directions/muxing and the state machine for rul6024_write_register. 
+    // Call once per chain before any rul6024_write_register() calls; 
+    // the SM stays enabled and reusable for repeated writes (WREG1, then WREG2, ...) until the caller tears it down (see rul6024_initialize() in rul6024.cpp).
+    //
+    //   data_base_pin    -> first of 6 consecutive RGB data lane pins
+    //   clk_le_base_pin  -> CLK; clk_le_base_pin+1 and +2 must be LE and
+    //                       OEN respectively (i.e. CLK/LE/OEN are assumed
+    //                       wired to three *consecutive* GPIOs)
+    //
+    static inline void rul6024_write_register_program_init(PIO pio, uint sm, uint offset, uint data_base_pin, uint clk_le_base_pin)
     {
         pio_sm_set_enabled(pio, sm, false);
         pio_sm_clear_fifos(pio, sm);
 
         pio_sm_set_consecutive_pindirs(pio, sm, data_base_pin, 6, true);
         pio_sm_set_consecutive_pindirs(pio, sm, clk_le_base_pin, 3, true);
-        for (uint i = 0; i < 6; i++) pio_gpio_init(pio, data_base_pin + i);
-        pio_gpio_init(pio, clk_le_base_pin);
-        pio_gpio_init(pio, clk_le_base_pin + 1);
-        pio_gpio_init(pio, clk_le_base_pin + 2);
+        for (uint i = 0; i < 6; i++)
+            pio_gpio_init(pio, data_base_pin + i);
+        pio_gpio_init(pio, clk_le_base_pin);     // CLK
+        pio_gpio_init(pio, clk_le_base_pin + 1); // LE
+        pio_gpio_init(pio, clk_le_base_pin + 2); // OEN
 
         pio_sm_config c = rul6024_write_register_program_get_default_config(offset);
         sm_config_set_out_pins(&c, data_base_pin, 6);
         sm_config_set_set_pins(&c, clk_le_base_pin, 3);
-        sm_config_set_out_shift(&c, true, false, 32);   // shift_right=true, autopull off (all pulls explicit)
+        sm_config_set_out_shift(&c, true, false, 32); // shift_right=true, autopull off (all pulls explicit)
+
+        // Halves the PIO clock relative to sys_clk. 
+        // Combined with the program's `[7]` delays this sets CLK high/low time.
+        // See the timing note above the .program declaration if this ever changes.
         sm_config_set_clkdiv(&c, 2.0f);
         sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
@@ -322,20 +383,26 @@ le_data_loop:
         pio_sm_set_enabled(pio, sm, true);
     }
 
+    // Issues one register write: shifts `dma_words[0 .. display_width-1]` into the chain (one 6-bit word per CLK pulse) and 
+    // asserts LE for the trailing `cmd_signature` of those pulses, so the chain latches the shifted-in value as the command identified by cmd_signature 
+    // (e.g. CMD_WREG1 = 11, CMD_WREG2 = 12 — see rul6024.h).
+    //
+    // dma_words must hold exactly `display_width` entries, pre-expanded by prepare_register_dma() in rul6024.cpp.
+    // This function only streams them to the PIO FIFO, it does no encoding of its own.
     static inline void rul6024_write_register(PIO pio, uint sm, uint32_t display_width, uint32_t cmd_signature, const uint32_t *dma_words)
     {
-        printf("display_width=%u\n", display_width);
-        uint16_t data_length = display_width - cmd_signature;
-        printf("data_length=%u\n", data_length);
-        pio_sm_put_blocking(pio, sm, data_length - 1);
-        for (uint32_t i = 0; i < data_length; i++) {
+        uint16_t data_length = display_width - cmd_signature; // LE-low portion (Phase 2)
+
+        pio_sm_put_blocking(pio, sm, data_length - 1); // Phase 1: loop count for data_loop
+        for (uint32_t i = 0; i < data_length; i++)
+        {
             pio_sm_put_blocking(pio, sm, dma_words[i]);
         }
-        pio_sm_put_blocking(pio, sm, cmd_signature - 1);
-         printf("cmd_signature=%u\n", cmd_signature);
-        for (uint32_t i = data_length; i < data_length + cmd_signature; i++) {
+
+        pio_sm_put_blocking(pio, sm, cmd_signature - 1); // Phase 3: loop count for le_data_loop
+        for (uint32_t i = data_length; i < data_length + cmd_signature; i++)
+        {
             pio_sm_put_blocking(pio, sm, dma_words[i]);
         }
-        printf("rul6024_write_register for cmd=%d\n", cmd_signature);
     }
 %}
