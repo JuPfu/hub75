@@ -60,8 +60,7 @@
 // Kept as named constants (rather than inlined hex literals in the .cpp)
 // so a future re-tune touches one place, and so the values are visible
 // under their own name in a debugger or a logic-analyzer capture diff.
-// If you sweep new candidates, prefer editing these two lines over adding
-// ad-hoc literals elsewhere.
+// If you sweep new candidates, prefer editing these two lines over adding ad-hoc literals elsewhere.
 // -----------------------------------------------------------------------------
 constexpr uint16_t RUL6024_WREG1_VALUE = 0x3FB4;
 constexpr uint16_t RUL6024_WREG2_VALUE = 0xD1FF;
@@ -76,7 +75,7 @@ constexpr uint16_t RUL6024_WREG2_VALUE = 0xD1FF;
 // use that PIO block afterwards.
 //
 // Not reentrant: internally caches Cfg in a single file-scope static, so
-// only one RUL6024 chain can be initialized "in flight" at a time. Safe to
-// call once per chain, sequentially, at start-up.
+// only one RUL6024 chain can be initialized "in flight" at a time. 
+// Safe to call once per chain, sequentially, at start-up.
 // -----------------------------------------------------------------------------
 void rul6024_initialize(Hub75Config Cfg);

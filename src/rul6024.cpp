@@ -132,10 +132,8 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 // Runs the confirmed-working configuration sequence for one RUL6024 chain:
 //
 //   1. Build the WREG1 / WREG2 DMA images (and, optionally, a probe image
-//      for the reserved 4–10 command range — see RUL6024_PROBE_RESERVED
-//      below).
-//   2. Initialize the rul6024_write_register PIO program on the given
-//      state machine.
+//      for the reserved 4–10 command range — see RUL6024_PROBE_RESERVED below).
+//   2. Initialize the rul6024_write_register PIO program on the given state machine.
 //   3. Write CMD_WREG1, then CMD_WREG2, in that order.
 //
 // Order matters: WREG2-before-WREG1 was tried previously and left the
@@ -253,6 +251,7 @@ void rul6024_initialize(Hub75Config Cfg)
     rul6024_setup(pio, sm, offset);
     pio_sm_set_enabled(pio, sm, false);
 
+    // remove rul6024_write_register_program and unclaim state machine 
     pio_remove_program(pio, &rul6024_write_register_program, offset);
     pio_sm_unclaim(pio, sm);
 }
