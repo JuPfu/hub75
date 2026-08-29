@@ -1,14 +1,12 @@
 // =============================================================================
 // rul6024.cpp
 //
-// One-time configuration ("register write") sequence for a chain of
-// RUL6024 HUB75 driver ICs. This runs BEFORE normal HUB75 scanning starts:
-// it borrows the PIO/GPIO resources long enough to shift WREG1 and WREG2
-// into every daisy-chained chip, then hands the PIO block back so
-// hub75_row / hub75_bitplane_stream can drive the panel normally.
+// One-time configuration ("register write") sequence for a chain of RUL6024 HUB75 driver ICs.
+// This runs BEFORE normal HUB75 scanning starts:
+//   it borrows the PIO/GPIO resources long enough to shift WREG1 and WREG2 into every daisy-chained chip,
+//   then hands the PIO block back so hub75_row / hub75_bitplane_stream can drive the panel normally.
 //
-// Protocol background: see rul6024.h for the LE-length command scheme and
-// the WREG1/WREG2 values used here.
+// Protocol background: see rul6024.h for the LE-length command scheme and the WREG1/WREG2 values used here.
 // =============================================================================
 
 #include <cstdlib>
@@ -27,63 +25,54 @@
 
 // Cached panel/pin configuration for the chain currently being initialized.
 // NOTE: file-scope static -> not reentrant. See the rul6024_initialize()
-// doc comment in rul6024.h for the implication (one chain in flight at a
-// time).
+// doc comment in rul6024.h for the implication (one chain in flight at a time).
 static Hub75Config cfg;
 
 // -----------------------------------------------------------------------------
 // register_dma_buffer layout
 //
-// rul6024_write_register() (PIO helper, see hub75.pio) expects one
-// already-expanded "DMA word per CLK pulse" image per register write: one
-// uint32_t per output CLK cycle, each holding a 6-bit value (one bit per
-// RGB sub-pixel lane) for that cycle. prepare_register_dma() produces
-// exactly `display_width` such words per register (display_width = one CLK
-// pulse per bit position, repeated across the whole daisy chain), where
-//
+// rul6024_write_register() (PIO helper, see hub75.pio) expects one already-expanded
+// "DMA word per CLK pulse" image per register write:
+// one uint32_t per output CLK cycle, each holding a 6-bit value (one bit per RGB sub-pixel lane)
+// for that cycle. prepare_register_dma() produces exactly `display_width` such words per register
+// (display_width = one CLK pulse per bit position, repeated across the whole daisy chain), where
 //     display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols
 //
 // register_dma_buffer holds REGISTER_SLOT_COUNT such images side-by-side,
-// addressed by slot index rather than a hardcoded byte offset. There is no
-// compile-time cap on display_width: the buffer is sized in
-// ensure_register_dma_buffer_capacity() below, driven directly by the
-// display_width computed from whatever Hub75Config was actually passed to
-// rul6024_initialize() — so any panel/chain geometry gets a correctly
-// sized buffer, rather than only whichever width the constant happened to
+// addressed by slot index rather than a hardcoded byte offset.
+// There is no compile-time cap on display_width: the buffer is sized in ensure_register_dma_buffer_capacity() below,
+// driven directly by the display_width computed from whatever Hub75Config was actually passed to rul6024_initialize() —
+// so any panel/chain geometry gets a correctly sized buffer, rather than only whichever width the constant happened to
 // be hand-picked for.
 // -----------------------------------------------------------------------------
 static constexpr uint32_t REGISTER_SLOT_WREG1 = 0;
 static constexpr uint32_t REGISTER_SLOT_WREG2 = 1;
 #ifdef RUL6024_PROBE_RESERVED
-static constexpr uint32_t REGISTER_SLOT_TEST  = 2;
+static constexpr uint32_t REGISTER_SLOT_TEST = 2;
 static constexpr uint32_t REGISTER_SLOT_COUNT = 3;
 #else
-static constexpr uint32_t REGISTER_SLOT_COUNT = 2;  // no TEST slot when not probing
+static constexpr uint32_t REGISTER_SLOT_COUNT = 2; // no TEST slot when not probing
 #endif
 
 // Backing storage for all REGISTER_SLOT_COUNT images, sized to exactly
-// REGISTER_SLOT_COUNT * display_width uint32_t entries by
-// ensure_register_dma_buffer_capacity() the moment display_width is known
-// (once per rul6024_initialize() call — not a per-frame allocation, so the
-// one-time heap use here is not a real-time concern).
+// REGISTER_SLOT_COUNT * display_width uint32_t
+// entries by ensure_register_dma_buffer_capacity() the moment display_width is known (once per rul6024_initialize() call —
+// not a per-frame allocation, so the one-time heap use here is not a real-time concern).
 static std::vector<uint32_t> register_dma_buffer;
 
-// (Re)sizes register_dma_buffer for the given display_width. Must be called
-// before the first register_slot() use for that display_width — rul6024_setup()
-// does this as its first step, right after computing display_width from cfg.
+// (Re)sizes register_dma_buffer for the given display_width. Must be called before the first register_slot()
+// use for that display_width — rul6024_setup() does this as its first step, right after computing display_width from cfg.
 static void ensure_register_dma_buffer_capacity(uint32_t display_width)
 {
     assert(display_width > 0);
-    assert(display_width % 16 == 0);  // prepare_register_dma() assumes an integral number of 16-bit chips
+    assert(display_width % 16 == 0); // prepare_register_dma() assumes an integral number of 16-bit chips
     register_dma_buffer.assign(static_cast<size_t>(REGISTER_SLOT_COUNT) * display_width, 0);
 }
 
-// Returns a pointer to the start of `slot`'s region within
-// register_dma_buffer, sized for the given display_width. Centralizing this
-// (rather than repeating `slot * display_width` at each call site) means
-// there is exactly one place that can get the indexing wrong. Requires
-// ensure_register_dma_buffer_capacity(display_width) to have already been
-// called for this display_width.
+// Returns a pointer to the start of `slot`'s region within register_dma_buffer,
+// sized for the given display_width. Centralizing this (rather than repeating `slot * display_width` at each call site)
+// means there is exactly one place that can get the indexing wrong. Requires ensure_register_dma_buffer_capacity(display_width)
+// to have already been called for this display_width.
 static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 {
     assert(slot < REGISTER_SLOT_COUNT);
@@ -95,31 +84,28 @@ static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 // -----------------------------------------------------------------------------
 // prepare_register_dma()
 //
-// Expands one 16-bit register value into `display_width` 6-bit-per-lane DMA
-// words, MSB (bit 15) first, matching the chip's documented shift order
-// ("the data transmitted to the chip first is the high bit of the
-// register"). Each 16-bit value is repeated back-to-back to fill the whole
-// chain: display_width / 16 gives the number of daisy-chained chips, so
-// e.g. for display_width = 64 the same 16-bit value is written 4 times in
-// a row, one per chip in the chain.
+// Expands one 16-bit register value into `display_width` 6-bit-per-lane DMA words, MSB (bit 15) first, 
+// matching the chip's documented shift order ("the data transmitted to the chip first is the high bit 
+// of the register"). Each 16-bit value is repeated back-to-back to fill the whole chain: 
+// display_width / 16 gives the number of daisy-chained chips, so e.g. for display_width = 64 
+// the same 16-bit value is                             written 4 times in a row, one per chip in the chain.
 //
 // Each output word is either:
 //     RUL6024_DATA_HIGH (0x3f) -> all six data lanes driven HIGH this cycle
 //     RUL6024_DATA_LOW  (0x00) -> all six data lanes driven LOW this cycle
 //
 // i.e. every chip in the chain receives the identical register value —
-// there is currently no support for giving different chips in one chain
-// different WREG1/WREG2 values.
+// there is currently no support for giving different chips in one chain different WREG1/WREG2 values.
 // -----------------------------------------------------------------------------
 static constexpr uint8_t RUL6024_DATA_HIGH = 0x3f;
 static constexpr uint8_t RUL6024_DATA_LOW = 0x00;
 
 static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display_width)
 {
-    int repeats_per_chain = display_width / 16;  // one 16-bit register per chained chip
+    int repeats_per_chain = display_width / 16; // one 16-bit register per chained chip
     for (int chip = 0; chip < repeats_per_chain; ++chip)
     {
-        for (int bit = 15; bit >= 0; --bit)  // MSB first
+        for (int bit = 15; bit >= 0; --bit) // MSB first
         {
             *dst++ = (value & (1u << bit)) ? RUL6024_DATA_HIGH : RUL6024_DATA_LOW;
         }
@@ -136,16 +122,12 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 //   2. Initialize the rul6024_write_register PIO program on the given state machine.
 //   3. Write CMD_WREG1, then CMD_WREG2, in that order.
 //
-// Order matters: WREG2-before-WREG1 was tried previously and left the
-// display showing nothing but init leftovers, so WREG1 must go first.
-//
 // Unlike an earlier iteration of this file, this sequence does NOT send
-// CMD_DATA_LATCH or CMD_RESET_OEN afterwards, and the PIO program's OE
-// commit pulse (see the comment above .wrap in hub75.pio) stays disabled.
-// Testing confirms panel initialization is reliable without them for this
-// single-chain configuration. If you extend this to a chained/multi-group
-// setup and see initialization become flaky again, this is the first place
-// to revisit — reintroduce DATA_LATCH/RESET_OEN behind a flag and compare.
+// CMD_DATA_LATCH afterwards.
+// Testing confirms panel initialization is reliable without CMD_DATA_LATCH and 
+// CMD_RESET_OEN them for this single-chain configuration. 
+// If you extend this to a chained/multi-group setup and see initialization become flaky again,
+// this is the first place to revisit — reintroduce DATA_LATCH/RESET_OEN behind a flag and compare.
 // -----------------------------------------------------------------------------
 void rul6024_setup(PIO pio, uint sm, uint offset)
 {
@@ -176,7 +158,7 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     // ---------------------------------------------------------------------
 #ifdef RUL6024_PROBE_RESERVED
     uint32_t *test_buf = register_slot(REGISTER_SLOT_TEST, display_width);
-    uint16_t test_data[] = {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000};  // registers 4..10
+    uint16_t test_data[] = {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}; // registers 4..10
 
     for (uint32_t reg = 4; reg <= 10; ++reg)
     {
@@ -209,11 +191,11 @@ void rul6024_initialize(Hub75Config Cfg)
     // below can compute the minimal contiguous GPIO window to request.
     // data_base_pin .. data_base_pin+5 covers the 6 RGB data lanes;
     // clk_pin, strobe_pin (LE) and oen_pin must be the remaining three
-    // "set pins" used by rul6024_write_register (see hub75.pio — they are
-    // assumed consecutive: clk_pin, clk_pin+1, clk_pin+2).
+    // "set pins" used by rul6024_write_register (see hub75.pio — 
+    // they are assumed consecutive: clk_pin, clk_pin+1, clk_pin+2).
     size_t gpio_pins[] = {
         cfg.pins.data_base_pin,
-        cfg.pins.data_base_pin + 5,  // last of the 6 RGB data lanes
+        cfg.pins.data_base_pin + 5, // last of the 6 RGB data lanes
         cfg.pins.clk_pin,
         cfg.pins.strobe_pin,
         cfg.pins.oen_pin};
@@ -251,7 +233,7 @@ void rul6024_initialize(Hub75Config Cfg)
     rul6024_setup(pio, sm, offset);
     pio_sm_set_enabled(pio, sm, false);
 
-    // remove rul6024_write_register_program and unclaim state machine 
+    // remove rul6024_write_register_program and unclaim state machine
     pio_remove_program(pio, &rul6024_write_register_program, offset);
     pio_sm_unclaim(pio, sm);
 }
