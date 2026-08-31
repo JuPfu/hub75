@@ -47,7 +47,7 @@ static Hub75Config cfg;
 // -----------------------------------------------------------------------------
 static constexpr uint32_t REGISTER_SLOT_WREG1 = 0;
 static constexpr uint32_t REGISTER_SLOT_WREG2 = 1;
-#ifdef RUL6024_PROBE_RESERVED
+#ifndef RUL6024_PROBE_RESERVED
 static constexpr uint32_t REGISTER_SLOT_TEST = 2;
 static constexpr uint32_t REGISTER_SLOT_COUNT = 3;
 #else
@@ -156,7 +156,7 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     // ideally one register at a time, not all seven in one boot, so an
     // observed effect can be attributed to a specific register.
     // ---------------------------------------------------------------------
-#ifdef RUL6024_PROBE_RESERVED
+#ifndef RUL6024_PROBE_RESERVED
     uint32_t *test_buf = register_slot(REGISTER_SLOT_TEST, display_width);
     uint16_t test_data[] = {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}; // registers 4..10
 
@@ -167,8 +167,6 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     }
 #endif
 
-    // rul6024_write_register(pio, sm, display_width, CMD_WREG1-1, wreg1_buf);
-    // rul6024_write_register(pio, sm, display_width, CMD_WREG2-1, wreg2_buf);
     rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
     rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
 }

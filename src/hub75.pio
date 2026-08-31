@@ -340,9 +340,9 @@ le_data_loop:
     ; ---- Phase 4 (might be disabled): OE rising-edge "commit" pulse ---- 
     ; Testing (see rul6024.cpp) shows WREG1/WREG2 initialize reliably without it for this single-chain configuration.
     ; I left it here, enabled, as it also does not seem to harm the initialisation.
-    ; set pins, 0b000 [7]      ; OEN=0
-    ; set pins, 0b100 [7]      ; OEN=1  <- the rising edge
-    ; set pins, 0b000 [7]      ; OEN=0  (resting, enabled)
+    set pins, 0b000 [7]      ; OEN=0
+    set pins, 0b100 [7]      ; OEN=1  <- the rising edge
+    set pins, 0b000 [7]      ; OEN=0  (resting, enabled)
 .wrap
 
 %c-sdk {
@@ -404,32 +404,5 @@ le_data_loop:
         {
             pio_sm_put_blocking(pio, sm, dma_words[i]);
         }
-    }
-
-    // Issues the DATA_LATCH command (LE length = 3, see rul6024.h's LE-length
-    // table) on the same rul6024_write_register PIO program/state machine
-    // already set up by rul6024_write_register_program_init(). Unlike
-    // WREG1/WREG2, DATA_LATCH carries no payload of its own - the chip only
-    // decodes the trailing LE-high pulse count once CLK stops toggling, so
-    // what gets shifted through beforehand doesn't matter.
-    //
-    // rul6024_write_register()'s "jmp x--" loop idiom can't do a genuine
-    // zero-iteration pass (x = 0 still runs the loop body once before the
-    // exit test), so the shortest legal transaction is 1 LE-low dummy pulse
-    // followed by the 3 LE-high pulses -> display_width = 4 here, not the
-    // panel's real display_width. The dummy data is all zero since the
-    // DATA pins are "don't care" for this command.
-    //
-    // Call this once, after the WREG1/WREG2 writes, from rul6024_setup()
-    // in rul6024.cpp - e.g.:
-    //     rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
-    //     rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
-    //     rul6024_data_latch(pio, sm);
-    static inline void rul6024_data_latch(PIO pio, uint sm)
-    {
-        static const uint32_t latch_dummy[4] = {0, 0, 0, 0};
-        const uint32_t le_length_data_latch = 3; // CMD_DATA_LATCH, see rul6024.h
-
-        rul6024_write_register(pio, sm, /*display_width=*/4, le_length_data_latch, latch_dummy);
     }
 %}

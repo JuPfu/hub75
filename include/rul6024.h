@@ -54,17 +54,16 @@
 // analytically for this panel. These two values were found by sweeping
 // candidates on real hardware:
 //
-//   WREG1 = 0x3FB4
-//   WREG2 = 0xD1FF
+//   WREG1 = 0x3FBF
+//   WREG2 = 0xFDFF
 //
 // Kept as named constants (rather than inlined hex literals in the .cpp)
 // so a future re-tune touches one place, and so the values are visible
 // under their own name in a debugger or a logic-analyzer capture diff.
 // If you sweep new candidates, prefer editing these two lines over adding ad-hoc literals elsewhere.
 // -----------------------------------------------------------------------------
-constexpr uint16_t RUL6024_WREG1_VALUE = 0x02ff; // 0xFDcf; //0xFDFF; // 0xFDCB
-// 0b1101
-constexpr uint16_t RUL6024_WREG2_VALUE = 0x0000; // 0xffff; //0xFCFF;
+constexpr uint16_t RUL6024_WREG1_VALUE = 0x3FBF;
+constexpr uint16_t RUL6024_WREG2_VALUE = 0xFDFF;
 
 // -----------------------------------------------------------------------------
 // rul6024_initialize()
