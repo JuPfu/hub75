@@ -167,6 +167,8 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     }
 #endif
 
+    // rul6024_write_register(pio, sm, display_width, CMD_WREG1-1, wreg1_buf);
+    // rul6024_write_register(pio, sm, display_width, CMD_WREG2-1, wreg2_buf);
     rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
     rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
 }

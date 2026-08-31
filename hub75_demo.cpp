@@ -17,7 +17,7 @@ constexpr Hub75Config panel_cfg{
     .panel = {
         .matrix_panel_width = 64,
         .matrix_panel_height = 64,
-        .chain_rows = 2,
+        .chain_rows = 1,
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
