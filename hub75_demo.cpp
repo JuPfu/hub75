@@ -24,14 +24,14 @@ constexpr Hub75Config panel_cfg{
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
-        .base_latch_ns = 80,
-        .base_addr_ns = 160,
+        .base_latch_ns = 180,
+        .base_addr_ns = 260,
     },
     .screen = {
         .rotation = Hub75Rotation::DEG_0,
     },
     .pins = {
-        .data_base_pin = 0,
+        .data_base_pin = 00,
         .data_n_pins = 6,
         .rowsel_base_pin = 6,
         .rowsel_n_pins = 5,
