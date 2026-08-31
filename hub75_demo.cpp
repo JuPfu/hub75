@@ -21,23 +21,23 @@ constexpr Hub75Config panel_cfg{
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
-        .panel_chip = Hub75PanelChip::RUL6024,
+        .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
-        .base_latch_ns = 580,
-        .base_addr_ns = 660,
+        .base_latch_ns = 80,
+        .base_addr_ns = 160,
     },
     .screen = {
         .rotation = Hub75Rotation::DEG_0,
     },
     .pins = {
-        .data_base_pin = 30,
+        .data_base_pin = 0,
         .data_n_pins = 6,
-        .rowsel_base_pin = 36,
+        .rowsel_base_pin = 6,
         .rowsel_n_pins = 5,
-        .clk_pin = 41,
-        .strobe_pin = 42,
-        .oen_pin = 43,
+        .clk_pin = 11,
+        .strobe_pin = 12,
+        .oen_pin = 13,
     },
     .color = {
         .bitplanes = 10,
@@ -46,7 +46,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = true,
+    .frame_rate_debug = false,
 };
 
 using Panel = Hub75Driver<panel_cfg>;
