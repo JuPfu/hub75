@@ -332,17 +332,30 @@ data_loop:
     out x, 32                ; x = cmd_signature - 1   e.g. 11->10 for WREG1, 12->11 for WREG2
 le_data_loop:
     pull block
-    out pins, 6               ; still real shift-register data — LE doesn't gate data, only marks the command
+    out pins, 6              ; still real shift-register data — LE doesn't gate data, only marks the command
     set pins, 0b111 [7]      ; OEN=1 LE=1 CLK=1  (data sampled on this rising edge)
     set pins, 0b110 [7]      ; OEN=1 LE=1 CLK=0
-    jmp x-- le_data_loop
+    ; jmp x-- le_data_loop
+
+    ; data latch
+    ; out null, 0b101 [7]      ; OEN=1 LE=0 CLK=1
+    ; out null, 0b111 [7]      ; OEN=1 LE=1 CLK=1 ; both high
+    ; out null, 0b110 [7]      ; OEN=1 LE=1 CLK=0 ;
+    ; out null, 0b111 [7]      ; OEN=1 LE=1 CLK=1 ; first
+    ; out null, 0b110 [7]      ; OEN=1 LE=1 CLK=0 ;
+    ; out null, 0b111 [7]      ; OEN=1 LE=1 CLK=1 ; second
+    ; out null, 0b110 [7]      ; OEN=1 LE=1 CLK=0 ; 
+    ; out null, 0b111 [7]      ; OEN=1 LE=1 CLK=1 ; third
+    ; out null, 0b110 [7]      ; OEN=1 LE=1 CLK=0 ; 
+    ; out null, 0b110 [7]      ; OEN=1 LE=1 CLK=0 ; 
+    ; out null, 0b100 [7]      ; OEN=1 LE=0 CLK=0 ; 
 
     ; ---- Phase 4 (might be disabled): OE rising-edge "commit" pulse ---- 
     ; Testing (see rul6024.cpp) shows WREG1/WREG2 initialize reliably without it for this single-chain configuration.
     ; I left it here, enabled, as it also does not seem to harm the initialisation.
-    set pins, 0b000 [7]      ; OEN=0
-    set pins, 0b100 [7]      ; OEN=1  <- the rising edge
-    set pins, 0b000 [7]      ; OEN=0  (resting, enabled)
+    ; set pins, 0b000 [7]      ; OEN=0
+    ; set pins, 0b100 [7]      ; OEN=1  <- the rising edge
+    ; set pins, 0b000 [7]      ; OEN=0  (resting, enabled)
 .wrap
 
 %c-sdk {
@@ -376,7 +389,7 @@ le_data_loop:
         // Halves the PIO clock relative to sys_clk. 
         // Combined with the program's `[7]` delays this sets CLK high/low time.
         // See the timing note above the .program declaration if this ever changes.
-        sm_config_set_clkdiv(&c, 2.0f);
+        sm_config_set_clkdiv(&c, 4.0f);
         sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
         pio_sm_init(pio, sm, offset, &c);

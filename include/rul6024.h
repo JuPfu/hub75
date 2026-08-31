@@ -62,8 +62,9 @@
 // under their own name in a debugger or a logic-analyzer capture diff.
 // If you sweep new candidates, prefer editing these two lines over adding ad-hoc literals elsewhere.
 // -----------------------------------------------------------------------------
-constexpr uint16_t RUL6024_WREG1_VALUE = 0x3FB4;
-constexpr uint16_t RUL6024_WREG2_VALUE = 0xD1FF;
+constexpr uint16_t RUL6024_WREG1_VALUE = 0xfdff; // 0xFDcf; //0xFDFF; // 0xFDCB
+// 0b1101
+constexpr uint16_t RUL6024_WREG2_VALUE = 0xD1FF; // 0xffff; //0xFCFF;
 
 // -----------------------------------------------------------------------------
 // rul6024_initialize()
