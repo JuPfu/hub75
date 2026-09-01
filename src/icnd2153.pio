@@ -1,0 +1,129 @@
+.pio_version 0
+
+; =============================================================================
+; PROGRAM: icnd2153_row
+; =============================================================================
+; Row-select shift chain (STP1612PW05/ICND2153/FM6124C family, per field-tested
+; reference): RA is pulsed on EVERY row; RC is additionally pulsed alongside RA
+; only when re-seeding row 0. No side-set needed here anymore - PWCLK/OE is
+; now handled entirely inside icnd2153_bitplane_stream.
+;
+.program icnd2153_row
+; set pin 0 = RA  (row-advance; pulsed every row)
+; set pin 1 = RB  (row-chain preset; pulsed alongside RA only on row 0)
+
+    mov x, y                    ; X = Y so the first row-visit takes the seed branch
+    irq nowait 1                ; kick off bitplane_stream for row 0
+
+.wrap_target
+    wait 1 irq 0                ; wait for bitplane_stream to finish shifting this row
+
+    jmp x != y, advance
+    ; -- row 0: preset RC and RA together, then clear both --
+    set pins, 0b11     [3]      ; RA=1, RB=1
+    set pins, 0b00     [3]      ; RA=0, RB=0
+    jmp row_done
+
+advance:
+    ; -- every other row: pulse RA only, RC stays low --
+    set pins, 0b01     [3]      ; RA=1, RB=0
+    set pins, 0b00     [3]      ; RA=0, RB=0
+
+row_done:
+    jmp x--, reload_done
+    mov x, y                    ; reload counter after the last row
+reload_done:
+    irq nowait 1                ; kick off bitplane_stream for the next row
+.wrap
+
+% c-sdk {
+    static inline void icnd2153_row_program_init(PIO pio, uint sm, uint offset,
+                                                  uint row_addr_base_pin,   // 2 consecutive pins: RA, RB
+                                                  uint num_scan_rows)
+    {
+        pio_sm_set_consecutive_pindirs(pio, sm, row_addr_base_pin, 2, true);
+        for (uint i = 0; i < 2; ++i) pio_gpio_init(pio, row_addr_base_pin + i);
+
+        pio_sm_config c = icnd2153_row_program_get_default_config(offset);
+        sm_config_set_set_pins(&c, row_addr_base_pin, 2);
+
+        sm_config_set_out_shift(&c, true, true, 32);
+
+        pio_sm_init(pio, sm, offset, &c);
+
+        pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
+        pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
+
+        pio_sm_set_enabled(pio, sm, true);
+    }
+%}
+
+; =============================================================================
+; PROGRAM: icnd2153_bitplane_stream
+; =============================================================================
+; CLK and PWCLK (-> panel OE) are pulsed TOGETHER on every bit shifted, per
+; the "PWCLK_GCLK" convention in the field-tested reference. LE is isolated,
+; used only for the latch sequences. The double-latch (commit to PWM) fires
+; only when this row-visit's trailing control byte says "LSB bitplane".
+;
+.program icnd2153_bitplane_stream
+; side-set pin 0 = CLK
+; side-set pin 1 = LE  (LAT)
+; side-set pin 2 = PWCLK  (-> panel OE pin)
+.side_set 3
+
+.wrap_target
+    mov x, y                    side 0b000   ; reload column counter (panel_width-1)
+    wait 1 irq 1                side 0b000   ; wait for row engine to request this row
+
+row_loop:
+    out pins, 6    [3]          side 0b000   ; present R0 G0 B0 R1 G1 B1 for this column
+    out null, 2                 side 0b000   ; discard padding -> completes 8-bit autopull
+    nop            [3]          side 0b101   ; CLK+PWCLK pulse together
+    jmp x--, row_loop           side 0b000   ; CLK+PWCLK fall, loop until row's pixels done
+
+    ; one extra control byte per row, appended by build_bitplanes(): value is
+    ; 1 on the LSB bitplane's row-visits, 0 otherwise
+    out x, 8                    side 0b000   ; X now holds the LSB flag (0 or 1)
+
+    ; --- SINGLE LATCH: shift register -> intermediate buffer (every pass) ---
+    nop            [3]          side 0b010   ; LE high
+    nop            [3]          side 0b111   ; LE high, CLK+PWCLK pulse
+    nop            [3]          side 0b010   ; CLK+PWCLK fall, LE still high
+
+    jmp !x, not_lsb              side 0b010   ; ordinary bitplane -> skip the extra commit pulse
+
+    ; --- DOUBLE LATCH (LSB pass only): commit intermediate buffer -> PWM engine ---
+    nop            [3]          side 0b111   ; second CLK+PWCLK pulse, LE still high
+    nop            [3]          side 0b010   ; CLK+PWCLK fall, LE still high
+
+not_lsb:
+    nop            [3]          side 0b000   ; LE falls -> latch complete
+    irq nowait 0                side 0b000   ; notify icnd2153_row this row is done
+.wrap
+
+% c-sdk {
+    static inline void icnd2153_bitplane_stream_program_init(PIO pio, uint sm, uint offset, uint rgb_base_pin, uint clock_base_pin, uint panel_width)
+    {
+        pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+        pio_sm_set_consecutive_pindirs(pio, sm, clock_base_pin, 3, true);   // CLK, LE, PWCLK
+        for (uint i = rgb_base_pin; i < rgb_base_pin + 6; ++i)
+            pio_gpio_init(pio, i);
+        for (uint i = 0; i < 3; ++i)
+            pio_gpio_init(pio, clock_base_pin + i);
+
+        pio_sm_config c = icnd2153_bitplane_stream_program_get_default_config(offset);
+        sm_config_set_out_pins(&c, rgb_base_pin, 6);
+        sm_config_set_sideset_pins(&c, clock_base_pin);
+
+        sm_config_set_out_shift(&c, true, true, 8);
+
+        sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+        pio_sm_init(pio, sm, offset, &c);
+
+        pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
+        pio_sm_put(pio, sm, panel_width - 1);
+
+        pio_sm_set_enabled(pio, sm, true);
+    }
+%}
