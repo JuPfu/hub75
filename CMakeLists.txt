@@ -46,6 +46,7 @@ add_library(hub75 STATIC)
 
 target_sources(hub75 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/icnd2153.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
 )
@@ -68,7 +69,9 @@ target_include_directories(hub75 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src
 )
 
-pico_generate_pio_header(hub75 ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio)
+pico_generate_pio_header(hub75 
+        ${CMAKE_CURRENT_LIST_DIR}/src/hub75.pio
+        ${CMAKE_CURRENT_LIST_DIR}/src/icnd2153.pio)
 
 # target_compile_definitions are PUBLIC so any target that links "hub75" (e.g. hub75_demo or hub75_demo_dual below, or a
 # consumer project's own executable) automatically inherits the exact same panel configuration.
