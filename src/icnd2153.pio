@@ -8,6 +8,12 @@
 ; only when re-seeding row 0. No side-set needed here anymore - PWCLK/OE is
 ; now handled entirely inside icnd2153_bitplane_stream.
 ;
+;
+; next test assumption:
+;   address a    row-advance
+;   address b    analogue to OEn for standard hub75 panels -> toggle on (0/low) / off (1/high)
+;   address c    set to 1 for new frame (row 0)
+;
 .program icnd2153_row
 ; set pin 0 = RA  (row-advance; pulsed every row)
 ; set pin 1 = RB  (row-chain preset; pulsed alongside RA only on row 0)

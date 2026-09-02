@@ -41,6 +41,7 @@ enum class Hub75PanelChip
     GENERIC,
     FM6126A,
     RUL6024,
+    ICND2153
 };
 
 enum class Hub75Rotation
@@ -136,7 +137,7 @@ struct Hub75PinConfig
 //   shift=31 -> add  0%   (disabled / identity, use this to turn off a term)
 struct Hub75ColorConfig
 {
-    uint32_t bitplanes = 10; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10
+    uint32_t bitplanes = 10; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 12 for some PWM boards 
 
     // Use separate CIE channels for improved color representation - needs more memory.
     bool separate_cie_channels = false;
