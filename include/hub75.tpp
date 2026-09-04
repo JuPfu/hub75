@@ -8,6 +8,7 @@
 #include "pico/sync.h"
 
 #include "hub75.pio.h"
+#include "icnd2153.pio.h"
 
 #include "rul6024.h"
 #include "fm6126a.h"
@@ -27,11 +28,17 @@ Hub75Driver<Cfg>::~Hub75Driver()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::create()
 {
-    dma_buffer_ = frame_buffer1_;
-    frame_buffer_ = frame_buffer2_;
+    dma_buffer_ = storage_.frame_buffer1_;
+    frame_buffer_ = storage_.frame_buffer2_;
 
-    dma_row_cmd_buffer_ = row_cmd_buffer1_;
-    row_cmd_buffer_ = row_cmd_buffer2_;
+    // row_cmd_buffer1_/row_cmd_buffer2_ only exist in the HUB75 specialization of
+    // Hub75Storage - PWM panels are driven by pixel_chan_/pixel_ctrl_chan_ alone,
+    // with no row-command DMA stream at all.
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        dma_row_cmd_buffer_ = storage_.row_cmd_buffer1_;
+        row_cmd_buffer_ = storage_.row_cmd_buffer2_;
+    }
 
     timing_init(clock_get_hz(clk_sys), SM_CLOCKDIV);
 
@@ -41,11 +48,19 @@ void Hub75Driver<Cfg>::create()
         rul6024_initialize(Cfg);
 
     configure_pio();
+
     setup_dma_transfers();
-    setup_bitplane_creation();
+
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        setup_bitplane_creation();
+    }
     setup_display_irq();
     setup_bitplane_stream_irq();
-    build_row_cmd_buffer(brightness_fp_);
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        build_row_cmd_buffer(brightness_fp_);
+    }
 
     register_instance();
 }
@@ -53,20 +68,32 @@ void Hub75Driver<Cfg>::create()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::start()
 {
-    dma_row_cmd_buffer_ = row_cmd_buffer2_;
-    row_cmd_buffer_ = row_cmd_buffer1_;
+    dma_buffer_ = storage_.frame_buffer2_;
+    frame_buffer_ = storage_.frame_buffer1_;
 
-    dma_buffer_ = frame_buffer2_;
-    frame_buffer_ = frame_buffer1_;
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        dma_row_cmd_buffer_ = storage_.row_cmd_buffer2_;
+        row_cmd_buffer_ = storage_.row_cmd_buffer1_;
+    }
 
     swap_row_cmd_buffer_pending_ = false;
     swap_frame_buffer_pending_ = false;
 
-    dma_channel_set_read_addr(row_ctrl_chan_, &dma_row_cmd_buffer_, false);
+    // row_chan_/row_ctrl_chan_ are only claimed and configured for HUB75 panels
+    // (see setup_dma_transfers()) - they stay at their default -1 for PWM, so touching
+    // them here would hand the DMA hardware an invalid channel number.
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        dma_channel_set_read_addr(row_ctrl_chan_, &dma_row_cmd_buffer_, false);
+    }
     dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
 
     dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true);
-    dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
+    }
 }
 
 // -----------------------------------------------------------------------------------------
@@ -255,18 +282,21 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
             frame_count_++;
         }
 
-        if (swap_row_cmd_buffer_pending_)
+        if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
         {
-            // dma_row_cmd_buffer_ -> active front buffer (DMA reads from it).
-            // row_cmd_buffer_ -> back buffer (modified by setBasisBrightness).
-            // Swap: the new back buffer becomes the new front buffer.
-            Hub75RowCmd *new_front = row_cmd_buffer_;
-            row_cmd_buffer_ = (new_front == row_cmd_buffer1_) ? row_cmd_buffer2_ : row_cmd_buffer1_;
-            dma_row_cmd_buffer_ = new_front;
+            if (swap_row_cmd_buffer_pending_)
+            {
+                // dma_row_cmd_buffer_ -> active front buffer (DMA reads from it).
+                // row_cmd_buffer_ -> back buffer (modified by setBasisBrightness).
+                // Swap: the new back buffer becomes the new front buffer.
+                Hub75RowCmd *new_front = row_cmd_buffer_;
+                row_cmd_buffer_ = (new_front == storage_.row_cmd_buffer1_) ? storage_.row_cmd_buffer2_ : storage_.row_cmd_buffer1_;
+                dma_row_cmd_buffer_ = new_front;
 
-            dma_channel_set_read_addr(row_ctrl_chan_, &dma_row_cmd_buffer_, false);
+                dma_channel_set_read_addr(row_ctrl_chan_, &dma_row_cmd_buffer_, false);
 
-            swap_row_cmd_buffer_pending_ = false;
+                swap_row_cmd_buffer_pending_ = false;
+            }
         }
     }
 
@@ -280,7 +310,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
             // frame_buffer_ -> back buffer (refilled by handle_bitplane_irq)
             // Swap: the new back buffer becomes the new front buffer.
             uint8_t *new_front = frame_buffer_;
-            frame_buffer_ = (new_front == frame_buffer1_) ? frame_buffer2_ : frame_buffer1_;
+            frame_buffer_ = (new_front == storage_.frame_buffer1_) ? storage_.frame_buffer2_ : storage_.frame_buffer1_;
             dma_buffer_ = new_front;
             dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
 
@@ -289,7 +319,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
     }
 }
 
-// DMA IRQ1: streaming pipeline for bitplane generation (rgb_buffer_ -> PIO -> frame_buffer_).
+// DMA IRQ1: streaming pipeline for bitplane generation (storage_.rgb_buffer_ -> PIO -> frame_buffer_).
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_bitplane_irq()
 {
@@ -308,7 +338,7 @@ void Hub75Driver<Cfg>::handle_bitplane_irq()
         // Prepare DMA channels for building next bitplane
         uint8_t *plane_dst = frame_buffer_ + (bitplane_ * (TOTAL_PIXELS >> 1));
         dma_channel_set_write_addr(write_chan_, plane_dst, false);
-        dma_channel_set_read_addr(read_chan_, rgb_buffer_, false);
+        dma_channel_set_read_addr(read_chan_, storage_.rgb_buffer_, false);
         dma_start_channel_mask((1u << read_chan_) | (1u << write_chan_));
     }
     else
@@ -456,85 +486,154 @@ void Hub75Driver<Cfg>::configure_pio()
             candidates[n++] = i;
 
     bool placed = false;
-    for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
+
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
-        const uint pio_index = candidates[c];
-        if (!claim_pio_block_for_row_stream(pio_index))
-            continue; // another instance already dedicated this block to its own row+stream pair
-
-        PIO candidate = pio_get_instance(pio_index);
-
-        static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
-        static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin);
-
-        // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
-        // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
-        // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
-        bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
-                                            { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                  &hub75_bitplane_stream_program,
-                                                  &pio_config_.data_pio,
-                                                  &pio_config_.sm_data,
-                                                  &pio_config_.data_prog_offs,
-                                                  stream_lo,
-                                                  stream_hi - stream_lo + 1,
-                                                  true); });
-
-        if (stream_ok)
+        for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
         {
-            static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
-            static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+            const uint pio_index = candidates[c];
+            if (!claim_pio_block_for_row_stream(pio_index))
+                continue; // another instance already dedicated this block to its own row+stream pair
 
-            // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
-            // level (see hub75_row_program_init), so there is only one row program.
-            bool row_ok = hub75_claim_on_pio(candidate, [&]
-                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                   &hub75_row_program,
-                                                   &pio_config_.row_pio,
-                                                   &pio_config_.sm_row,
-                                                   &pio_config_.row_prog_offs,
-                                                   row_lo,
-                                                   row_hi - row_lo + 1,
-                                                   true); });
+            PIO candidate = pio_get_instance(pio_index);
 
-            if (row_ok)
+            static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+            static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin);
+
+            // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
+            // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
+            // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
+            bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
+                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                      &hub75_bitplane_stream_program,
+                                                      &pio_config_.data_pio,
+                                                      &pio_config_.sm_data,
+                                                      &pio_config_.data_prog_offs,
+                                                      stream_lo,
+                                                      stream_hi - stream_lo + 1,
+                                                      true); });
+
+            if (stream_ok)
             {
-                placed = true;
-                break;
+                static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+                static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+
+                // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
+                // level (see hub75_row_program_init), so there is only one row program.
+                bool row_ok = hub75_claim_on_pio(candidate, [&]
+                                                 { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                       &hub75_row_program,
+                                                       &pio_config_.row_pio,
+                                                       &pio_config_.sm_row,
+                                                       &pio_config_.row_prog_offs,
+                                                       row_lo,
+                                                       row_hi - row_lo + 1,
+                                                       true); });
+
+                if (row_ok)
+                {
+                    placed = true;
+                    break;
+                }
+
+                pio_remove_program_and_unclaim_sm(&hub75_bitplane_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
             }
 
-            pio_remove_program_and_unclaim_sm(&hub75_bitplane_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
+            release_pio_block_for_row_stream(pio_index);
         }
 
-        release_pio_block_for_row_stream(pio_index);
-    }
+        if (!placed)
+        {
+            panic("Failed to find a PIO block with room for hub75_bitplane_stream_program + "
+                  "hub75_row_program (checked all %d blocks)\n",
+                  (int)NUM_PIOS);
+        }
 
-    if (!placed)
+        hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
+
+        // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
+        // base_latch_wait_cycles passed as parameter to hub75_row program.
+        // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
+        hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
+
+        // State machine for "parallelized" building of the bit-plane structure. No IRQ/GPIO use
+        // (see src/hub75.pio), so unlike stream/row it isn't restricted to any particular block or
+        // exclusive to one instance - the plain claim call already searches every block itself.
+        if (!pio_claim_free_sm_and_add_program(
+                &hub75_bitplane_setup_program,
+                &pio_config_.pio_read,
+                &pio_config_.sm_read,
+                &pio_config_.offs_read))
+        {
+            panic("Failed to claim PIO SM for hub75_bitplane_setup_program\n");
+        }
+        hub75_bitplane_setup_program_init(pio_config_.pio_read, pio_config_.sm_read, pio_config_.offs_read);
+    }
+    else
     {
-        panic("Failed to find a PIO block with room for hub75_bitplane_stream_program + "
-              "hub75_row_program (checked all %d blocks)\n",
-              (int)NUM_PIOS);
+        for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
+        {
+            const uint pio_index = candidates[c];
+            if (!claim_pio_block_for_row_stream(pio_index))
+                continue; // another instance already dedicated this block to its own row+stream pair
+
+            PIO candidate = pio_get_instance(pio_index);
+
+            static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+            static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin);
+
+            // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
+            // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
+            // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
+            bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
+                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                      &icnd2153_bitplane_stream_program,
+                                                      &pio_config_.data_pio,
+                                                      &pio_config_.sm_data,
+                                                      &pio_config_.data_prog_offs,
+                                                      stream_lo,
+                                                      stream_hi - stream_lo + 1,
+                                                      true); });
+
+            if (stream_ok)
+            {
+                static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+                static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+
+                // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
+                // level (see hub75_row_program_init), so there is only one row program.
+                bool row_ok = hub75_claim_on_pio(candidate, [&]
+                                                 { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                       &icnd2153_row_program,
+                                                       &pio_config_.row_pio,
+                                                       &pio_config_.sm_row,
+                                                       &pio_config_.row_prog_offs,
+                                                       row_lo,
+                                                       row_hi - row_lo + 1,
+                                                       true); });
+
+                if (row_ok)
+                {
+                    placed = true;
+                    break;
+                }
+
+                pio_remove_program_and_unclaim_sm(&icnd2153_bitplane_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
+            }
+
+            release_pio_block_for_row_stream(pio_index);
+        }
+
+        if (!placed)
+        {
+            panic("Failed to find a PIO block with room for icnd2153_bitplane_stream_program icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
+        }
+
+        hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
+
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, 32);
+        printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
-
-    hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
-
-    // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
-    // base_latch_wait_cycles passed as parameter to hub75_row program.
-    // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
-    hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
-
-    // State machine for "parallelized" building of the bit-plane structure. No IRQ/GPIO use
-    // (see src/hub75.pio), so unlike stream/row it isn't restricted to any particular block or
-    // exclusive to one instance - the plain claim call already searches every block itself.
-    if (!pio_claim_free_sm_and_add_program(
-            &hub75_bitplane_setup_program,
-            &pio_config_.pio_read,
-            &pio_config_.sm_read,
-            &pio_config_.offs_read))
-    {
-        panic("Failed to claim PIO SM for hub75_bitplane_setup_program\n");
-    }
-    hub75_bitplane_setup_program_init(pio_config_.pio_read, pio_config_.sm_read, pio_config_.offs_read);
 }
 
 // Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output
@@ -543,94 +642,149 @@ void Hub75Driver<Cfg>::configure_pio()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setup_dma_transfers()
 {
-    row_chan_ = dma_claim_unused_channel(true);
-    row_ctrl_chan_ = dma_claim_unused_channel(true);
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        row_chan_ = dma_claim_unused_channel(true);
+        row_ctrl_chan_ = dma_claim_unused_channel(true);
 
-    // row channel
-    dma_channel_config row_chan_config = dma_channel_get_default_config(row_chan_);
+        // row channel
+        dma_channel_config row_chan_config = dma_channel_get_default_config(row_chan_);
 
-    channel_config_set_transfer_data_size(&row_chan_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&row_chan_config, true);
-    channel_config_set_write_increment(&row_chan_config, false);
+        channel_config_set_transfer_data_size(&row_chan_config, DMA_SIZE_32);
+        channel_config_set_read_increment(&row_chan_config, true);
+        channel_config_set_write_increment(&row_chan_config, false);
 
-    channel_config_set_high_priority(&row_chan_config, true);
+        channel_config_set_high_priority(&row_chan_config, true);
 
-    channel_config_set_dreq(&row_chan_config, pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true));
+        channel_config_set_dreq(&row_chan_config, pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true));
 
-    channel_config_set_chain_to(&row_chan_config, row_ctrl_chan_);
+        channel_config_set_chain_to(&row_chan_config, row_ctrl_chan_);
 
-    // One big transfer of the complete content of dma_row_cmd_buffer_.
-    // The dma_row_cmd_buffer_
-    //    - has (mostly) different lit cycles and dark cycles for each bitplane
-    //    - has the addresses of each row in each bitplane
-    dma_channel_configure(row_chan_,
-                          &row_chan_config,
-                          &pio_config_.row_pio->txf[pio_config_.sm_row],
-                          dma_row_cmd_buffer_,
-                          dma_encode_transfer_count(bcm_sequence_length * SCAN_DEPTH * row_cmd_struct_members),
-                          false);
+        // One big transfer of the complete content of dma_row_cmd_buffer_.
+        // The dma_row_cmd_buffer_
+        //    - has (mostly) different lit cycles and dark cycles for each bitplane
+        //    - has the addresses of each row in each bitplane
+        dma_channel_configure(row_chan_,
+                              &row_chan_config,
+                              &pio_config_.row_pio->txf[pio_config_.sm_row],
+                              dma_row_cmd_buffer_,
+                              dma_encode_transfer_count(bcm_sequence_length * SCAN_DEPTH * row_cmd_struct_members),
+                              false);
 
-    // row ctrl channel
-    dma_channel_config row_ctrl_chan_config = dma_channel_get_default_config(row_ctrl_chan_);
+        // row ctrl channel
+        dma_channel_config row_ctrl_chan_config = dma_channel_get_default_config(row_ctrl_chan_);
 
-    channel_config_set_transfer_data_size(&row_ctrl_chan_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&row_ctrl_chan_config, false);
-    channel_config_set_write_increment(&row_ctrl_chan_config, false);
+        channel_config_set_transfer_data_size(&row_ctrl_chan_config, DMA_SIZE_32);
+        channel_config_set_read_increment(&row_ctrl_chan_config, false);
+        channel_config_set_write_increment(&row_ctrl_chan_config, false);
 
-    channel_config_set_dreq(&row_ctrl_chan_config, DREQ_FORCE);
+        channel_config_set_dreq(&row_ctrl_chan_config, DREQ_FORCE);
 
-    channel_config_set_high_priority(&row_ctrl_chan_config, true);
+        channel_config_set_high_priority(&row_ctrl_chan_config, true);
 
-    channel_config_set_chain_to(&row_ctrl_chan_config, row_chan_);
+        channel_config_set_chain_to(&row_ctrl_chan_config, row_chan_);
 
-    // When row_chan_ has finished a complete frame (each row in each bitplane) has been emitted.
-    // The row_ctrl_chan_ resets the start address of row_chan_ to dma_row_cmd_buffer_.
-    dma_channel_configure(row_ctrl_chan_, &row_ctrl_chan_config, &dma_hw->ch[row_chan_].read_addr, dma_row_cmd_buffer_, dma_encode_transfer_count(1), false);
+        // When row_chan_ has finished a complete frame (each row in each bitplane) has been emitted.
+        // The row_ctrl_chan_ resets the start address of row_chan_ to dma_row_cmd_buffer_.
+        dma_channel_configure(row_ctrl_chan_, &row_ctrl_chan_config, &dma_hw->ch[row_chan_].read_addr, dma_row_cmd_buffer_, dma_encode_transfer_count(1), false);
 
-    // pixel channel
-    pixel_chan_ = dma_claim_unused_channel(true);
-    pixel_ctrl_chan_ = dma_claim_unused_channel(true);
+        // pixel channel
+        pixel_chan_ = dma_claim_unused_channel(true);
+        pixel_ctrl_chan_ = dma_claim_unused_channel(true);
 
-    dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
+        dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
 
-    channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_8);
-    channel_config_set_read_increment(&pixel_chan_config, true);
-    channel_config_set_write_increment(&pixel_chan_config, false);
+        channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_8);
+        channel_config_set_read_increment(&pixel_chan_config, true);
+        channel_config_set_write_increment(&pixel_chan_config, false);
 
-    channel_config_set_dreq(&pixel_chan_config, pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true));
+        channel_config_set_dreq(&pixel_chan_config, pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true));
 
-    channel_config_set_high_priority(&pixel_chan_config, true);
+        channel_config_set_high_priority(&pixel_chan_config, true);
 
-    channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan_);
+        channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan_);
 
-    // Due to DMA channel row_chan_ the complete pre-build bit planes can be passed to DMA channel pixel_chan_.
-    // The pixel_chan_ iterates over all bitplanes in one big swoop.
-    dma_channel_configure(pixel_chan_,
-                          &pixel_chan_config,
-                          &pio_config_.data_pio->txf[pio_config_.sm_data],
-                          dma_buffer_,
-                          dma_encode_transfer_count((TOTAL_PIXELS >> 1) * bcm_sequence_length),
-                          false);
+        // Due to DMA channel row_chan_ the complete pre-build bit planes can be passed to DMA channel pixel_chan_.
+        // The pixel_chan_ iterates over all bitplanes in one big swoop.
+        dma_channel_configure(pixel_chan_,
+                              &pixel_chan_config,
+                              &pio_config_.data_pio->txf[pio_config_.sm_data],
+                              dma_buffer_,
+                              dma_encode_transfer_count((TOTAL_PIXELS >> 1) * bcm_sequence_length),
+                              false);
 
-    // pixel ctrl channel
-    dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
+        // pixel ctrl channel
+        dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
 
-    channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
-    channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
+        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
+        channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
+        channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
 
-    channel_config_set_dreq(&pixel_ctrl_chan_config, DREQ_FORCE);
+        channel_config_set_dreq(&pixel_ctrl_chan_config, DREQ_FORCE);
 
-    channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
+        channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
 
-    channel_config_set_chain_to(&pixel_ctrl_chan_config, pixel_chan_);
+        channel_config_set_chain_to(&pixel_ctrl_chan_config, pixel_chan_);
 
-    // When pixel_chan_ has finished a complete frame (each row in each bitplane) has been emitted.
-    // The pixel_ctrl_chan_ resets the start address of pixel_chan_ to dma_buffer_.
-    dma_channel_configure(pixel_ctrl_chan_, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan_].read_addr, dma_buffer_, dma_encode_transfer_count(1), false);
+        // When pixel_chan_ has finished a complete frame (each row in each bitplane) has been emitted.
+        // The pixel_ctrl_chan_ resets the start address of pixel_chan_ to dma_buffer_.
+        dma_channel_configure(pixel_ctrl_chan_, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan_].read_addr, dma_buffer_, dma_encode_transfer_count(1), false);
 
-    pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
-    pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
+        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
+        pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
+    }
+    else
+    {
+        // icnd2153_row_program
+        // self sufficient - no control handler needed
+        // row counter is reset in icnd2153_row_program no input from DMA!!!
+        // Trigger start of icnd2153_row_program -> runs forever
+        //
+        // icnd2153_bitplane_stream receives pixel data fed by DMA similar to hub75_bitplane_stream pixel channel
+        pixel_chan_ = dma_claim_unused_channel(true);
+        pixel_ctrl_chan_ = dma_claim_unused_channel(true);
+
+        dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
+
+        channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_8);
+        channel_config_set_read_increment(&pixel_chan_config, true);
+        channel_config_set_write_increment(&pixel_chan_config, false);
+
+        channel_config_set_dreq(&pixel_chan_config, pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true));
+
+        channel_config_set_high_priority(&pixel_chan_config, true);
+
+        channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan_);
+
+        // Due to DMA channel row_chan the complete pre-build bit planes can be passed to DMA channel pixel_chan.
+        // The pixel_chan iterates over all bitplanes in one big swoop.
+        dma_channel_configure(pixel_chan_,
+                              &pixel_chan_config,
+                              &pio_config_.data_pio->txf[pio_config_.sm_data],
+                              &dma_buffer_,
+                              dma_encode_transfer_count(((TOTAL_PIXELS >> 1) + SCAN_DEPTH) * Cfg.color.bitplanes),
+                              false);
+
+        // pixel ctrl channel
+        dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
+
+        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
+        channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
+        channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
+
+        channel_config_set_dreq(&pixel_ctrl_chan_config, DREQ_FORCE);
+
+        channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
+
+        channel_config_set_chain_to(&pixel_ctrl_chan_config, pixel_chan_);
+
+        // When pixel_chan has finished a complete frame (each row in each bitplane) has been emitted.
+        // The pixel_ctrl_chan resets the start address of pixel_chan to dma_buffer.
+        dma_channel_configure(pixel_ctrl_chan_, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan_].read_addr, &dma_buffer_, dma_encode_transfer_count(1), false);
+
+        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
+        pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
+    }
 }
 
 // -----------------------------------------------------------------------------------------
@@ -774,6 +928,54 @@ uint32_t Hub75Driver<Cfg>::rot_lut_rgb(const uint8_t *src, int dx_base, int dy, 
     return pack_lut_rgb_(src[rot + 2], src[rot + 1], src[rot]);
 }
 
+template <Hub75Config Cfg>
+__attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_bitplanes()
+{
+    // This is the PWM grayscale bit-slicing path: it reads storage_.rgb_buffer_ as a flat
+    // per-channel byte array (uint16_t[TOTAL_PIXELS*3]) and writes shift-selected bits into
+    // frame_buffer_. It has no meaning for HUB75 panels, whose storage_.rgb_buffer_ is a much
+    // smaller, differently-laid-out uint32_t[TOTAL_PIXELS] of already LUT/CCM-packed pixels
+    // (see rot_lut()/pack_lut_rgb() and update()/update_bgr() instead). Since this function is
+    // a virtual override, it is instantiated for every Cfg regardless of panel_class, so the
+    // whole body must be guarded - without this if constexpr, the loop bounds below (sized for
+    // the PWM buffer) walk straight off the end of the much smaller HUB75 rgb_buffer_.
+    if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
+    {
+        // slice rgb_buffer into frame_buffer with 12 bit or 16 bit resolution
+
+        constexpr uint32_t pixel_pairs = TOTAL_PIXELS >> 1;
+        constexpr uint32_t rgb_entries = pixel_pairs * 6; // 2 rgb colour slices in 1 byte (x x r0 g0 b0 r1 g1 b1) results in 6 rgb entries per pixel pair
+        constexpr uint32_t entries_per_row = DISPLAY_WIDTH * 6;
+
+        uint32_t fb_index = 0;
+
+        for (uint16_t i = 0; i < Cfg.color.bitplanes; i++)
+        {
+            const uint16_t shift = Cfg.color.bitplanes - 1u - i; // select bitplane
+            const uint16_t mask = 1u << shift;
+            const uint8_t is_lsb = (i == Cfg.color.bitplanes - 1) ? 1 : 0;
+
+            for (uint32_t row_start = 0; row_start < rgb_entries; row_start += entries_per_row)
+            {
+                for (uint32_t j = row_start; j < row_start + entries_per_row; j += 6)
+                {
+                    frame_buffer_[fb_index] = (((storage_.rgb_buffer_[j] & mask) >> shift) << 5) |
+                                              (((storage_.rgb_buffer_[j + 1] & mask) >> shift) << 4) |
+                                              (((storage_.rgb_buffer_[j + 2] & mask) >> shift) << 3) |
+                                              (((storage_.rgb_buffer_[j + 3] & mask) >> shift) << 2) |
+                                              (((storage_.rgb_buffer_[j + 4] & mask) >> shift) << 1) |
+                                              (((storage_.rgb_buffer_[j + 5] & mask) >> shift) << 0);
+                    fb_index++;
+                }
+                frame_buffer_[fb_index++] = is_lsb; // NEW: one control byte per row-visit
+            }
+        }
+        swap_frame_buffer_pending_ = true; // signal frame_buffer switch
+
+        printf(">>>build_bitplanes swap_frame_buffer_pending=%d\n", swap_frame_buffer_pending_);
+    }
+}
+
 // Calculate offset for current row in panel with coordinates (v, h) in positive or negative
 // ('reverse') direction.
 template <Hub75Config Cfg>
@@ -839,7 +1041,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base - p * rows_per_bank;
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                                storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -850,7 +1052,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base + p * rows_per_bank;
-                                rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                                storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -927,8 +1129,8 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             const int dx2 = phys_h * Cfg.panel.matrix_panel_width + local_col2;
                             const int dy2 = v * Cfg.panel.matrix_panel_height + local_row2;
 
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx2, dy2, 0, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx2, dy2, 0, W, H);
                         }
                     }
                 }
@@ -969,38 +1171,44 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                     {
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
                         }
                     }
                     else
                     {
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
                         }
 
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
             }
         }
     }
-
-    // Kick off building bitplanes from rgb_buffer_ to be written to frame_buffer_
-    dma_channel_set_write_addr(write_chan_, frame_buffer_, false);
-    dma_channel_set_read_addr(read_chan_, rgb_buffer_, false);
-    dma_start_channel_mask((1u << read_chan_) | (1u << write_chan_));
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        // Kick off building bitplanes from storage_.rgb_buffer_ to be written to frame_buffer_
+        dma_channel_set_write_addr(write_chan_, frame_buffer_, false);
+        dma_channel_set_read_addr(read_chan_, storage_.rgb_buffer_, false);
+        dma_start_channel_mask((1u << read_chan_) | (1u << write_chan_));
+    }
+    else
+    {
+        build_bitplanes();
+    }
 }
 
 #if USE_PICO_GRAPHICS == true
@@ -1088,7 +1296,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base - p * rows_per_bank;
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+                                storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1099,7 +1307,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base + p * rows_per_bank;
-                                rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+                                storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1174,8 +1382,8 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                             const int dx2 = phys_h * Cfg.panel.matrix_panel_width + local_col2;
                             const int dy2 = v * Cfg.panel.matrix_panel_height + local_row2;
 
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx, dy, 0, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx2, dy2, 0, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx, dy, 0, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx2, dy2, 0, W, H);
                         }
                     }
                 }
@@ -1218,26 +1426,26 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                         //   - sign on quarter rows -> above
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
                         }
                     }
                     else
                     {
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                            rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
+                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
@@ -1245,9 +1453,16 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
         }
     }
 
-    // Kick off building bitplanes from rgb_buffer_ to be written to frame_buffer_
-    dma_channel_set_write_addr(write_chan_, frame_buffer_, false);
-    dma_channel_set_read_addr(read_chan_, rgb_buffer_, false);
-    dma_start_channel_mask((1u << read_chan_) | (1u << write_chan_));
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        // Kick off building bitplanes from storage_.rgb_buffer_ to be written to frame_buffer_
+        dma_channel_set_write_addr(write_chan_, frame_buffer_, false);
+        dma_channel_set_read_addr(read_chan_, storage_.rgb_buffer_, false);
+        dma_start_channel_mask((1u << read_chan_) | (1u << write_chan_));
+    }
+    else
+    {
+        build_bitplanes();
+    }
 }
 #endif

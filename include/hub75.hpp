@@ -21,6 +21,12 @@
 
 // See README.md file chapter "How to Configure" for how to size a Hub75Config for your panel.
 
+enum class PanelClass
+{
+    HUB75,
+    PWM,
+};
+
 enum class Hub75ChainMode
 {
     SERPENTINE,
@@ -41,7 +47,7 @@ enum class Hub75PanelChip
     GENERIC,
     FM6126A,
     RUL6024,
-    ICND2153
+    ICND2153,
 };
 
 enum class Hub75Rotation
@@ -79,6 +85,9 @@ struct Hub75PanelConfig
     //   2x4 serpentine array:  chain_rows=2, chain_cols=4
     uint32_t chain_rows = 1;
     uint32_t chain_cols = 1;
+
+    /* The software-based control of Hub75 matrix panels differs significantly from that of PWM matrix panels */
+    PanelClass panel_class = PanelClass::HUB75;
     Hub75ChainMode chain_mode = Hub75ChainMode::SERPENTINE;
 
     // Scan rate 1:32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
@@ -114,8 +123,8 @@ struct Hub75ScreenConfig
 // Wiring of the HUB75 matrix.
 struct Hub75PinConfig
 {
-    uint32_t data_base_pin = 0; // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
-    uint32_t data_n_pins = 6;   // count of consecutive color pins usually 6
+    uint32_t data_base_pin = 0;   // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
+    uint32_t data_n_pins = 6;     // count of consecutive color pins usually 6
     uint32_t rowsel_base_pin = 6; // start gpio pin of address pins
     uint32_t rowsel_n_pins = 5;   // count of consecutive address pins - adapt to the number of address pins of your panel
     uint32_t clk_pin = 11;
@@ -137,7 +146,7 @@ struct Hub75PinConfig
 //   shift=31 -> add  0%   (disabled / identity, use this to turn off a term)
 struct Hub75ColorConfig
 {
-    uint32_t bitplanes = 10; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 12 for some PWM boards 
+    uint32_t bitplanes = 12; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 12 for some PWM boards
 
     // Use separate CIE channels for improved color representation - needs more memory.
     bool separate_cie_channels = false;
@@ -237,6 +246,8 @@ protected:
     virtual void handle_ctrl_irq() = 0;
     virtual void handle_bitplane_irq() = 0;
 
+    virtual void build_bitplanes() = 0;
+
 private:
     static void global_ctrl_irq_handler();
     static void global_bitplane_irq_handler();
@@ -251,7 +262,8 @@ private:
     // global IRQ handlers below (which read the same state, possibly on the other core).
     // Initialized eagerly here (dynamic init of an inline variable runs on core0 before main(),
     // i.e. before core1 could ever be launched), so there's no lazy-init race to solve too.
-    static inline critical_section_t s_instance_lock = [] {
+    static inline critical_section_t s_instance_lock = []
+    {
         critical_section_t cs;
         critical_section_init(&cs);
         return cs;
@@ -264,7 +276,9 @@ class Hub75Driver : public Hub75DriverBase
 private:
     static_assert(Cfg.panel.chain_rows >= 1, "chain_rows must be >= 1");
     static_assert(Cfg.panel.chain_cols >= 1, "chain_cols must be >= 1");
-    static_assert(Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10, "bitplanes must be 8 or 10");
+    static_assert(
+        ((Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10) && Cfg.panel.panel_class == PanelClass::HUB75) || ((Cfg.color.bitplanes == 12 || Cfg.color.bitplanes == 16) && Cfg.panel.panel_class == PanelClass::PWM),
+        "bitplanes must be 8 or 10 for HUB75 panels or bitplanes must be 12 or 16 for PWM panels");
 
     // Unrotated panel geometry: internal only. Callers should use SCREEN_WIDTH/SCREEN_HEIGHT
     // below, which takes rotation into account.
@@ -273,7 +287,7 @@ private:
     static_assert(DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
 
 public:
-    static constexpr size_t TOTAL_PIXELS = static_cast<size_t>(DISPLAY_WIDTH) * DISPLAY_HEIGHT;
+    static constexpr size_t TOTAL_PIXELS = static_cast<size_t>(DISPLAY_WIDTH * DISPLAY_HEIGHT);
 
     // SCREEN_WIDTH/SCREEN_HEIGHT follow screen rotation. Use those to size drawing routines
     // or framebuffers passed into update()/update_bgr().
@@ -286,12 +300,12 @@ public:
             ? DISPLAY_WIDTH
             : DISPLAY_HEIGHT;
     static_assert(SCREEN_WIDTH == ((Cfg.screen.rotation == Hub75Rotation::DEG_90 || Cfg.screen.rotation == Hub75Rotation::DEG_270)
-                                        ? Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height
-                                        : Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width),
+                                       ? Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height
+                                       : Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width),
                   "Width/height mismatch for rotated display");
     static_assert(SCREEN_HEIGHT == ((Cfg.screen.rotation == Hub75Rotation::DEG_90 || Cfg.screen.rotation == Hub75Rotation::DEG_270)
-                                         ? Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width
-                                         : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
+                                        ? Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width
+                                        : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
                   "Width/height mismatch for rotated display");
 
     Hub75Driver() = default;
@@ -325,8 +339,7 @@ private:
     static constexpr uint32_t ROWS_IN_PARALLEL = Cfg.panel.matrix_panel_height / SCAN_DEPTH;
     static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH; // alias, used for RowMapping::Split panels
 
-    static constexpr uint32_t LINE_OFFSET =
-        ((Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols) >> 1u) * ROWS_IN_PARALLEL;
+    static constexpr uint32_t LINE_OFFSET = ((Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols) >> 1u) * ROWS_IN_PARALLEL;
     static constexpr int32_t BITPLANE_STREAM_LENGTH = static_cast<int32_t>(LINE_OFFSET);
 
     static constexpr int32_t stride_row = static_cast<int32_t>(Cfg.panel.matrix_panel_width * Cfg.panel.chain_cols);
@@ -348,7 +361,7 @@ private:
             else
                 return std::array<uint8_t, 10>{0, 9, 2, 7, 4, 5, 1, 8, 3, 6};
         }
-        else
+        else if constexpr (Cfg.color.bitplanes == 8)
         {
             if constexpr (Cfg.color.balanced_light_output)
                 // Split BP 7 into 3 parts, BP 6 into 2 parts.
@@ -422,20 +435,41 @@ private:
     void handle_ctrl_irq() override;
     void handle_bitplane_irq() override;
 
+    void build_bitplanes() override;
+
     // --- State --------------------------------------------------------------------------------
-    alignas(4) uint8_t frame_buffer1_[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
-    alignas(4) uint8_t frame_buffer2_[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
 
-    alignas(4) Hub75RowCmd row_cmd_buffer1_[SCAN_DEPTH * bcm_sequence_length];
-    alignas(4) Hub75RowCmd row_cmd_buffer2_[SCAN_DEPTH * bcm_sequence_length];
+    template <PanelClass PC, auto CfgVal>
+    struct Hub75Storage; // primary declared, not defined
 
-    alignas(4) uint32_t rgb_buffer_[TOTAL_PIXELS];
+    template <auto CfgVal>
+    struct Hub75Storage<PanelClass::HUB75, CfgVal>
+    {
+        uint32_t rgb_buffer_[TOTAL_PIXELS];
 
-    uint8_t *frame_buffer_ = nullptr; // Back buffer - written by bitplane builder (handle_bitplane_irq)
-    uint8_t *dma_buffer_ = nullptr;   // Front buffer - read by pixel_chan DMA -> panel streamer
+        alignas(4) uint8_t frame_buffer1_[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
+        alignas(4) uint8_t frame_buffer2_[(TOTAL_PIXELS >> 1) * bcm_sequence_length];
 
-    Hub75RowCmd *row_cmd_buffer_ = nullptr;
-    Hub75RowCmd *dma_row_cmd_buffer_ = nullptr;
+        alignas(4) Hub75RowCmd row_cmd_buffer1_[SCAN_DEPTH * bcm_sequence_length];
+        alignas(4) Hub75RowCmd row_cmd_buffer2_[SCAN_DEPTH * bcm_sequence_length];
+    };
+
+    template <auto CfgVal>
+    struct Hub75Storage<PanelClass::PWM, CfgVal>
+    {
+        alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
+
+        alignas(4) uint8_t frame_buffer1_[(TOTAL_PIXELS >> 1) * Cfg.color.bitplanes + SCAN_DEPTH * Cfg.color.bitplanes];
+        alignas(4) uint8_t frame_buffer2_[(TOTAL_PIXELS >> 1) * Cfg.color.bitplanes + SCAN_DEPTH * Cfg.color.bitplanes];
+    };
+
+    Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;
+
+    alignas(4) uint8_t *frame_buffer_ = nullptr; // Back buffer - written by bitplane builder (handle_bitplane_irq)
+    alignas(4) uint8_t *dma_buffer_ = nullptr;   // Front buffer - read by pixel_chan DMA -> panel streamer
+
+    alignas(4) Hub75RowCmd *row_cmd_buffer_ = nullptr;
+    alignas(4) Hub75RowCmd *dma_row_cmd_buffer_ = nullptr;
 
     volatile bool swap_row_cmd_buffer_pending_ = false;
     volatile bool swap_frame_buffer_pending_ = false;

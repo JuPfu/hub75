@@ -19,6 +19,7 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_height = 64,
         .chain_rows = 1,
         .chain_cols = 1,
+        .panel_class = PanelClass::PWM,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
         .panel_chip = Hub75PanelChip::GENERIC,
@@ -40,7 +41,7 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 13,
     },
     .color = {
-        .bitplanes = 10,
+        .bitplanes = 12,
         .separate_cie_channels = true,
         .balanced_light_output = true,
         .ccm_rg_shift = 6,
