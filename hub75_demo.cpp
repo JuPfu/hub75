@@ -31,7 +31,7 @@ constexpr Hub75Config panel_cfg{
         .rotation = Hub75Rotation::DEG_0,
     },
     .pins = {
-        .data_base_pin = 00,
+        .data_base_pin = 0,
         .data_n_pins = 6,
         .rowsel_base_pin = 6,
         .rowsel_n_pins = 5,
