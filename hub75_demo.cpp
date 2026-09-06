@@ -22,7 +22,7 @@ constexpr Hub75Config panel_cfg{
         .panel_class = PanelClass::HUB75,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
-        .panel_chip = Hub75PanelChip::RUL6024,
+        .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
         .base_latch_ns = 180,
@@ -47,7 +47,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = false,
+    .frame_rate_debug = true,
 };
 
 using Panel = Hub75Driver<panel_cfg>;
@@ -170,7 +170,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 266MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(266000, true);
+    set_sys_clock_khz(200000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 

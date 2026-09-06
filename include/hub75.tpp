@@ -56,9 +56,9 @@ void Hub75Driver<Cfg>::create()
         setup_bitplane_creation();
     }
     setup_display_irq();
-    setup_bitplane_stream_irq();
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
+        setup_bitplane_stream_irq();
         build_row_cmd_buffer(brightness_fp_);
     }
 
@@ -260,27 +260,11 @@ void Hub75Driver<Cfg>::timing_init(float clk_sys_hz, float clkdiv)
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_ctrl_irq()
 {
+            printf("IN handle_ctrl_irq\n");
+
     if (dma_channel_get_irq0_status(row_ctrl_chan_))
     {
         dma_channel_acknowledge_irq0(row_ctrl_chan_);
-
-        if constexpr (Cfg.frame_rate_debug)
-        {
-            if (frame_count_ == 0)
-            {
-                frame_time_start_ = get_absolute_time();
-            }
-            else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
-            {
-                frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
-                frame_count_ = -1; // reset so it measures again next interval
-
-                uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
-                printf("Frame frequency: %u Hz\n", freq);
-                frame_freq_us_ = 0; // clear until next measurement
-            }
-            frame_count_++;
-        }
 
         if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
         {
@@ -304,6 +288,24 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
     {
         dma_channel_acknowledge_irq0(pixel_ctrl_chan_);
 
+        if constexpr (Cfg.frame_rate_debug)
+        {
+            if (frame_count_ == 0)
+            {
+                frame_time_start_ = get_absolute_time();
+            }
+            else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
+            {
+                frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
+                frame_count_ = -1; // reset so it measures again next interval
+
+                uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
+                printf("Frame frequency: %u Hz\n", freq);
+                frame_freq_us_ = 0; // clear until next measurement
+            }
+            frame_count_++;
+        }
+
         if (swap_frame_buffer_pending_)
         {
             // dma_buffer_  -> active front buffer (DMA streams from it)
@@ -323,6 +325,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_bitplane_irq()
 {
+    printf("HANDLE BITPLANE IRQ\n");
     if (!dma_channel_get_irq1_status(read_chan_))
         return;
 
@@ -410,14 +413,19 @@ void Hub75Driver<Cfg>::setup_bitplane_creation()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setup_display_irq()
 {
-    dma_channel_set_irq0_enabled(row_ctrl_chan_, true);
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        dma_channel_set_irq0_enabled(row_ctrl_chan_, true);
+    }
     dma_channel_set_irq0_enabled(pixel_ctrl_chan_, true);
+    printf("setup_display_irq dma_channel_set_irq0_enabled pixel_ctrl_chan_\n");
 }
 
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setup_bitplane_stream_irq()
 {
     dma_channel_set_irq1_enabled(read_chan_, true);
+    printf("setup_bitplane_stream_irq read_chan_ enabled\n");
 }
 
 // hub75_row(_inverted) and hub75_bitplane_stream synchronise with each other via PIO-block-
@@ -631,7 +639,7 @@ void Hub75Driver<Cfg>::configure_pio()
 
         hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, 32);
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, 128);
         printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
 }

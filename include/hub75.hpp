@@ -369,6 +369,15 @@ private:
             else
                 return std::array<uint8_t, 8>{0, 7, 2, 5, 1, 6, 3, 4};
         }
+        else
+        {
+            // PWM panels (bitplanes == 12 or 16) don't use binary-code-modulation row commands
+            // at all - grayscale comes from build_bitplanes() bit-slicing directly into
+            // frame_buffer_, and Hub75Storage<PanelClass::PWM,...> has no row_cmd_buffer1_/2_.
+            // BCM_SEQUENCE/bcm_sequence_length are HUB75-only, so an empty sequence is correct
+            // (and safe) here - it just needs *a* valid return so BCM_SEQUENCE's type deduces.
+            return std::array<uint8_t, 0>{};
+        }
     }
 
     static constexpr auto BCM_SEQUENCE = compute_bcm_sequence();
