@@ -45,6 +45,18 @@
 #define CMD_WREG1 11
 #define CMD_WREG2 12
 
+// DATA_LATCH and the two-step RESET_OEN are now issued from rul6024_setup()
+// (rul6024.cpp) via rul6024_data_latch() / rul6024_reset_oen() in hub75.pio.
+// Defined here, matching the anticipatory comment above, purely for
+// readability at call sites and in debugger/logic-analyzer captures — the
+// hub75.pio helpers hardcode the same LE-length values themselves (see the
+// comments there) rather than including this header, to avoid the header
+// include-order issue noted in rul6024.cpp (hub75.pio.h is included before
+// rul6024.h there).
+#define CMD_DATA_LATCH 3
+#define CMD_RESET_OEN_STEP1 1
+#define CMD_RESET_OEN_STEP2 2
+
 // -----------------------------------------------------------------------------
 // WREG1 / WREG2 payloads — empirically determined, confirmed repeatable.
 //

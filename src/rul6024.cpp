@@ -47,7 +47,7 @@ static Hub75Config cfg;
 // -----------------------------------------------------------------------------
 static constexpr uint32_t REGISTER_SLOT_WREG1 = 0;
 static constexpr uint32_t REGISTER_SLOT_WREG2 = 1;
-#ifndef RUL6024_PROBE_RESERVED
+#ifdef RUL6024_PROBE_RESERVED
 static constexpr uint32_t REGISTER_SLOT_TEST = 2;
 static constexpr uint32_t REGISTER_SLOT_COUNT = 3;
 #else
@@ -69,10 +69,10 @@ static void ensure_register_dma_buffer_capacity(uint32_t display_width)
     register_dma_buffer.assign(static_cast<size_t>(REGISTER_SLOT_COUNT) * display_width, 0);
 }
 
-// Returns a pointer to the start of `slot`'s region within register_dma_buffer,
-// sized for the given display_width. Centralizing this (rather than repeating `slot * display_width` at each call site)
-// means there is exactly one place that can get the indexing wrong. Requires ensure_register_dma_buffer_capacity(display_width)
-// to have already been called for this display_width.
+// Returns a pointer to the start of `slot`'s region within register_dma_buffer, sized for the given display_width. 
+// Centralizing this (rather than repeating `slot * display_width` at each call site) means there is exactly one place
+// that can get the indexing wrong. Requires ensure_register_dma_buffer_capacity(display_width) to have already been 
+// called for this display_width.
 static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 {
     assert(slot < REGISTER_SLOT_COUNT);
@@ -115,19 +115,19 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 // -----------------------------------------------------------------------------
 // rul6024_setup()
 //
-// Runs the confirmed-working configuration sequence for one RUL6024 chain:
+// Runs the configuration sequence for one RUL6024 chain:
 //
 //   1. Build the WREG1 / WREG2 DMA images (and, optionally, a probe image
 //      for the reserved 4–10 command range — see RUL6024_PROBE_RESERVED below).
 //   2. Initialize the rul6024_write_register PIO program on the given state machine.
 //   3. Write CMD_WREG1, then CMD_WREG2, in that order.
-//
-// Unlike an earlier iteration of this file, this sequence does NOT send
-// CMD_DATA_LATCH afterwards.
-// Testing confirms panel initialization is reliable without CMD_DATA_LATCH and 
-// CMD_RESET_OEN them for this single-chain configuration. 
-// If you extend this to a chained/multi-group setup and see initialization become flaky again,
-// this is the first place to revisit — reintroduce DATA_LATCH/RESET_OEN behind a flag and compare.
+//   4. Issue DATA_LATCH, then the two-step RESET_OEN — in that order, matching
+//      the sequence the old bit-banged implementation (rul6024_old.cpp) used,
+//      which explicitly commented "RESET_OEN is required after writing WREG2".
+//      An earlier revision of this file dropped both steps after testing
+//      suggested they weren't needed for a single chain; they have been
+//      reintroduced here to rule out an unreset chip state as a source of
+//      the initialization instability seen with the full 4-chip daisy chain.
 // -----------------------------------------------------------------------------
 void rul6024_setup(PIO pio, uint sm, uint offset)
 {
@@ -156,7 +156,7 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     // ideally one register at a time, not all seven in one boot, so an
     // observed effect can be attributed to a specific register.
     // ---------------------------------------------------------------------
-#ifndef RUL6024_PROBE_RESERVED
+#ifdef RUL6024_PROBE_RESERVED
     uint32_t *test_buf = register_slot(REGISTER_SLOT_TEST, display_width);
     uint16_t test_data[] = {0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}; // registers 4..10
 
@@ -167,8 +167,17 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     }
 #endif
 
+    rul6024_write_register(pio, sm, display_width, CMD_WREG2+1, wreg2_buf);
     rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
+
+    rul6024_data_latch(pio, sm);
+    rul6024_reset_oen(pio, sm);
+
     rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
+    rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
+  
+    rul6024_data_latch(pio, sm);
+    rul6024_reset_oen(pio, sm);
 }
 
 // -----------------------------------------------------------------------------
