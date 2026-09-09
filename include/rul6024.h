@@ -12,7 +12,7 @@
 // =============================================================================
 
 #include <cstdint>
-#include "hub75.hpp"   // for Hub75Config
+#include "hub75.hpp" // for Hub75Config
 
 // -----------------------------------------------------------------------------
 // RUL6024 command signatures ("LE length" protocol)
@@ -66,7 +66,7 @@
 // analytically for this panel. These two values were found by sweeping
 // candidates on real hardware:
 //
-//   WREG1 = 0x3FBF
+//   WREG1 = 0x7FBF
 //   WREG2 = 0xFDFF
 //
 // Kept as named constants (rather than inlined hex literals in the .cpp)
@@ -74,7 +74,7 @@
 // under their own name in a debugger or a logic-analyzer capture diff.
 // If you sweep new candidates, prefer editing these two lines over adding ad-hoc literals elsewhere.
 // -----------------------------------------------------------------------------
-constexpr uint16_t RUL6024_WREG1_VALUE = 0x3FBF;
+constexpr uint16_t RUL6024_WREG1_VALUE = 0x7FBF;
 constexpr uint16_t RUL6024_WREG2_VALUE = 0xFDFF;
 
 // -----------------------------------------------------------------------------
@@ -87,7 +87,7 @@ constexpr uint16_t RUL6024_WREG2_VALUE = 0xFDFF;
 // use that PIO block afterwards.
 //
 // Not reentrant: internally caches Cfg in a single file-scope static, so
-// only one RUL6024 chain can be initialized "in flight" at a time. 
+// only one RUL6024 chain can be initialized "in flight" at a time.
 // Safe to call once per chain, sequentially, at start-up.
 // -----------------------------------------------------------------------------
 void rul6024_initialize(Hub75Config Cfg);

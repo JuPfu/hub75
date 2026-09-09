@@ -46,7 +46,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = false,
+    .frame_rate_debug = true,
 };
 
 using Panel = Hub75Driver<panel_cfg>;

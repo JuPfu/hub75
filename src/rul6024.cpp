@@ -69,9 +69,9 @@ static void ensure_register_dma_buffer_capacity(uint32_t display_width)
     register_dma_buffer.assign(static_cast<size_t>(REGISTER_SLOT_COUNT) * display_width, 0);
 }
 
-// Returns a pointer to the start of `slot`'s region within register_dma_buffer, sized for the given display_width. 
+// Returns a pointer to the start of `slot`'s region within register_dma_buffer, sized for the given display_width.
 // Centralizing this (rather than repeating `slot * display_width` at each call site) means there is exactly one place
-// that can get the indexing wrong. Requires ensure_register_dma_buffer_capacity(display_width) to have already been 
+// that can get the indexing wrong. Requires ensure_register_dma_buffer_capacity(display_width) to have already been
 // called for this display_width.
 static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 {
@@ -84,10 +84,10 @@ static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 // -----------------------------------------------------------------------------
 // prepare_register_dma()
 //
-// Expands one 16-bit register value into `display_width` 6-bit-per-lane DMA words, MSB (bit 15) first, 
-// matching the chip's documented shift order ("the data transmitted to the chip first is the high bit 
-// of the register"). Each 16-bit value is repeated back-to-back to fill the whole chain: 
-// display_width / 16 gives the number of daisy-chained chips, so e.g. for display_width = 64 
+// Expands one 16-bit register value into `display_width` 6-bit-per-lane DMA words, MSB (bit 15) first,
+// matching the chip's documented shift order ("the data transmitted to the chip first is the high bit
+// of the register"). Each 16-bit value is repeated back-to-back to fill the whole chain:
+// display_width / 16 gives the number of daisy-chained chips, so e.g. for display_width = 64
 // the same 16-bit value is                             written 4 times in a row, one per chip in the chain.
 //
 // Each output word is either:
@@ -167,17 +167,18 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
     }
 #endif
 
-    rul6024_write_register(pio, sm, display_width, CMD_WREG2+1, wreg2_buf);
-    rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
-
-    rul6024_data_latch(pio, sm);
-    rul6024_reset_oen(pio, sm);
-
-    rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
-    rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
-  
-    rul6024_data_latch(pio, sm);
-    rul6024_reset_oen(pio, sm);
+    // ---------------------------------------------------------------------
+    // The "rul6024_write_register(pio, sm, display_width, CMD_WREG2+1, wreg2_buf);"
+    // is doing the trick. I do not know why - no documentation available.
+    static constexpr int RUL6024_INIT_PASSES = 1;
+    rul6024_write_register(pio, sm, display_width, CMD_WREG2 + 1, wreg2_buf);
+    for (int pass = 0; pass < RUL6024_INIT_PASSES; ++pass)
+    {
+        rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
+        rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
+        rul6024_data_latch(pio, sm);
+        rul6024_reset_oen(pio, sm);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -200,7 +201,7 @@ void rul6024_initialize(Hub75Config Cfg)
     // below can compute the minimal contiguous GPIO window to request.
     // data_base_pin .. data_base_pin+5 covers the 6 RGB data lanes;
     // clk_pin, strobe_pin (LE) and oen_pin must be the remaining three
-    // "set pins" used by rul6024_write_register (see hub75.pio — 
+    // "set pins" used by rul6024_write_register (see hub75.pio —
     // they are assumed consecutive: clk_pin, clk_pin+1, clk_pin+2).
     size_t gpio_pins[] = {
         cfg.pins.data_base_pin,
