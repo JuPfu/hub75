@@ -413,12 +413,6 @@ le_data_loop:
     // followed by the 3 LE-high pulses -> display_width = 4 here, not the
     // panel's real display_width. The dummy data is all zero since the
     // DATA pins are "don't care" for this command.
-    //
-    // Call this once, after the WREG1/WREG2 writes, from rul6024_setup()
-    // in rul6024.cpp - e.g.:
-    //     rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
-    //     rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
-    //     rul6024_data_latch(pio, sm);
     static inline void rul6024_data_latch(PIO pio, uint sm)
     {
         static const uint32_t latch_dummy[4] = {0, 0, 0, 0};
@@ -438,14 +432,6 @@ le_data_loop:
     // (display_width = 3 for the LE-length-2 step). The "jmp x--" loop
     // idiom's minimum-1-iteration quirk (see rul6024_data_latch() above)
     // is why display_width is 2 and 3, not 1 and 2.
-    //
-    // The old code always ran this as the *last* step of setup, after
-    // WREG1, WREG2 and DATA_LATCH - not before them - so call it in that
-    // position from rul6024_setup() in rul6024.cpp, e.g.:
-    //     rul6024_write_register(pio, sm, display_width, CMD_WREG1, wreg1_buf);
-    //     rul6024_write_register(pio, sm, display_width, CMD_WREG2, wreg2_buf);
-    //     rul6024_data_latch(pio, sm);
-    //     rul6024_reset_oen(pio, sm);
     static inline void rul6024_reset_oen(PIO pio, uint sm)
     {
         static const uint32_t reset_oen_dummy[3] = {0, 0, 0};
