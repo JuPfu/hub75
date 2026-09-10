@@ -66,7 +66,7 @@
 // analytically for this panel. These two values were found by sweeping
 // candidates on real hardware:
 //
-//   WREG1 = 0x7FBF
+//   WREG1 = 0xFFBF
 //   WREG2 = 0xFDFF
 //
 // Kept as named constants (rather than inlined hex literals in the .cpp)
@@ -74,7 +74,7 @@
 // under their own name in a debugger or a logic-analyzer capture diff.
 // If you sweep new candidates, prefer editing these two lines over adding ad-hoc literals elsewhere.
 // -----------------------------------------------------------------------------
-constexpr uint16_t RUL6024_WREG1_VALUE = 0x7FBF;
+constexpr uint16_t RUL6024_WREG1_VALUE = 0xFFBF;
 constexpr uint16_t RUL6024_WREG2_VALUE = 0xFDFF;
 
 // -----------------------------------------------------------------------------
