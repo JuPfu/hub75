@@ -304,7 +304,7 @@ static inline void hub75_bitplane_setup_set_shift(PIO pio, uint sm, uint offset,
 ;     LE-high pulses is what the chip decodes as the command (11 = WREG1,
 ;     12 = WREG2, ...) once CLK stops toggling.
 ;
-; Timing: sm_config_set_clkdiv(&c, 2.0f) below halves the PIO clock
+; Timing: sm_config_set_clkdiv(&c, 10.0f) reduces the PIO clock
 ; relative to sys_clk. Each `set pins ... [7]` instruction then holds its
 ; pin state for 8 PIO cycles (1 issue cycle + [7] delay cycles) before the
 ; next `set`. If you ever change sys_clk or clkdiv, recompute the
@@ -370,7 +370,7 @@ le_data_loop:
         // Halves the PIO clock relative to sys_clk. 
         // Combined with the program's `[7]` delays this sets CLK high/low time.
         // See the timing note above the .program declaration if this ever changes.
-        sm_config_set_clkdiv(&c, 20.0f);
+        sm_config_set_clkdiv(&c, 10.0f);
         sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
         pio_sm_init(pio, sm, offset, &c);
