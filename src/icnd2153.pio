@@ -138,3 +138,173 @@ not_lsb:
         pio_sm_set_enabled(pio, sm, true);
     }
 %}
+
+; =============================================================================
+; PROGRAM: icnd2153_write_register
+; =============================================================================
+; One-time control-command / configuration-register writer for a chain of
+; ICND2153 driver ICs. Runs BEFORE normal row/bitplane scanning starts: it
+; borrows the PIO/GPIO resources long enough to shift PRE_ACT / EN_OP / VSYNC
+; and the WR_CFG1..WR_CFG4 / WR_DBG register values into every daisy-chained
+; chip, then hands the PIO block back so icnd2153_row / icnd2153_bitplane_stream
+; can drive the panel normally. Directly modelled on rul6024_write_register
+; above - the wire protocol is identical: a command is decoded purely by how
+; many trailing DCLK rising edges occur while LE (LAT) is held high, per the
+; "Control Command" table in icnd2153_control_command.png. See icnd2153.h for
+; the command-signature constants and icnd2153.cpp for the C++ driver.
+;
+; set pin group (clock_base_pin, 3 pins) - SAME ordering as
+; icnd2153_bitplane_stream_program_init() above, so both programs can be
+; pointed at the same three GPIOs:
+;   bit0 (clock_base_pin + 0) = CLK
+;   bit1 (clock_base_pin + 1) = LE     (a.k.a. LAT)
+;   bit2 (clock_base_pin + 2) = PWCLK  (-> panel OEN pin; held HIGH/blanked
+;                                for the whole control-command / register-write
+;                                sequence, mirroring how rul6024_write_register
+;                                treats OEN, so no write-glitch is visible on
+;                                the panel.
+;                                ASSUMPTION, please verify against real
+;                                hardware: the captured scope trace shows the
+;                                OE line toggling *during* the long "write
+;                                configuration register" burst - this may be
+;                                a free-running signal unrelated to this
+;                                write, or PWCLK may actually need to keep
+;                                pulsing here. Flagged in the accompanying
+;                                chat message.)
+;
+; "out pins, 6" targets 6 consecutive data pins (rgb_base_pin..+5), one bit
+; per RGB sub-pixel lane, driven identically for every chip in the chain (see
+; prepare_register_dma() in icnd2153.cpp - the same 16-bit register value is
+; shifted once per daisy-chained chip, exactly as for RUL6024).
+;
+; Wire protocol, per call to icnd2153_write_register() (C-SDK helper below) -
+; identical structure to rul6024_write_register():
+;
+;   Phase 1 (once): receive `data_length = display_width - cmd_signature`,
+;     the number of CLK pulses to send with LE held LOW.
+;   Phase 2 (data_loop, `data_length` iterations): shift the leading portion
+;     of the register image in with LE LOW - still real register data, the
+;     chip keeps shifting on every CLK pulse regardless of LE.
+;   Phase 3 (le_data_loop, `cmd_signature` iterations): shift the remaining
+;     `cmd_signature` pulses in with LE HIGH. Together with Phase 2 this
+;     clocks in exactly `display_width` bits total, and the trailing run of
+;     `cmd_signature` LE-high pulses is what the chip decodes as the command
+;     once CLK stops toggling (1 = DATA_LATCH, 2 = WR_DBG, 3 = VSYNC,
+;     4 = WR_CFG1, 6 = WR_CFG2, 8 = WR_CFG3, 10 = WR_CFG4, 12 = EN_OP,
+;     13 = DIS_OP, 14 = PRE_ACT - see icnd2153.h).
+;
+; Timing: sm_config_set_clkdiv(&c, 10.0f) below matches rul6024_write_register's
+; divider. If you ever change sys_clk or clkdiv, recompute the resulting CLK
+; high/low time and re-check it against the ICND2153's timing spec.
+.program icnd2153_write_register
+.wrap_target
+    ; ---- Phase 1: latch in the data/command split point for this write ----
+    pull block
+    out x, 32                ; x = data_length - 1 (CLK pulses to send with LE low)
+    set pins, 0b100 [7]      ; PWCLK/OEN=1 (blanked), LE=0, CLK=0 — idle/rest state
+
+    ; ---- Phase 2: shift register data in, LE low (not yet part of the command signature) ----
+data_loop:
+    pull block
+    out pins, 6              ; drive this cycle's 6 data lanes (1 bit/lane, all chips identical)
+    set pins, 0b101 [7]      ; PWCLK/OEN=1 LE=0 CLK=1  (chip samples data on this rising edge)
+    set pins, 0b100 [7]      ; PWCLK/OEN=1 LE=0 CLK=0
+    jmp x-- data_loop
+
+    ; ---- Phase 3: shift the final cmd_signature bits in with LE held high ----
+    ;              (LE-high pulse *count*, not the data itself, selects the command)
+    pull block
+    out x, 32                ; x = cmd_signature - 1   e.g. 4->3 for WR_CFG1, 14->13 for PRE_ACT
+le_data_loop:
+    pull block
+    out pins, 6              ; still real shift-register data — LE doesn't gate data, only marks the command
+    set pins, 0b111 [7]      ; PWCLK/OEN=1 LE=1 CLK=1  (data sampled on this rising edge)
+    set pins, 0b110 [7]      ; PWCLK/OEN=1 LE=1 CLK=0
+    jmp x-- le_data_loop
+.wrap
+
+% c-sdk {
+    // Configures GPIO directions/muxing and the state machine for
+    // icnd2153_write_register. Call once per chain before any
+    // icnd2153_write_register() / icnd2153_write_control_command() calls;
+    // the SM stays enabled and reusable for repeated writes (PRE_ACT, EN_OP,
+    // VSYNC, WR_CFG1..4, WR_DBG, DATA_LATCH, ...) until the caller tears it
+    // down (see icnd2153_initialize() in icnd2153.cpp).
+    //
+    //   rgb_base_pin    -> first of 6 consecutive RGB data lane pins
+    //   clock_base_pin  -> CLK; clock_base_pin+1 and +2 must be LE and
+    //                      PWCLK/OEN respectively (three *consecutive* GPIOs,
+    //                      same grouping as icnd2153_bitplane_stream_program_init)
+    //
+    static inline void icnd2153_write_register_program_init(PIO pio, uint sm, uint offset, uint rgb_base_pin, uint clock_base_pin)
+    {
+        pio_sm_set_enabled(pio, sm, false);
+        pio_sm_clear_fifos(pio, sm);
+
+        pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+        pio_sm_set_consecutive_pindirs(pio, sm, clock_base_pin, 3, true);
+        for (uint i = 0; i < 6; i++)
+            pio_gpio_init(pio, rgb_base_pin + i);
+        pio_gpio_init(pio, clock_base_pin);     // CLK
+        pio_gpio_init(pio, clock_base_pin + 1); // LE (LAT)
+        pio_gpio_init(pio, clock_base_pin + 2); // PWCLK / OEN
+
+        pio_sm_config c = icnd2153_write_register_program_get_default_config(offset);
+        sm_config_set_out_pins(&c, rgb_base_pin, 6);
+        sm_config_set_set_pins(&c, clock_base_pin, 3);
+        sm_config_set_out_shift(&c, true, false, 32); // shift_right=true, autopull off (all pulls explicit)
+
+        // Divides the PIO clock relative to sys_clk
+        sm_config_set_clkdiv(&c, 10.0f);
+        sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+        pio_sm_init(pio, sm, offset, &c);
+        pio_sm_set_enabled(pio, sm, true);
+    }
+
+    // Issues one register write: shifts `dma_words[0 .. display_width-1]` into
+    // the chain (one 6-bit word per CLK pulse) and asserts LE for the trailing
+    // `cmd_signature` of those pulses, so the chain latches the shifted-in
+    // value as the command identified by cmd_signature (e.g.
+    // ICND2153_CMD_WR_CFG1 = 4, ICND2153_CMD_WR_CFG2 = 6, ... — see
+    // icnd2153.h).
+    //
+    // dma_words must hold exactly `display_width` entries, pre-expanded by
+    // prepare_register_dma() in icnd2153.cpp. This function only streams
+    // them to the PIO FIFO, it does no encoding of its own.
+    static inline void icnd2153_write_register(PIO pio, uint sm, uint32_t display_width, uint32_t cmd_signature, const uint32_t *dma_words)
+    {
+        uint16_t data_length = display_width - cmd_signature; // LE-low portion (Phase 2)
+
+        pio_sm_put_blocking(pio, sm, data_length - 1); // Phase 1: loop count for data_loop
+        for (uint32_t i = 0; i < data_length; i++)
+        {
+            pio_sm_put_blocking(pio, sm, dma_words[i]);
+        }
+
+        pio_sm_put_blocking(pio, sm, cmd_signature - 1); // Phase 3: loop count for le_data_loop
+        for (uint32_t i = data_length; i < data_length + cmd_signature; i++)
+        {
+            pio_sm_put_blocking(pio, sm, dma_words[i]);
+        }
+    }
+
+    // Issues a no-payload control command: PRE_ACT, EN_OP, VSYNC, DIS_OP, or
+    // DATA_LATCH. Per the Control Command table these carry no register data
+    // of their own — the chip only decodes the trailing LE-high pulse count
+    // once CLK stops toggling, so what gets shifted through beforehand
+    // doesn't matter (mirrors rul6024_data_latch() / rul6024_reset_oen() in
+    // hub75.pio, which use the same idiom for RUL6024's no-payload commands).
+    //
+    // icnd2153_write_register()'s "jmp x--" loop can't do a genuine
+    // zero-iteration pass (x = 0 still runs the loop body once before the
+    // exit test), so the shortest legal transaction is 1 LE-low dummy pulse
+    // followed by the `cmd_signature` LE-high pulses -> display_width =
+    // cmd_signature + 1. The dummy data is all zero since the DATA pins are
+    // don't-care for these commands.
+    static inline void icnd2153_write_control_command(PIO pio, uint sm, uint32_t cmd_signature)
+    {
+        static const uint32_t dummy[15] = {0}; // sized for the longest command (PRE_ACT, 14 -> display_width 15)
+        icnd2153_write_register(pio, sm, /*display_width=*/cmd_signature + 1, cmd_signature, dummy);
+    }
+%}

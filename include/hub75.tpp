@@ -10,6 +10,7 @@
 #include "hub75.pio.h"
 #include "icnd2153.pio.h"
 
+#include "icnd2153.h"
 #include "rul6024.h"
 #include "fm6126a.h"
 
@@ -46,6 +47,8 @@ void Hub75Driver<Cfg>::create()
         FM6126A_setup(Cfg.pins, Cfg.panel.matrix_panel_width);
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::RUL6024)
         rul6024_initialize(Cfg);
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
+        icnd2153_initialize(Cfg);
 
     configure_pio();
 

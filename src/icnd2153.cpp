@@ -1,247 +1,221 @@
-#include <cstdlib>
+// =============================================================================
+// icnd2153.cpp
+//
+// One-time configuration sequence for a chain of ICND2153 HUB75 driver ICs.
+// This runs BEFORE normal HUB75 scanning starts: it borrows the PIO/GPIO
+// resources long enough to run PRE_ACT / EN_OP / VSYNC and shift the
+// WR_CFG1..WR_CFG4 / WR_DBG register values into every daisy-chained chip,
+// then hands the PIO block back so icnd2153_row / icnd2153_bitplane_stream
+// can drive the panel normally.
+//
+// Directly modelled on rul6024.cpp — see icnd2153.pio's icnd2153_write_register
+// program for the shared wire protocol (identical to rul6024_write_register:
+// a command is decoded purely by its trailing LE-high pulse count), and
+// icnd2153.h for the command-signature / register-value constants.
+//
+// Sequence, per icnd2153_control_command.png:
+//   1. PRE_ACT   (14 LE-high pulses, no payload)
+//   2. EN_OP     (12 LE-high pulses, no payload)
+//   3. VSYNC     ( 3 LE-high pulses, no payload)
+//   4. WR_CFG1 .. WR_CFG4, WR_DBG — each carries `display_width` bits of
+//      register data (the same 16-bit value repeated once per daisy-chained
+//      chip), with the register's own trailing LE-high pulse count as the
+//      command signature (4, 6, 8, 10, 2 respectively).
+//   5. DATA_LATCH (1 LE-high pulse, no payload) — commits the shifted values.
+//
+// OPEN QUESTIONS / ASSUMPTIONS carried over from the accompanying chat
+// message — please confirm before relying on this in production:
+//   - Exact command ORDER above (PRE_ACT -> EN_OP -> VSYNC -> registers ->
+//     DATA_LATCH); the annotated scope trace supports this reading but
+//     doesn't nail down whether DATA_LATCH belongs at the very end or
+//     between other steps.
+//   - PWCLK/OEN held HIGH (blanked) for the whole sequence, mirroring
+//     RUL6024 — the scope trace's OE toggling during the long register-write
+//     burst might mean this needs to keep pulsing instead.
+//   - Chain length = display_width / 16 chips, same convention as RUL6024 —
+//     confirm 16 is really the per-chip shift-register width here too.
+//   - Which CFG2 "Setting Example" (RED/GREEN/BLUE) applies; ICND2153_CFG1_VALUE()
+//     currently hardcodes RED (see icnd2153_setup() below).
+// =============================================================================
+
+#include <cstdint>
+#include <cassert>
+#include <algorithm>
+#include <vector>
 
 #include "pico/stdlib.h"
-#include "hardware/clocks.h"
+#include "hardware/pio.h"
 
 #include "hub75.hpp"
-#include "icnd2153.hpp"
+#include "icnd2153.pio.h"
 
+#include "icnd2153.h"
 
-#ifdef ABC
-// =============================================================================
-// ICND2153 one-time startup command sequence
-// =============================================================================
-// Per the ICND2153 datasheet's "Control Command" table: a command is
-// selected by the NUMBER of DCLK rising edges that occur while LE is held
-// high. This must run BEFORE configure_pio() reassigns CLK_PIN/LE_PIN to
-// PIO control, since it needs plain GPIO ownership of those two pins.
+// Cached panel/pin configuration for the chain currently being initialized.
+// NOTE: file-scope static -> not reentrant, same caveat as rul6024.cpp's cfg.
+static Hub75Config cfg;
 
-// static void icnd2153_send_command(uint dclk_pin, uint le_pin, uint n_edges)
-// {
-//     gpio_put(le_pin, 1);
-//     sleep_us(1);                        // LE setup time before first DCLK edge
-//     for (uint i = 0; i < n_edges; i++)
-//     {
-//         gpio_put(dclk_pin, 1);
-//         sleep_us(1);
-//         gpio_put(dclk_pin, 0);
-//         sleep_us(1);
-//     }
-//     gpio_put(le_pin, 0);
-//     sleep_us(1);                        // LE hold time after last DCLK edge
-// }
+// -----------------------------------------------------------------------------
+// register_dma_buffer layout — one expanded "DMA word per CLK pulse" image
+// per configuration register (REG1..REG4 plus the debug register, REG5),
+// each `display_width` uint32_t entries long. Same scheme as rul6024.cpp's
+// register_dma_buffer, just with 5 slots instead of 2.
+// -----------------------------------------------------------------------------
+static constexpr uint32_t REGISTER_SLOT_CFG1 = 0;
+static constexpr uint32_t REGISTER_SLOT_CFG2 = 1;
+static constexpr uint32_t REGISTER_SLOT_CFG3 = 2;
+static constexpr uint32_t REGISTER_SLOT_CFG4 = 3;
+static constexpr uint32_t REGISTER_SLOT_DBG = 4;
+static constexpr uint32_t REGISTER_SLOT_COUNT = 5;
 
-// static void icnd2153_startup_sequence(uint dclk_pin, uint le_pin)
-// {
-//     gpio_init(dclk_pin);
-//     gpio_init(le_pin);
-//     gpio_set_dir(dclk_pin, GPIO_OUT);
-//     gpio_set_dir(le_pin, GPIO_OUT);
-//     gpio_put(dclk_pin, 0);
-//     gpio_put(le_pin, 0);
-//     sleep_us(10);
+static std::vector<uint32_t> register_dma_buffer;
 
-//     icnd2153_send_command(dclk_pin, le_pin, 14);  // PRE_ACT
-//     sleep_us(10);
-//     icnd2153_send_command(dclk_pin, le_pin, 12);  // EN_OP
-//     sleep_us(10);
-
-//     // Leave pins as plain GPIO outputs here — configure_pio() will call
-//     // pio_gpio_init() on them afterward to hand control to the PIO block
-//     // for normal (DATA_LATCH-per-row) operation.
-// }
-
-// // =============================================================================
-// // Free-running GCLK
-// // =============================================================================
-// // Datasheet: "the reference clock input pin for PWM gray scale control" —
-// // feeds the chip's internal comparator, independent of DCLK/LE/CLK. A
-// // hardware PWM slice is the simplest way to generate this: it runs forever
-// // in hardware, with zero PIO/CPU involvement once started.
-
-// static void icnd2153_start_gclk(uint gclk_pin, float freq_hz)
-// {
-//     gpio_set_function(gclk_pin, GPIO_FUNC_PWM);
-//     uint slice = pwm_gpio_to_slice_num(gclk_pin);
-//     uint chan  = pwm_gpio_to_channel(gclk_pin);
-
-//     uint32_t wrap = 100;   // small wrap -> clean, jitter-free 50% duty square wave
-//     float sys_clk_hz = (float)clock_get_hz(clk_sys);
-//     float div = sys_clk_hz / (freq_hz * (wrap + 1));
-
-//     pwm_config cfg = pwm_get_default_config();
-//     pwm_config_set_clkdiv(&cfg, div);
-//     pwm_config_set_wrap(&cfg, wrap);
-//     pwm_init(slice, &cfg, true);
-//     pwm_set_chan_level(slice, chan, (wrap + 1) / 2);   // 50% duty
-// }
-
-//===========
-
-void icnd2153_init_register()
+// (Re)sizes register_dma_buffer for the given display_width. Must be called
+// before the first register_slot() use for that display_width —
+// icnd2153_setup() does this as its first step.
+static void ensure_register_dma_buffer_capacity(uint32_t display_width)
 {
-    // Set up GPIO
-    for (auto i = 0; i < DATA_N_PINS; i++)
-    {
-        gpio_init(DATA_BASE_PIN + i);
-        gpio_set_function(DATA_BASE_PIN + i, GPIO_FUNC_SIO);
-        gpio_set_dir(DATA_BASE_PIN + i, true);
-        gpio_put(DATA_BASE_PIN + i, 0);
-    }
-
-    for (auto i = 0; i < ROWSEL_N_PINS; i++)
-    {
-        gpio_init(ROWSEL_BASE_PIN + i);
-        gpio_set_function(ROWSEL_BASE_PIN + i, GPIO_FUNC_SIO);
-        gpio_set_dir(ROWSEL_BASE_PIN + i, true);
-        gpio_put(ROWSEL_BASE_PIN + i, 0);
-    }
-
-    gpio_init(CLK_PIN);
-    gpio_set_function(CLK_PIN, GPIO_FUNC_SIO);
-    gpio_set_dir(CLK_PIN, true);
-    gpio_put(CLK_PIN, LOW);
-
-    gpio_init(STROBE_PIN);
-    gpio_set_function(STROBE_PIN, GPIO_FUNC_SIO);
-    gpio_set_dir(STROBE_PIN, true);
-    gpio_put(CLK_PIN, LOW);
-
-    gpio_init(OEN_PIN);
-    gpio_set_function(OEN_PIN, GPIO_FUNC_SIO);
-    gpio_set_dir(OEN_PIN, true);
-    gpio_put(OEN_PIN, LOW);
+    assert(display_width > 0);
+    assert(display_width % 16 == 0); // prepare_register_dma() assumes an integral number of 16-bit chips
+    register_dma_buffer.assign(static_cast<size_t>(REGISTER_SLOT_COUNT) * display_width, 0);
 }
 
-static inline void pulse_clk()
+// Returns a pointer to the start of `slot`'s region within register_dma_buffer.
+// Requires ensure_register_dma_buffer_capacity(display_width) to have already
+// been called for this display_width.
+static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 {
-    gpio_put(CLK_PIN, 1);
-    asm volatile("nop \n nop \n nop");
-    gpio_put(CLK_PIN, 0);
+    assert(slot < REGISTER_SLOT_COUNT);
+    size_t offset = static_cast<size_t>(slot) * display_width;
+    assert(offset + display_width <= register_dma_buffer.size());
+    return &register_dma_buffer[offset];
 }
 
-static inline void pulse_lat()
+// -----------------------------------------------------------------------------
+// prepare_register_dma()
+//
+// Expands one 16-bit register value into `display_width` 6-bit-per-lane DMA
+// words, MSB first, repeated once per daisy-chained chip — identical scheme
+// to rul6024.cpp's prepare_register_dma(). As with RUL6024, every chip in
+// the chain currently receives the identical register value; there's no
+// support yet for giving different chips different WR_CFG*/WR_DBG values.
+// -----------------------------------------------------------------------------
+static constexpr uint8_t ICND2153_DATA_HIGH = 0x3f;
+static constexpr uint8_t ICND2153_DATA_LOW = 0x00;
+
+static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display_width)
 {
-    gpio_put(STROBE_PIN, 1);
-    asm volatile("nop \n nop \n nop");
-    gpio_put(STROBE_PIN, 0);
-}
-
-static inline void shift_rgb6(uint8_t value)
-{
-    gpio_put(DATA_BASE_PIN, (value >> 0) & 1);
-    gpio_put(DATA_BASE_PIN + 1, (value >> 1) & 1);
-    gpio_put(DATA_BASE_PIN + 2, (value >> 2) & 1);
-
-    gpio_put(DATA_BASE_PIN + 3, (value >> 3) & 1);
-    gpio_put(DATA_BASE_PIN + 4, (value >> 4) & 1);
-    gpio_put(DATA_BASE_PIN + 5, (value >> 5) & 1);
-
-    pulse_clk();
-}
-
-static void icnd2153_write_register(uint16_t reg)
-{
-    gpio_put(OEN_PIN, 1);
-
-    // Shift 16 bits MSB first
-    for (int i = 15; i >= 0; --i)
+    int repeats_per_chain = display_width / 16; // one 16-bit register per chained chip
+    for (int chip = 0; chip < repeats_per_chain; ++chip)
     {
-        const uint8_t bit = (reg >> i) & 1;
-
-        // replicate bit to all RGB channels
-        uint8_t rgb =
-            (bit << 0) |
-            (bit << 1) |
-            (bit << 2) |
-            (bit << 3) |
-            (bit << 4) |
-            (bit << 5);
-
-        shift_rgb6(rgb);
-    }
-
-    // ICND2153 register latch
-    // Many panels expect LAT high during several CLK cycles.
-
-    gpio_put(STROBE_PIN, 1);
-
-    for (int i = 0; i < 4; ++i)
-    {
-        pulse_clk();
-    }
-
-    gpio_put(STROBE_PIN, 0);
-}
-
-void icnd2153_init()
-{
-    icnd2153_init_register();
-
-    // Disable output during init
-    gpio_put(OEN_PIN, 1);
-
-    gpio_put(CLK_PIN, 0);
-    gpio_put(STROBE_PIN, 0);
-
-    // Clear RGB outputs
-    gpio_put(DATA_BASE_PIN, 0);
-    gpio_put(DATA_BASE_PIN + 1, 0);
-    gpio_put(DATA_BASE_PIN + 2, 0);
-
-    gpio_put(DATA_BASE_PIN + 3, 0);
-    gpio_put(DATA_BASE_PIN + 4, 0);
-    gpio_put(DATA_BASE_PIN + 5, 0);
-
-    // Reset row address lines
-    gpio_put(ROWSEL_BASE_PIN, 0);
-    gpio_put(ROWSEL_BASE_PIN + 1, 0);
-    gpio_put(ROWSEL_BASE_PIN + 2, 0);
-    gpio_put(ROWSEL_BASE_PIN + 3, 0);
-    gpio_put(ROWSEL_BASE_PIN + 4, 0);
-
-    sleep_ms(10);
-
-    // Flush shift registers
-    // This removes random startup garbage.
-
-    for (int i = 0; i < 512; ++i)
-    {
-        pulse_clk();
-    }
-
-    pulse_lat();
-
-    sleep_ms(1);
-
-    // Optional conservative configuration writes.
-    // These values are intentionally minimal and safe.
-    // Many panels will ignore them harmlessly.
-
-    icnd2153_write_register(0xffff);
-    icnd2153_write_register(0xffff);
-
-    sleep_ms(1);
-
-    // Clear panel contents completely.
-    // Important for some 4L panels.
-
-    for (int row = 0; row < 16; ++row)
-    {
-        gpio_put(ROWSEL_BASE_PIN, (row >> 0) & 1);
-        gpio_put(ROWSEL_BASE_PIN + 1, (row >> 1) & 1);
-        gpio_put(ROWSEL_BASE_PIN + 2, (row >> 2) & 1);
-        gpio_put(ROWSEL_BASE_PIN + 3, (row >> 3) & 1);
-        gpio_put(ROWSEL_BASE_PIN + 4, (row >> 4) & 1);
-
-        for (int i = 0; i < 256; ++i)
+        for (int bit = 15; bit >= 0; --bit) // MSB first
         {
-            shift_rgb6(0x00);
+            *dst++ = (value & (1u << bit)) ? ICND2153_DATA_HIGH : ICND2153_DATA_LOW;
         }
+    }
+}
 
-        pulse_lat();
+// -----------------------------------------------------------------------------
+// icnd2153_setup()
+//
+// Runs the configuration sequence for one ICND2153 chain — see the sequence
+// and open-questions notes at the top of this file.
+// -----------------------------------------------------------------------------
+void icnd2153_setup(PIO pio, uint sm, uint offset)
+{
+    uint32_t display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols;
+
+    // Must happen before any register_slot() call below.
+    ensure_register_dma_buffer_capacity(display_width);
+
+    uint32_t *cfg1_buf = register_slot(REGISTER_SLOT_CFG1, display_width);
+    uint32_t *cfg2_buf = register_slot(REGISTER_SLOT_CFG2, display_width);
+    uint32_t *cfg3_buf = register_slot(REGISTER_SLOT_CFG3, display_width);
+    uint32_t *cfg4_buf = register_slot(REGISTER_SLOT_CFG4, display_width);
+    uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
+
+    prepare_register_dma(ICND2153_CFG1_VALUE, cfg1_buf, display_width);
+    // prepare_register_dma(ICND2153_CFG2_VALUE_RED, cfg2_buf, display_width); // TODO: RED/GREEN/BLUE — see icnd2153.h
+    prepare_register_dma(ICND2153_CFG3_VALUE, cfg3_buf, display_width);
+    prepare_register_dma(ICND2153_CFG4_VALUE, cfg4_buf, display_width);
+    prepare_register_dma(ICND2153_CFG5_VALUE, dbg_buf, display_width);
+
+    icnd2153_write_register_program_init(pio, sm, offset, cfg.pins.data_base_pin, cfg.pins.clk_pin);
+
+    // ---- 1. Pre-activate, enable outputs, vertical sync — all no-payload ----
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_EN_OP);
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
+
+    // ---- 2. Configuration registers 1..4, then the debug register (REG5) ----
+    icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG1, cfg1_buf);
+    icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG2, cfg2_buf);
+    icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG3, cfg3_buf);
+    icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG4, cfg4_buf);
+    // icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
+
+    // ---- 3. Commit the shifted register values ----
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
+    printf(">>>>>WROTE icnd2153_write_control_command\n");
+}
+
+// -----------------------------------------------------------------------------
+// icnd2153_initialize()
+//
+// Entry point: claims a PIO state machine covering every GPIO this chain's
+// control-command sequence touches (6 data lanes + CLK/LE/PWCLK), runs
+// icnd2153_setup(), then releases the program and state machine so the
+// normal HUB75 row/bitplane PIO programs can use that PIO block. Structured
+// identically to rul6024_initialize().
+// -----------------------------------------------------------------------------
+void icnd2153_initialize(Hub75Config Cfg)
+{
+    cfg = Cfg;
+
+    uint sm;
+    PIO pio;
+    uint offset;
+
+    // Every GPIO this chain's PIO program will touch, so pio_claim_free_...
+    // below can compute the minimal contiguous GPIO window to request.
+    size_t gpio_pins[] = {
+        cfg.pins.data_base_pin,
+        cfg.pins.data_base_pin + 5, // last of the 6 RGB data lanes
+        cfg.pins.clk_pin,
+        cfg.pins.strobe_pin, // LE / LAT
+        cfg.pins.oen_pin};   // PWCLK / OEN
+    size_t n = sizeof(gpio_pins) / sizeof(gpio_pins[0]);
+
+    size_t min_gpio = *std::min_element(gpio_pins, gpio_pins + n);
+    size_t max_gpio = *std::max_element(gpio_pins, gpio_pins + n);
+
+    // Same RP2350B / PIO2 rationale as rul6024_initialize(): force_pio2=true
+    // ensures we land on a PIO block that can actually reach GPIO 30-47.
+    if (!pio_claim_free_sm_and_add_program_for_gpio_range(
+            &icnd2153_write_register_program,
+            &pio,
+            &sm,
+            &offset,
+            min_gpio,
+            static_cast<uint>(max_gpio - min_gpio + 1),
+            true))
+    {
+        panic("Failed to claim PIO SM for icnd2153_write_register_program\n");
     }
 
-    gpio_put(OEN_PIN, 0);
+    if (sm < 0)
+    {
+        printf("icnd2153_initialize: No free SM on this PIO instance!\n");
+        return;
+    }
+
+    // setup initialisation sequence and emit it to panel
+    icnd2153_setup(pio, sm, offset);
+
+    // disable state machine
+    pio_sm_set_enabled(pio, sm, false);
+
+    // remove icnd2153_write_register_program and unclaim state machine
+    pio_remove_program(pio, &icnd2153_write_register_program, offset);
+    pio_sm_unclaim(pio, sm);
 }
-#endif

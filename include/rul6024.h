@@ -12,7 +12,7 @@
 // =============================================================================
 
 #include <cstdint>
-#include "hub75.hpp"   // for Hub75Config
+#include "hub75.hpp" // for Hub75Config
 
 // -----------------------------------------------------------------------------
 // RUL6024 command signatures ("LE length" protocol)
@@ -45,6 +45,18 @@
 #define CMD_WREG1 11
 #define CMD_WREG2 12
 
+// DATA_LATCH and the two-step RESET_OEN are now issued from rul6024_setup()
+// (rul6024.cpp) via rul6024_data_latch() / rul6024_reset_oen() in hub75.pio.
+// Defined here, matching the anticipatory comment above, purely for
+// readability at call sites and in debugger/logic-analyzer captures — the
+// hub75.pio helpers hardcode the same LE-length values themselves (see the
+// comments there) rather than including this header, to avoid the header
+// include-order issue noted in rul6024.cpp (hub75.pio.h is included before
+// rul6024.h there).
+#define CMD_DATA_LATCH 3
+#define CMD_RESET_OEN_STEP1 1
+#define CMD_RESET_OEN_STEP2 2
+
 // -----------------------------------------------------------------------------
 // WREG1 / WREG2 payloads — empirically determined, confirmed repeatable.
 //
@@ -54,7 +66,7 @@
 // analytically for this panel. These two values were found by sweeping
 // candidates on real hardware:
 //
-//   WREG1 = 0x3FBF
+//   WREG1 = 0xFFBF
 //   WREG2 = 0xFDFF
 //
 // Kept as named constants (rather than inlined hex literals in the .cpp)
@@ -62,7 +74,7 @@
 // under their own name in a debugger or a logic-analyzer capture diff.
 // If you sweep new candidates, prefer editing these two lines over adding ad-hoc literals elsewhere.
 // -----------------------------------------------------------------------------
-constexpr uint16_t RUL6024_WREG1_VALUE = 0x3FBF;
+constexpr uint16_t RUL6024_WREG1_VALUE = 0xFFBF;
 constexpr uint16_t RUL6024_WREG2_VALUE = 0xFDFF;
 
 // -----------------------------------------------------------------------------
@@ -75,7 +87,7 @@ constexpr uint16_t RUL6024_WREG2_VALUE = 0xFDFF;
 // use that PIO block afterwards.
 //
 // Not reentrant: internally caches Cfg in a single file-scope static, so
-// only one RUL6024 chain can be initialized "in flight" at a time. 
+// only one RUL6024 chain can be initialized "in flight" at a time.
 // Safe to call once per chain, sequentially, at start-up.
 // -----------------------------------------------------------------------------
 void rul6024_initialize(Hub75Config Cfg);
