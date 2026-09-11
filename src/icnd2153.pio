@@ -27,8 +27,10 @@
 
     jmp x != y, advance
     ; -- row 0: preset RC and RA together, then clear both --
-    set pins, 0b111     [3]      ; RA=1, RB=1, RC=1
-    set pins, 0b000     [3]      ; RA=0, RB=0, RC=0
+    set pins, 0b100     [3]      ; RC=1, RB=0, RA=0
+    set pins, 0b101     [3]      ; RC=1, RB=0, RA=1
+    set pins, 0b100     [3]      ; RC=1, RB=0, RA=0
+    set pins, 0b000     [3]      ; RC=0, RB=0, RA=0
     jmp row_done
 
 advance:

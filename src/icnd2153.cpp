@@ -135,7 +135,7 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
     prepare_register_dma(ICND2153_CFG1_VALUE, cfg1_buf, display_width);
-    // prepare_register_dma(ICND2153_CFG2_VALUE_RED, cfg2_buf, display_width); // TODO: RED/GREEN/BLUE — see icnd2153.h
+    prepare_register_dma(ICND2153_CFG2_VALUE, cfg2_buf, display_width);
     prepare_register_dma(ICND2153_CFG3_VALUE, cfg3_buf, display_width);
     prepare_register_dma(ICND2153_CFG4_VALUE, cfg4_buf, display_width);
     prepare_register_dma(ICND2153_CFG5_VALUE, dbg_buf, display_width);
@@ -143,16 +143,38 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     icnd2153_write_register_program_init(pio, sm, offset, cfg.pins.data_base_pin, cfg.pins.clk_pin);
 
     // ---- 1. Pre-activate, enable outputs, vertical sync — all no-payload ----
+    // Pre-active command
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    // Enable all output channels
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_EN_OP);
+    // Vertical sync. signal
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
 
     // ---- 2. Configuration registers 1..4, then the debug register (REG5) ----
+    // Pre-active command
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    // Write configuration register 1
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG1, cfg1_buf);
+
+    // Pre-active command
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    // Write configuration register 2
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG2, cfg2_buf);
+
+    // Pre-active command
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    // Write configuration register 3
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG3, cfg3_buf);
+
+    // Pre-active command
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    // Write configuration register 4
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG4, cfg4_buf);
-    // icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
+
+        // Pre-active command
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
+    // Write debug register
+    icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
 
     // ---- 3. Commit the shifted register values ----
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
