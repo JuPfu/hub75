@@ -23,19 +23,31 @@
 //      command signature (4, 6, 8, 10, 2 respectively).
 //   5. DATA_LATCH (1 LE-high pulse, no payload) — commits the shifted values.
 //
-// OPEN QUESTIONS / ASSUMPTIONS carried over from the accompanying chat
-// message — please confirm before relying on this in production:
-//   - Exact command ORDER above (PRE_ACT -> EN_OP -> VSYNC -> registers ->
-//     DATA_LATCH); the annotated scope trace supports this reading but
-//     doesn't nail down whether DATA_LATCH belongs at the very end or
-//     between other steps.
-//   - PWCLK/OEN held HIGH (blanked) for the whole sequence, mirroring
-//     RUL6024 — the scope trace's OE toggling during the long register-write
-//     burst might mean this needs to keep pulsing instead.
+// Sequence and per-register PRE_ACT framing confirmed against a real-world
+// reference implementation for the same chip family: icn2053_start() in
+// https://bitbucket.org/nadyrshin_ryu/icn2053_esp32_demo/src/master/main/icn2053/icn2053.c
+// (bit-banged, ESP32). Its icn2053_SendDataToAllDrivers()/icn2053_SendData()
+// send the identical 16-bit value to every chained chip and only raise LE
+// for the trailing `latches` bits of the LAST chip's shift — which, since
+// every chip's data is identical, is the same waveform as raising LE for
+// the trailing `cmd_signature` bits of the whole `display_width`-bit image,
+// i.e. exactly what icnd2153_write_register() below already does. No PIO
+// change was needed for the data-emission mechanism itself; DATA_LATCH was
+// removed from this file (see note above icnd2153_setup()).
+//
+// Remaining open points, not resolved by that reference:
+//   - PWCLK/OEN handling during the write: the ESP32 reference never touches
+//     its OE pin during icn2053_start() at all (only during per-row
+//     scanning), so holding PWCLK/OEN high here is a defensive choice
+//     (mirrors RUL6024's blanking), not something the reference requires.
 //   - Chain length = display_width / 16 chips, same convention as RUL6024 —
-//     confirm 16 is really the per-chip shift-register width here too.
-//   - Which CFG2 "Setting Example" (RED/GREEN/BLUE) applies; ICND2153_CFG1_VALUE()
-//     currently hardcodes RED (see icnd2153_setup() below).
+//     the reference hardcodes driversNum=8 for its own panel, so this still
+//     needs confirming against your panel's actual chain length.
+//   - Register VALUES: the reference's 0x1F70/0xffff/0x40F3/0x0000/0x0000
+//     are tuned for a different board (and even that author left alternate
+//     values commented out) — icnd2153_control_command.png's register-map
+//     table is the more likely source of truth for your panel. CFG2 also
+//     still has an unresolved RED/GREEN/BLUE choice — see icnd2153.h.
 // =============================================================================
 
 #include <cstdint>
@@ -135,7 +147,7 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
     prepare_register_dma(ICND2153_CFG1_VALUE, cfg1_buf, display_width);
-    prepare_register_dma(ICND2153_CFG2_VALUE, cfg2_buf, display_width);
+    prepare_register_dma(ICND2153_CFG2_VALUE, cfg2_buf, display_width); // TODO: RED/GREEN/BLUE — see icnd2153.h
     prepare_register_dma(ICND2153_CFG3_VALUE, cfg3_buf, display_width);
     prepare_register_dma(ICND2153_CFG4_VALUE, cfg4_buf, display_width);
     prepare_register_dma(ICND2153_CFG5_VALUE, dbg_buf, display_width);
@@ -176,9 +188,12 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     // Write debug register
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
 
-    // ---- 3. Commit the shifted register values ----
-    icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
-    printf(">>>>>WROTE icnd2153_write_control_command\n");
+    // NOTE: no trailing DATA_LATCH here. Per the icn2053.c reference,
+    // DATA_LATCH is issued as the trailing LE-high pulse on the *last*
+    // grayscale data packet of each row during normal scanning (see
+    // icn2053_send_datapacket()'s `sect == 7 ? 1 : 0`) — that belongs in
+    // icnd2153_bitplane_stream's own LE side-set, not in this one-time
+    // register-configuration sequence.
 }
 
 // -----------------------------------------------------------------------------

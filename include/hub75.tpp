@@ -640,9 +640,9 @@ void Hub75Driver<Cfg>::configure_pio()
             panic("Failed to find a PIO block with room for icnd2153_bitplane_stream_program icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
         }
 
-        hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
+        icnd2153_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, 128);
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, DISPLAY_WIDTH);
         printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
 }
