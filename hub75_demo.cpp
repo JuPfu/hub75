@@ -41,7 +41,7 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 43,
     },
     .color = {
-        .bitplanes = 12,
+        .bitplanes = 16,
         .separate_cie_channels = true,
         .balanced_light_output = true,
         .ccm_rg_shift = 6,

@@ -183,7 +183,7 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     // Write configuration register 4
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_CFG4, cfg4_buf);
 
-        // Pre-active command
+    // Pre-active command
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
     // Write debug register
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
@@ -218,9 +218,9 @@ void icnd2153_initialize(Hub75Config Cfg)
     size_t gpio_pins[] = {
         cfg.pins.data_base_pin,
         cfg.pins.data_base_pin + 5, // last of the 6 RGB data lanes
-        cfg.pins.clk_pin,
-        cfg.pins.strobe_pin, // LE / LAT
-        cfg.pins.oen_pin};   // PWCLK / OEN
+        cfg.pins.clk_pin,           // CLK
+        cfg.pins.strobe_pin,        // LE / LAT
+        cfg.pins.oen_pin};          // PWCLK / OEN
     size_t n = sizeof(gpio_pins) / sizeof(gpio_pins[0]);
 
     size_t min_gpio = *std::min_element(gpio_pins, gpio_pins + n);

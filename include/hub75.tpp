@@ -263,7 +263,7 @@ void Hub75Driver<Cfg>::timing_init(float clk_sys_hz, float clkdiv)
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_ctrl_irq()
 {
-            printf("IN handle_ctrl_irq\n");
+    printf("IN handle_ctrl_irq\n");
 
     if (dma_channel_get_irq0_status(row_ctrl_chan_))
     {
@@ -596,7 +596,7 @@ void Hub75Driver<Cfg>::configure_pio()
             // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
             // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
             // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
-            bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
+            bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                 { return pio_claim_free_sm_and_add_program_for_gpio_range(
                                                       &icnd2153_bitplane_stream_program,
                                                       &pio_config_.data_pio,
@@ -613,7 +613,7 @@ void Hub75Driver<Cfg>::configure_pio()
 
                 // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
                 // level (see hub75_row_program_init), so there is only one row program.
-                bool row_ok = hub75_claim_on_pio(candidate, [&]
+                bool row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                  { return pio_claim_free_sm_and_add_program_for_gpio_range(
                                                        &icnd2153_row_program,
                                                        &pio_config_.row_pio,
@@ -642,7 +642,7 @@ void Hub75Driver<Cfg>::configure_pio()
 
         icnd2153_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, DISPLAY_WIDTH);
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, SCAN_DEPTH);
         printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
 }
@@ -942,21 +942,27 @@ uint32_t Hub75Driver<Cfg>::rot_lut_rgb(const uint8_t *src, int dx_base, int dy, 
 template <Hub75Config Cfg>
 __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_bitplanes()
 {
-    // This is the PWM grayscale bit-slicing path: it reads storage_.rgb_buffer_ as a flat
-    // per-channel byte array (uint16_t[TOTAL_PIXELS*3]) and writes shift-selected bits into
-    // frame_buffer_. It has no meaning for HUB75 panels, whose storage_.rgb_buffer_ is a much
-    // smaller, differently-laid-out uint32_t[TOTAL_PIXELS] of already LUT/CCM-packed pixels
-    // (see rot_lut()/pack_lut_rgb() and update()/update_bgr() instead). Since this function is
-    // a virtual override, it is instantiated for every Cfg regardless of panel_class, so the
-    // whole body must be guarded - without this if constexpr, the loop bounds below (sized for
-    // the PWM buffer) walk straight off the end of the much smaller HUB75 rgb_buffer_.
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        // slice rgb_buffer into frame_buffer with 12 bit or 16 bit resolution
-
-        constexpr uint32_t pixel_pairs = TOTAL_PIXELS >> 1;
-        constexpr uint32_t rgb_entries = pixel_pairs * 6; // 2 rgb colour slices in 1 byte (x x r0 g0 b0 r1 g1 b1) results in 6 rgb entries per pixel pair
-        constexpr uint32_t entries_per_row = DISPLAY_WIDTH * 6;
+        // Pack two physically-paired rows (row r and row r + SCAN_DEPTH — same
+        // dual-row-scan convention as standard HUB75: R1/G1/B1 for the top half,
+        // R2/G2/B2 for the bottom half, sharing one row-select line) into a single
+        // byte per column: bits [5:3] = R0 G0 B0 of the top row, bits [2:0] = R1 G1
+        // B1 of the paired row.
+        //
+        // storage_.rgb_buffer_ is NOT pre-interleaved — it's a flat, row-major
+        // uint16_t[TOTAL_PIXELS*3] (index = (row * DISPLAY_WIDTH + col) * 3 + channel,
+        // channel 0/1/2 = R/G/B), so the two source pixels for one output byte are
+        // `SCAN_DEPTH * DISPLAY_WIDTH * 3` uint16_t entries apart, not adjacent —
+        // that offset is what the previous version was missing.
+        //
+        // ASSUMPTION: DISPLAY_HEIGHT == 2 * SCAN_DEPTH (true for chain_rows == 1,
+        // per the ROW_MAP_SPLIT static_asserts elsewhere in this file) and
+        // storage_.rgb_buffer_ really is filled in that plain row-major order —
+        // worth double-checking against whatever fills it for the PWM path if this
+        // doesn't come out right.
+        constexpr uint32_t channels_per_row = DISPLAY_WIDTH * 3;             // R,G,B per column, one (top-half) row
+        constexpr uint32_t paired_row_offset = SCAN_DEPTH * channels_per_row; // -> same column, paired (bottom-half) row
 
         uint32_t fb_index = 0;
 
@@ -964,26 +970,30 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_bitplanes
         {
             const uint16_t shift = Cfg.color.bitplanes - 1u - i; // select bitplane
             const uint16_t mask = 1u << shift;
-            const uint8_t is_lsb = (i == Cfg.color.bitplanes - 1) ? 1 : 0;
+            const uint8_t is_least_significant_bit = (i == Cfg.color.bitplanes - 1) ? 1 : 0;
 
-            for (uint32_t row_start = 0; row_start < rgb_entries; row_start += entries_per_row)
+            for (uint32_t row = 0; row < SCAN_DEPTH; row++)
             {
-                for (uint32_t j = row_start; j < row_start + entries_per_row; j += 6)
+                const uint32_t top_base = row * channels_per_row;
+                const uint32_t bot_base = top_base + paired_row_offset;
+
+                for (uint32_t col = 0; col < DISPLAY_WIDTH; col++)
                 {
-                    frame_buffer_[fb_index] = (((storage_.rgb_buffer_[j] & mask) >> shift) << 5) |
-                                              (((storage_.rgb_buffer_[j + 1] & mask) >> shift) << 4) |
-                                              (((storage_.rgb_buffer_[j + 2] & mask) >> shift) << 3) |
-                                              (((storage_.rgb_buffer_[j + 3] & mask) >> shift) << 2) |
-                                              (((storage_.rgb_buffer_[j + 4] & mask) >> shift) << 1) |
-                                              (((storage_.rgb_buffer_[j + 5] & mask) >> shift) << 0);
-                    fb_index++;
+                    const uint32_t t = top_base + col * 3;
+                    const uint32_t b = bot_base + col * 3;
+
+                    frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[t]     & mask) >> shift) << 5) |
+                                                 (((storage_.rgb_buffer_[t + 1] & mask) >> shift) << 4) |
+                                                 (((storage_.rgb_buffer_[t + 2] & mask) >> shift) << 3) |
+                                                 (((storage_.rgb_buffer_[b]     & mask) >> shift) << 2) |
+                                                 (((storage_.rgb_buffer_[b + 1] & mask) >> shift) << 1) |
+                                                 (((storage_.rgb_buffer_[b + 2] & mask) >> shift) << 0);
                 }
-                frame_buffer_[fb_index++] = is_lsb; // NEW: one control byte per row-visit
+
+                frame_buffer_[fb_index++] = is_least_significant_bit; // one control byte per row-visit
             }
         }
         swap_frame_buffer_pending_ = true; // signal frame_buffer switch
-
-        printf(">>>build_bitplanes swap_frame_buffer_pending=%d\n", swap_frame_buffer_pending_);
     }
 }
 
