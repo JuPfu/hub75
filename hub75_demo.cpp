@@ -41,7 +41,7 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 43,
     },
     .color = {
-        .bitplanes = 16,
+        .bitplanes = 12,
         .separate_cie_channels = true,
         .balanced_light_output = true,
         .ccm_rg_shift = 6,
@@ -141,7 +141,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 8)
+    if (++demo_index > 6)
     {
         demo_index = 0; // Cycle through all examples
     }

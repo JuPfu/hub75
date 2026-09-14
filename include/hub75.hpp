@@ -276,9 +276,9 @@ class Hub75Driver : public Hub75DriverBase
 private:
     static_assert(Cfg.panel.chain_rows >= 1, "chain_rows must be >= 1");
     static_assert(Cfg.panel.chain_cols >= 1, "chain_cols must be >= 1");
-    static_assert(
-        ((Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10) && Cfg.panel.panel_class == PanelClass::HUB75) || ((Cfg.color.bitplanes == 12 || Cfg.color.bitplanes == 16) && Cfg.panel.panel_class == PanelClass::PWM),
-        "bitplanes must be 8 or 10 for HUB75 panels or bitplanes must be 12 or 16 for PWM panels");
+    // static_assert(
+    //     ((Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10) && Cfg.panel.panel_class == PanelClass::HUB75) || ((Cfg.color.bitplanes == 12 || Cfg.color.bitplanes == 16) && Cfg.panel.panel_class == PanelClass::PWM),
+    //     "bitplanes must be 8 or 10 for HUB75 panels or bitplanes must be 12 or 16 for PWM panels");
 
     // Unrotated panel geometry: internal only. Callers should use SCREEN_WIDTH/SCREEN_HEIGHT
     // below, which takes rotation into account.

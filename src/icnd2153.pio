@@ -35,8 +35,8 @@
 
 advance:
     ; -- every other row: pulse RA only, RC stays low --
-    set pins, 0b001     [3]      ; RA=1, RB=0, RC=0
-    set pins, 0b000     [3]      ; RA=0, RB=0, RC=0
+    set pins, 0b001     [3]      ; RC=0, RB=0, RA=1
+    set pins, 0b000     [3]      ; RC=0, RB=0, RA=0
 
 row_done:
     jmp x--, reload_done
@@ -91,7 +91,7 @@ row_loop:
     out pins, 6    [3]          side 0b000   ; present R0 G0 B0 R1 G1 B1 for this column
     out null, 2                 side 0b000   ; discard padding -> completes 8-bit autopull
     nop            [3]          side 0b101   ; CLK+PWCLK pulse together
-    nop            [2]          side 0b000   ; CLK+PWCLK pulse together
+    nop                         side 0b000   ; CLK+PWCLK pulse together
     jmp x--, row_loop           side 0b000   ; CLK+PWCLK fall, loop until row's pixels done
 
     ; one extra control byte per row, appended by build_bitplanes(): value is
@@ -101,7 +101,7 @@ row_loop:
     ; --- SINGLE LATCH: shift register -> intermediate buffer (every pass) ---
     nop            [3]          side 0b010   ; LE high
     nop            [3]          side 0b111   ; LE high, CLK+PWCLK pulse 
-    nop            [3]          side 0b010   ; CLK+PWCLK fall, LE still high
+    nop            [2]          side 0b010   ; CLK+PWCLK fall, LE still high
     jmp !x, not_lsb             side 0b010   ; ordinary bitplane -> skip the extra commit pulse
 
     ; --- DOUBLE LATCH (LSB pass only): commit intermediate buffer -> PWM engine ---

@@ -26,7 +26,7 @@ CCM_SHIFTS = {
 # In the template-driven version BITPLANES is a template parameter, not a
 # preprocessor macro, so every resolution's tables must exist unconditionally
 # and be selected at compile time (e.g. via if constexpr / partial specialization).
-RESOLUTIONS = [(10, 1024), (8, 256)]
+RESOLUTIONS = [(16, 65536), (12, 4096), (10, 1024), (8, 256)]
 
 CHANNELS = [
     ("RED",   RED_CAP),

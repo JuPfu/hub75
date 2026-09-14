@@ -806,27 +806,33 @@ template <Hub75Config Cfg>
 constexpr const uint16_t *Hub75Driver<Cfg>::cie_red_table()
 {
     if constexpr (Cfg.color.separate_cie_channels)
-        return (Cfg.color.bitplanes == 10) ? CIE10_RED : CIE8_RED;
+        return (Cfg.color.bitplanes == 16) ? CIE16_RED : (Cfg.color.bitplanes == 10) ? CIE10_RED
+                                                                                     : CIE8_RED;
     else
-        return (Cfg.color.bitplanes == 10) ? CIE10 : CIE8;
+        return (Cfg.color.bitplanes == 16) ? CIE16 : (Cfg.color.bitplanes == 10) ? CIE10
+                                                                                 : CIE8;
 }
 
 template <Hub75Config Cfg>
 constexpr const uint16_t *Hub75Driver<Cfg>::cie_green_table()
 {
     if constexpr (Cfg.color.separate_cie_channels)
-        return (Cfg.color.bitplanes == 10) ? CIE10_GREEN : CIE8_GREEN;
+        return (Cfg.color.bitplanes == 16) ? CIE16_GREEN : (Cfg.color.bitplanes == 10) ? CIE10_GREEN
+                                                                                       : CIE8_GREEN;
     else
-        return (Cfg.color.bitplanes == 10) ? CIE10 : CIE8;
+        return (Cfg.color.bitplanes == 16) ? CIE16 : (Cfg.color.bitplanes == 10) ? CIE10
+                                                                                 : CIE8;
 }
 
 template <Hub75Config Cfg>
 constexpr const uint16_t *Hub75Driver<Cfg>::cie_blue_table()
 {
     if constexpr (Cfg.color.separate_cie_channels)
-        return (Cfg.color.bitplanes == 10) ? CIE10_BLUE : CIE8_BLUE;
+        return (Cfg.color.bitplanes == 16) ? CIE16_BLUE : (Cfg.color.bitplanes == 10) ? CIE10_BLUE
+                                                                                      : CIE8_BLUE;
     else
-        return (Cfg.color.bitplanes == 10) ? CIE10 : CIE8;
+        return (Cfg.color.bitplanes == 16) ? CIE16 : (Cfg.color.bitplanes == 10) ? CIE10
+                                                                                 : CIE8;
 }
 
 // Full cross-channel mixing on already-LUT-mapped 10/8-bit values. rv, gv, bv hold the LUT
@@ -942,26 +948,30 @@ uint32_t Hub75Driver<Cfg>::rot_lut_rgb(const uint8_t *src, int dx_base, int dy, 
 template <Hub75Config Cfg>
 __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_bitplanes()
 {
+    // This is the PWM grayscale bit-slicing path: it reads storage_.rgb_buffer_ as a flat
+    // per-channel byte array (uint16_t[TOTAL_PIXELS*3]) and writes shift-selected bits into
+    // frame_buffer_. It has no meaning for HUB75 panels, whose storage_.rgb_buffer_ is a much
+    // smaller, differently-laid-out uint32_t[TOTAL_PIXELS] of already LUT/CCM-packed pixels
+    // (see rot_lut()/pack_lut_rgb() and update()/update_bgr() instead). Since this function is
+    // a virtual override, it is instantiated for every Cfg regardless of panel_class, so the
+    // whole body must be guarded - without this if constexpr, the loop bounds below (sized for
+    // the PWM buffer) walk straight off the end of the much smaller HUB75 rgb_buffer_.
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        // Pack two physically-paired rows (row r and row r + SCAN_DEPTH — same
-        // dual-row-scan convention as standard HUB75: R1/G1/B1 for the top half,
-        // R2/G2/B2 for the bottom half, sharing one row-select line) into a single
-        // byte per column: bits [5:3] = R0 G0 B0 of the top row, bits [2:0] = R1 G1
-        // B1 of the paired row.
+        // ---- Step 1: pack two physically-paired rows (row r and row r +
+        // SCAN_DEPTH - same dual-row-scan convention as standard HUB75's
+        // R1G1B1/R2G2B2) into a single byte per column: bits [5:3] = R0 G0 B0 of
+        // the top row, bits [2:0] = R1 G1 B1 of the paired row.
         //
-        // storage_.rgb_buffer_ is NOT pre-interleaved — it's a flat, row-major
-        // uint16_t[TOTAL_PIXELS*3] (index = (row * DISPLAY_WIDTH + col) * 3 + channel,
-        // channel 0/1/2 = R/G/B), so the two source pixels for one output byte are
-        // `SCAN_DEPTH * DISPLAY_WIDTH * 3` uint16_t entries apart, not adjacent —
-        // that offset is what the previous version was missing.
+        // storage_.rgb_buffer_ (and so mapped_rgb) is NOT pre-interleaved - it's
+        // flat, row-major (index = (row * DISPLAY_WIDTH + col) * 3 + channel), so
+        // the two source pixels for one output byte are SCAN_DEPTH *
+        // DISPLAY_WIDTH * 3 entries apart, not adjacent.
         //
-        // ASSUMPTION: DISPLAY_HEIGHT == 2 * SCAN_DEPTH (true for chain_rows == 1,
-        // per the ROW_MAP_SPLIT static_asserts elsewhere in this file) and
-        // storage_.rgb_buffer_ really is filled in that plain row-major order —
-        // worth double-checking against whatever fills it for the PWM path if this
-        // doesn't come out right.
-        constexpr uint32_t channels_per_row = DISPLAY_WIDTH * 3;             // R,G,B per column, one (top-half) row
+        // ASSUMPTION: DISPLAY_HEIGHT == 2 * SCAN_DEPTH (true for chain_rows == 1)
+        // and storage_.rgb_buffer_ really is filled in that plain row-major order
+        // by whatever wraps the Pimoroni graphics library's DrawPixel calls.
+        constexpr uint32_t channels_per_row = DISPLAY_WIDTH * 3;              // R,G,B per column, one (top-half) row
         constexpr uint32_t paired_row_offset = SCAN_DEPTH * channels_per_row; // -> same column, paired (bottom-half) row
 
         uint32_t fb_index = 0;
@@ -982,18 +992,20 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_bitplanes
                     const uint32_t t = top_base + col * 3;
                     const uint32_t b = bot_base + col * 3;
 
-                    frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[t]     & mask) >> shift) << 5) |
-                                                 (((storage_.rgb_buffer_[t + 1] & mask) >> shift) << 4) |
-                                                 (((storage_.rgb_buffer_[t + 2] & mask) >> shift) << 3) |
-                                                 (((storage_.rgb_buffer_[b]     & mask) >> shift) << 2) |
-                                                 (((storage_.rgb_buffer_[b + 1] & mask) >> shift) << 1) |
-                                                 (((storage_.rgb_buffer_[b + 2] & mask) >> shift) << 0);
+                    frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[t] & mask) >> shift) << 5) |
+                                                (((storage_.rgb_buffer_[t + 1] & mask) >> shift) << 4) |
+                                                (((storage_.rgb_buffer_[t + 2] & mask) >> shift) << 3) |
+                                                (((storage_.rgb_buffer_[b] & mask) >> shift) << 2) |
+                                                (((storage_.rgb_buffer_[b + 1] & mask) >> shift) << 1) |
+                                                (((storage_.rgb_buffer_[b + 2] & mask) >> shift) << 0);
                 }
 
                 frame_buffer_[fb_index++] = is_least_significant_bit; // one control byte per row-visit
             }
         }
         swap_frame_buffer_pending_ = true; // signal frame_buffer switch
+
+        printf(">>>build_bitplanes swap_frame_buffer_pending=%d\n", swap_frame_buffer_pending_);
     }
 }
 

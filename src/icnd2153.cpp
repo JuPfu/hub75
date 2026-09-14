@@ -157,10 +157,6 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     // ---- 1. Pre-activate, enable outputs, vertical sync — all no-payload ----
     // Pre-active command
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
-    // Enable all output channels
-    icnd2153_write_control_command(pio, sm, ICND2153_CMD_EN_OP);
-    // Vertical sync. signal
-    icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
 
     // ---- 2. Configuration registers 1..4, then the debug register (REG5) ----
     // Pre-active command
@@ -187,6 +183,15 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
     // Write debug register
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
+
+    // Data latch command
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
+
+    // Vertical sync. signal
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
+
+    // Enable all output channels
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_EN_OP);
 
     // NOTE: no trailing DATA_LATCH here. Per the icn2053.c reference,
     // DATA_LATCH is issued as the trailing LE-high pulse on the *last*
