@@ -246,7 +246,7 @@ protected:
     virtual void handle_ctrl_irq() = 0;
     virtual void handle_bitplane_irq() = 0;
 
-    virtual void build_bitplanes() = 0;
+    virtual void build_pixel_stream() = 0;
 
 private:
     static void global_ctrl_irq_handler();
@@ -372,7 +372,7 @@ private:
         else
         {
             // PWM panels (bitplanes == 12 or 16) don't use binary-code-modulation row commands
-            // at all - grayscale comes from build_bitplanes() bit-slicing directly into
+            // at all - grayscale comes from build_pixel_stream() directly into
             // frame_buffer_, and Hub75Storage<PanelClass::PWM,...> has no row_cmd_buffer1_/2_.
             // BCM_SEQUENCE/bcm_sequence_length are HUB75-only, so an empty sequence is correct
             // (and safe) here - it just needs *a* valid return so BCM_SEQUENCE's type deduces.
@@ -403,6 +403,19 @@ private:
     static inline uint32_t rot_lut_rgb(const uint8_t *src, int dx_base, int dy, int i, int W, int H);
     static inline int32_t map_panel_row(int row, int v, int h, bool reverse);
 
+    // --- PWM (ICND2153-family) pixel packing ---------------------------------------------------
+    // CIE-gamma + CCM correction for one PWM pixel, written as 3 consecutive
+    // storage_.rgb_buffer_ entries (R,G,B) starting at fb_index, which is advanced by 3.
+    // NOT static, unlike rot_lut()/pack_lut_rgb_() above - those only return a value and leave
+    // the storage_ write to their (non-static) caller; these write into storage_ themselves.
+    inline void pack_pwm_rgb_(size_t &fb_index, uint8_t r, uint8_t g, uint8_t b);
+    // Drop-in replacements for rot_lut()/rot_lut_rgb() at every update()/update_bgr() call site:
+    // dispatch to the existing HUB75 packing for PanelClass::HUB75, or to pack_pwm_rgb_() for PWM.
+    // Each advances fb_index itself (by 1 for HUB75, by 3 for PWM), so callers no longer need to
+    // know which panel_class they're building for.
+    inline void write_pixel(size_t &fb_index, const uint32_t *src, int dx_base, int dy, int i, int W, int H);
+    inline void write_pixel_rgb(size_t &fb_index, const uint8_t *src, int dx_base, int dy, int i, int W, int H);
+
     // --- Timing -------------------------------------------------------------------------------
     // Cached PIO-cycle counts derived from Cfg.panel.base_{latch,addr}_ns and the actual
     // clk_sys/clkdiv at init time - read every row build, so therefore cached here.
@@ -430,6 +443,10 @@ private:
         PIO row_pio = nullptr;
         uint row_prog_offs = 0;
 
+        uint sm_gclk = 0;
+        PIO gclk_pio = nullptr;
+        uint gclk_prog_offs = 0;
+
         uint sm_read = 0;
         PIO pio_read = nullptr;
         uint offs_read = 0;
@@ -444,7 +461,7 @@ private:
     void handle_ctrl_irq() override;
     void handle_bitplane_irq() override;
 
-    void build_bitplanes() override;
+    void build_pixel_stream() override;
 
     // --- State --------------------------------------------------------------------------------
 
@@ -468,8 +485,8 @@ private:
     {
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
 
-        alignas(4) uint8_t frame_buffer1_[(TOTAL_PIXELS >> 1) * Cfg.color.bitplanes + SCAN_DEPTH * Cfg.color.bitplanes];
-        alignas(4) uint8_t frame_buffer2_[(TOTAL_PIXELS >> 1) * Cfg.color.bitplanes + SCAN_DEPTH * Cfg.color.bitplanes];
+        alignas(4) uint8_t frame_buffer1_[2 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
+        alignas(4) uint8_t frame_buffer2_[2 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;

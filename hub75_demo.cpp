@@ -24,7 +24,7 @@ constexpr Hub75Config panel_cfg{
         .panel_kind = RowMapping::Standard,
         .panel_chip = Hub75PanelChip::ICND2153,
         .inverted_stb = false,
-        .sm_clockdiv_factor = 10.0f,
+        .sm_clockdiv_factor = 15.0f,
         .base_latch_ns = 180,
         .base_addr_ns = 260,
     },
@@ -41,7 +41,7 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 43,
     },
     .color = {
-        .bitplanes = 12,
+        .bitplanes = 16,
         .separate_cie_channels = true,
         .balanced_light_output = true,
         .ccm_rg_shift = 6,
@@ -86,7 +86,7 @@ const uint8_t *demo_image()
 #include "grey_scale_stripes.hpp"
 #include "rectangle.hpp"
 
-static int demo_index = -1; ///< Example selector (-1 for auto-cycle)
+static int demo_index = 6; ///< Example selector (-1 for auto-cycle)
 
 // Perform initialisation
 int pico_led_init(void)
@@ -143,7 +143,7 @@ bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
     if (++demo_index > 6)
     {
-        demo_index = 0; // Cycle through all examples
+        demo_index = 6; // Cycle through all examples
     }
     return true;
 }
@@ -197,27 +197,27 @@ int main()
     // The following examples are animated. In the update function the color of the modified image data is ramped up to 10 bits and the image data is interwoven.
 
     // Create bouncing balls using pico_graphics functionality
-    static BouncingBalls<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> bouncingBalls(10);
+    // static BouncingBalls<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> bouncingBalls(10);
 
-    // Create rotating antialiased line using pico_graphics functionality
-    static Rotator<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rotator;
+    // // Create rotating antialiased line using pico_graphics functionality
+    // static Rotator<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rotator;
 
-    // Create analog clock using pico_graphics functionality
-    static AnalogClock<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> analogClock;
+    // // Create analog clock using pico_graphics functionality
+    // static AnalogClock<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> analogClock;
 
-    // Create fire effect using pico_graphics functionality
-    static FireEffect<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> fireEffect;
+    // // Create fire effect using pico_graphics functionality
+    // static FireEffect<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> fireEffect;
 
-    static HueValueSpectrum<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> hueValueSpectrum;
+    // static HueValueSpectrum<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> hueValueSpectrum;
 
     static PixelFill<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> pixelFill;
 
     // Pico RAM is finite - due to your configuration of panel_cfg (dimensions, bitplanes,
     // balanced_light_output and separate_cie_channels) you have to select just a selection of demos!
 
-    // static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
+    static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
 
-    // static Rectangle<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rectangle;
+    static Rectangle<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rectangle;
 
     // Cycle through the examples - move to next example every 15 seconds
     struct repeating_timer timer;
@@ -249,53 +249,53 @@ int main()
         if (demo_index == 0)
         {
             // Image data is in r8, g8, b8 format
-            bouncingBalls.bounce();
-            driver.update(&bouncingBalls);
+            // bouncingBalls.bounce();
+            // driver.update(&bouncingBalls);
         }
         else if (demo_index == 1)
         {
             // Image data is in r8, g8, b8 format
-            fireEffect.burn();
-            driver.update(&fireEffect);
+            // fireEffect.burn();
+            // driver.update(&fireEffect);
         }
         else if (demo_index == 2)
         {
             // Taylor Swift - image data is in b8, g8, r8 format
             // By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448
-            driver.update_bgr(demo_image());
+            // driver.update_bgr(demo_image());
         }
         else if (demo_index == 3)
         {
-            rotator.draw();
-            driver.update(&rotator);
+            // rotator.draw();
+            // driver.update(&rotator);
         }
         else if (demo_index == 4)
         {
-            analogClock.draw();
-            driver.update(&analogClock);
+            // analogClock.draw();
+            // driver.update(&analogClock);
         }
         else if (demo_index == 5)
         {
             // Image data is in r8, g8, b8 format
-            hueValueSpectrum.drawShades();
-            driver.update(&hueValueSpectrum);
+            // hueValueSpectrum.drawShades();
+            // driver.update(&hueValueSpectrum);
         }
         else if (demo_index == 6)
         {
             // Image data is in r8, g8, b8 format
-            pixelFill.fill();
+            pixelFill.draw_line();
             driver.update(&pixelFill);
         }
-        // else if (demo_index == 7)
-        // {
-        //     greyScaleStripes.drawStripes();
-        //     driver.update(&greyScaleStripes);
-        // }
-        // else if (demo_index == 8)
-        // {
-        //     rectangle.draw();
-        //     driver.update(&rectangle);
-        // }
+        else if (demo_index == 7)
+        {
+            greyScaleStripes.drawStripes();
+            driver.update(&greyScaleStripes);
+        }
+        else if (demo_index == 8)
+        {
+            rectangle.draw();
+            driver.update(&rectangle);
+        }
 
         // matrix panel brightness will vary when you uncomment the following api call
         // driver.setIntensity(intensity);

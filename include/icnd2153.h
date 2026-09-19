@@ -41,8 +41,10 @@ static constexpr uint32_t ICND2153_CMD_PRE_ACT = 14;    // pre-active command   
 // use a single shared register set for the whole chain rather than one per
 // colour. If your panel is one of those, just pick one CFG2 value (or a
 // custom-tuned one) and drop the other two.
-static constexpr uint16_t ICND2153_CFG1_VALUE = 0x0F70; //0x0F70; // 0x1F70; // 0x0F70;
-static constexpr uint16_t ICND2153_CFG2_VALUE = 0x7F9C; // 0xffff; //0x7F9C;
+// 0x7e08, 0x0fb0, 0xe6fc, 0x60b6,  0x5a70}
+// 0x0008, 0x1f70, 0x6707, 0x40f7, 0x0040
+static constexpr uint16_t ICND2153_CFG1_VALUE = 0x1F70; //0x0F70; // 0x1F70; // 0x0F70;
+static constexpr uint16_t ICND2153_CFG2_VALUE = 0xFF9C; // 0xffff; //0x7F9C;
 // static constexpr uint16_t ICND2153_CFG2_VALUE_GREEN = 0x679C;
 // static constexpr uint16_t ICND2153_CFG2_VALUE_BLUE = 0x5F9C;
 static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7; // 0x40F3; // 0x40F7; 0b0001 0010 1010 1100 => 0x0262

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 
@@ -591,14 +592,14 @@ void Hub75Driver<Cfg>::configure_pio()
             PIO candidate = pio_get_instance(pio_index);
 
             static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
-            static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin);
+            static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin + 1);
 
             // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
-            // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
+            // side-set/CLK+LE here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
             // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
             bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                 { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &icnd2153_bitplane_stream_program,
+                                                      &icnd2153_pixel_stream_program,
                                                       &pio_config_.data_pio,
                                                       &pio_config_.sm_data,
                                                       &pio_config_.data_prog_offs,
@@ -608,11 +609,13 @@ void Hub75Driver<Cfg>::configure_pio()
 
             if (stream_ok)
             {
-                static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
-                static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+                printf("successfully claimed icnd2153_pixel_stream_program low=%d  high=%d\n", stream_lo, stream_hi);
 
-                // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
-                // level (see hub75_row_program_init), so there is only one row program.
+                // icnd2153_row only ever touches rowsel_base_pin's 3 pins (RA/RB/RC) - GCLK moved
+                // entirely to icnd2153_gclk (oen_pin), so it's no longer part of this range.
+                static constexpr uint32_t row_lo = Cfg.pins.rowsel_base_pin;
+                static constexpr uint32_t row_hi = Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1;
+
                 bool row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                  { return pio_claim_free_sm_and_add_program_for_gpio_range(
                                                        &icnd2153_row_program,
@@ -623,26 +626,57 @@ void Hub75Driver<Cfg>::configure_pio()
                                                        row_hi - row_lo + 1,
                                                        true); });
 
+                printf("claiming icnd2153_row_program resulted in %d   row_lo=%d  row_hi=%d\n", row_ok, row_lo, row_hi);
+
                 if (row_ok)
                 {
-                    placed = true;
-                    break;
+                    printf("successfully claimed icnd2153_row_program\n");
+
+                    // icnd2153_gclk only touches oen_pin (1 pin) - a single-pin range, distinct
+                    // from both the stream (CLK/LE/data) and row (RA/RB/RC) pin groups above.
+                    static constexpr uint32_t gclk_lo = Cfg.pins.oen_pin;
+                    static constexpr uint32_t gclk_hi = Cfg.pins.oen_pin;
+
+                    bool gckl_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
+                                                      { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                            &icnd2153_gclk_program,
+                                                            &pio_config_.gclk_pio,
+                                                            &pio_config_.sm_gclk,
+                                                            &pio_config_.gclk_prog_offs,
+                                                            gclk_lo,
+                                                            gclk_hi - gclk_lo + 1,
+                                                            true); });
+                    if (gckl_ok)
+                    {
+                        printf("successfully claimed icnd2153_gclk_program\n");
+                        placed = true;
+                        break;
+                    }
+
+                    printf("gclk claim failed claimed icnd2153_gclk_program\n");
+                    // gclk claim failed - undo the row claim before retrying the next PIO block,
+                    // otherwise it leaks (pixel_stream's cleanup below only covers itself).
+                    pio_remove_program_and_unclaim_sm(&icnd2153_row_program, pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs);
                 }
 
-                pio_remove_program_and_unclaim_sm(&icnd2153_bitplane_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
+                printf("remove icnd2153_pixel_stream_program\n");
+                pio_remove_program_and_unclaim_sm(&icnd2153_pixel_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
             }
 
+            printf("release_pio_block_for_row_stream\n");
             release_pio_block_for_row_stream(pio_index);
         }
 
         if (!placed)
         {
-            panic("Failed to find a PIO block with room for icnd2153_bitplane_stream_program icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
+            panic("Failed to find a PIO block with room for icnd2153_pixel_stream_program + icnd2153_row_program + icnd2153_gclk_program (checked all %d blocks)\n", (int)NUM_PIOS);
         }
 
-        icnd2153_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
+        icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, SCAN_DEPTH);
+        icnd2153_gclk_program_init(pio_config_.gclk_pio, pio_config_.sm_gclk, pio_config_.gclk_prog_offs, Cfg.pins.oen_pin, 138);
+
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH);
         printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
 }
@@ -751,7 +785,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         // row counter is reset in icnd2153_row_program no input from DMA!!!
         // Trigger start of icnd2153_row_program -> runs forever
         //
-        // icnd2153_bitplane_stream receives pixel data fed by DMA similar to hub75_bitplane_stream pixel channel
+        // icnd2153_pixel_stream receives pixel data fed by DMA
         pixel_chan_ = dma_claim_unused_channel(true);
         pixel_ctrl_chan_ = dma_claim_unused_channel(true);
 
@@ -767,13 +801,17 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
         channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan_);
 
-        // Due to DMA channel row_chan the complete pre-build bit planes can be passed to DMA channel pixel_chan.
-        // The pixel_chan iterates over all bitplanes in one big swoop.
+        // Due to DMA channel row_chan the complete pre-build pixel stream can be passed to DMA channel pixel_chan.
+        // The pixel_chan iterates over all (row, channel) DATA_LATCH transactions in one big swoop.
+        // Format: SCAN_DEPTH rows x 16 channels = 512 transactions/frame, each exactly 128 bytes
+        // (16 bits x DISPLAY_WIDTH/16 chips) - see build_pixel_stream() in this file and
+        // icnd2153_pixel_stream in icnd2153.pio, which hardcodes the 127-low + 1-high pulse shape
+        // rather than reading a variable length per transaction.
         dma_channel_configure(pixel_chan_,
                               &pixel_chan_config,
                               &pio_config_.data_pio->txf[pio_config_.sm_data],
                               &dma_buffer_,
-                              dma_encode_transfer_count(((TOTAL_PIXELS >> 1) + SCAN_DEPTH) * Cfg.color.bitplanes),
+                              dma_encode_transfer_count(2 + SCAN_DEPTH * 16 * DISPLAY_WIDTH),
                               false);
 
         // pixel ctrl channel
@@ -802,37 +840,118 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 // Colour pipeline
 // -----------------------------------------------------------------------------------------
 
+// Derives a 256-entry gamma table for an arbitrary bitplane depth from a 16-bit master
+// table by right-shifting each entry - used for any Cfg.color.bitplanes value that doesn't
+// have its own hand-generated table (currently: anything other than 8, 10, or 16). This
+// avoids needing to run cie.py and add a new CIEnn/_RED/_GREEN/_BLUE table to cie.hpp every
+// time a different bitplane depth is tried; 8 and 10 stay on their existing, separately
+// hand-tuned tables below since those are already in use by other panel configs.
+static constexpr std::array<uint16_t, 256> derive_cie_table(const uint16_t *src16, unsigned bitplanes)
+{
+    std::array<uint16_t, 256> out{};
+    const unsigned shift = 16u - bitplanes; // e.g. bitplanes=12 -> shift right by 4
+    for (int v = 0; v < 256; ++v)
+        out[static_cast<size_t>(v)] = static_cast<uint16_t>(src16[v] >> shift);
+    return out;
+}
+
 template <Hub75Config Cfg>
 constexpr const uint16_t *Hub75Driver<Cfg>::cie_red_table()
 {
     if constexpr (Cfg.color.separate_cie_channels)
-        return (Cfg.color.bitplanes == 16) ? CIE16_RED : (Cfg.color.bitplanes == 10) ? CIE10_RED
-                                                                                     : CIE8_RED;
+    {
+        if constexpr (Cfg.color.bitplanes == 16)
+            return CIE16_RED;
+        else if constexpr (Cfg.color.bitplanes == 10)
+            return CIE10_RED;
+        else if constexpr (Cfg.color.bitplanes == 8)
+            return CIE8_RED;
+        else
+        {
+            static constexpr auto table = derive_cie_table(CIE16_RED, Cfg.color.bitplanes);
+            return table.data();
+        }
+    }
     else
-        return (Cfg.color.bitplanes == 16) ? CIE16 : (Cfg.color.bitplanes == 10) ? CIE10
-                                                                                 : CIE8;
+    {
+        if constexpr (Cfg.color.bitplanes == 16)
+            return CIE16;
+        else if constexpr (Cfg.color.bitplanes == 10)
+            return CIE10;
+        else if constexpr (Cfg.color.bitplanes == 8)
+            return CIE8;
+        else
+        {
+            static constexpr auto table = derive_cie_table(CIE16, Cfg.color.bitplanes);
+            return table.data();
+        }
+    }
 }
 
 template <Hub75Config Cfg>
 constexpr const uint16_t *Hub75Driver<Cfg>::cie_green_table()
 {
     if constexpr (Cfg.color.separate_cie_channels)
-        return (Cfg.color.bitplanes == 16) ? CIE16_GREEN : (Cfg.color.bitplanes == 10) ? CIE10_GREEN
-                                                                                       : CIE8_GREEN;
+    {
+        if constexpr (Cfg.color.bitplanes == 16)
+            return CIE16_GREEN;
+        else if constexpr (Cfg.color.bitplanes == 10)
+            return CIE10_GREEN;
+        else if constexpr (Cfg.color.bitplanes == 8)
+            return CIE8_GREEN;
+        else
+        {
+            static constexpr auto table = derive_cie_table(CIE16_GREEN, Cfg.color.bitplanes);
+            return table.data();
+        }
+    }
     else
-        return (Cfg.color.bitplanes == 16) ? CIE16 : (Cfg.color.bitplanes == 10) ? CIE10
-                                                                                 : CIE8;
+    {
+        if constexpr (Cfg.color.bitplanes == 16)
+            return CIE16;
+        else if constexpr (Cfg.color.bitplanes == 10)
+            return CIE10;
+        else if constexpr (Cfg.color.bitplanes == 8)
+            return CIE8;
+        else
+        {
+            static constexpr auto table = derive_cie_table(CIE16, Cfg.color.bitplanes);
+            return table.data();
+        }
+    }
 }
 
 template <Hub75Config Cfg>
 constexpr const uint16_t *Hub75Driver<Cfg>::cie_blue_table()
 {
     if constexpr (Cfg.color.separate_cie_channels)
-        return (Cfg.color.bitplanes == 16) ? CIE16_BLUE : (Cfg.color.bitplanes == 10) ? CIE10_BLUE
-                                                                                      : CIE8_BLUE;
+    {
+        if constexpr (Cfg.color.bitplanes == 16)
+            return CIE16_BLUE;
+        else if constexpr (Cfg.color.bitplanes == 10)
+            return CIE10_BLUE;
+        else if constexpr (Cfg.color.bitplanes == 8)
+            return CIE8_BLUE;
+        else
+        {
+            static constexpr auto table = derive_cie_table(CIE16_BLUE, Cfg.color.bitplanes);
+            return table.data();
+        }
+    }
     else
-        return (Cfg.color.bitplanes == 16) ? CIE16 : (Cfg.color.bitplanes == 10) ? CIE10
-                                                                                 : CIE8;
+    {
+        if constexpr (Cfg.color.bitplanes == 16)
+            return CIE16;
+        else if constexpr (Cfg.color.bitplanes == 10)
+            return CIE10;
+        else if constexpr (Cfg.color.bitplanes == 8)
+            return CIE8;
+        else
+        {
+            static constexpr auto table = derive_cie_table(CIE16, Cfg.color.bitplanes);
+            return table.data();
+        }
+    }
 }
 
 // Full cross-channel mixing on already-LUT-mapped 10/8-bit values. rv, gv, bv hold the LUT
@@ -945,67 +1064,106 @@ uint32_t Hub75Driver<Cfg>::rot_lut_rgb(const uint8_t *src, int dx_base, int dy, 
     return pack_lut_rgb_(src[rot + 2], src[rot + 1], src[rot]);
 }
 
+// -----------------------------------------------------------------------------------------
+// PWM (ICND2153-family) pixel packing
+// -----------------------------------------------------------------------------------------
+// CIE-gamma + CCM correction for one PWM pixel, mirroring pack_lut_rgb_()'s HUB75 pipeline
+// but writing 3 separate storage_.rgb_buffer_ entries (R,G,B) instead of one bit-packed
+// uint32_t, since the PWM buffer holds one uint16_t per channel rather than one combined
+// value per pixel. fb_index is advanced by 3 (vs. 1 for the HUB75 path).
 template <Hub75Config Cfg>
-__attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_bitplanes()
+inline void Hub75Driver<Cfg>::pack_pwm_rgb_(size_t &fb_index, uint8_t r, uint8_t g, uint8_t b)
 {
-    // This is the PWM grayscale bit-slicing path: it reads storage_.rgb_buffer_ as a flat
-    // per-channel byte array (uint16_t[TOTAL_PIXELS*3]) and writes shift-selected bits into
-    // frame_buffer_. It has no meaning for HUB75 panels, whose storage_.rgb_buffer_ is a much
-    // smaller, differently-laid-out uint32_t[TOTAL_PIXELS] of already LUT/CCM-packed pixels
-    // (see rot_lut()/pack_lut_rgb() and update()/update_bgr() instead). Since this function is
-    // a virtual override, it is instantiated for every Cfg regardless of panel_class, so the
-    // whole body must be guarded - without this if constexpr, the loop bounds below (sized for
-    // the PWM buffer) walk straight off the end of the much smaller HUB75 rgb_buffer_.
+    uint32_t rv = cie_red_table()[r];
+    uint32_t gv = cie_green_table()[g];
+    uint32_t bv = cie_blue_table()[b];
+    apply_ccm(rv, gv, bv); // same cross-talk/colour-correction matrix as the HUB75 path
+    storage_.rgb_buffer_[fb_index++] = static_cast<uint16_t>(rv);
+    storage_.rgb_buffer_[fb_index++] = static_cast<uint16_t>(gv);
+    storage_.rgb_buffer_[fb_index++] = static_cast<uint16_t>(bv);
+}
+
+// Drop-in replacement for every `write_pixel(fb_index, ...)` call site
+// in update(): reuses rotated_src_index() for the rotation/geometry lookup exactly like
+// rot_lut() does, then dispatches the final packing step by panel_class. Callers no longer
+// need to know whether they're building for HUB75 or PWM - just call write_pixel() and let
+// it handle the fb_index advance itself (1 for HUB75, 3 for PWM).
+template <Hub75Config Cfg>
+inline void Hub75Driver<Cfg>::write_pixel(size_t &fb_index, const uint32_t *src, int dx_base, int dy, int i, int W, int H)
+{
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+    }
+    else
+    {
+        const uint32_t px = src[rotated_src_index(dx_base + i, dy, W, H)];
+        // Same 0xRRGGBB component order rot_lut()/pack_lut_rgb() assume.
+        pack_pwm_rgb_(fb_index, static_cast<uint8_t>(px >> 16), static_cast<uint8_t>(px >> 8), static_cast<uint8_t>(px));
+    }
+}
+
+// Drop-in replacement for every `write_pixel_rgb(fb_index, ...)` call
+// site in update_bgr(). See write_pixel() above.
+template <Hub75Config Cfg>
+inline void Hub75Driver<Cfg>::write_pixel_rgb(size_t &fb_index, const uint8_t *src, int dx_base, int dy, int i, int W, int H)
+{
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+    }
+    else
+    {
+        const int32_t rot = rotated_src_index(dx_base + i, dy, W, H) * 3;
+        // Same BGR byte order rot_lut_rgb() assumes (src[rot]=B, [rot+1]=G, [rot+2]=R).
+        pack_pwm_rgb_(fb_index, src[rot + 2], src[rot + 1], src[rot]);
+    }
+}
+
+template <Hub75Config Cfg>
+__attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_stream()
+{
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        // ---- Step 1: pack two physically-paired rows (row r and row r +
-        // SCAN_DEPTH - same dual-row-scan convention as standard HUB75's
-        // R1G1B1/R2G2B2) into a single byte per column: bits [5:3] = R0 G0 B0 of
-        // the top row, bits [2:0] = R1 G1 B1 of the paired row.
-        //
-        // storage_.rgb_buffer_ (and so mapped_rgb) is NOT pre-interleaved - it's
-        // flat, row-major (index = (row * DISPLAY_WIDTH + col) * 3 + channel), so
-        // the two source pixels for one output byte are SCAN_DEPTH *
-        // DISPLAY_WIDTH * 3 entries apart, not adjacent.
-        //
-        // ASSUMPTION: DISPLAY_HEIGHT == 2 * SCAN_DEPTH (true for chain_rows == 1)
-        // and storage_.rgb_buffer_ really is filled in that plain row-major order
-        // by whatever wraps the Pimoroni graphics library's DrawPixel calls.
-        constexpr uint32_t channels_per_row = DISPLAY_WIDTH * 3;              // R,G,B per column, one (top-half) row
-        constexpr uint32_t paired_row_offset = SCAN_DEPTH * channels_per_row; // -> same column, paired (bottom-half) row
+        constexpr uint32_t CHIPS_PER_LANE = DISPLAY_WIDTH / 16;          // 8 for a 128-wide panel
+        constexpr uint32_t paired_row_offset = stride_to_paired_row * 3; // *3: rgb_buffer_ interleaves R,G,B per pixel
 
         uint32_t fb_index = 0;
 
-        for (uint16_t i = 0; i < Cfg.color.bitplanes; i++)
+        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
+        frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
+
+        for (uint32_t row = 0; row < SCAN_DEPTH; row++)
         {
-            const uint16_t shift = Cfg.color.bitplanes - 1u - i; // select bitplane
-            const uint16_t mask = 1u << shift;
-            const uint8_t is_least_significant_bit = (i == Cfg.color.bitplanes - 1) ? 1 : 0;
-
-            for (uint32_t row = 0; row < SCAN_DEPTH; row++)
+            for (uint32_t channel = 0; channel < 16; channel++)
             {
-                const uint32_t top_base = row * channels_per_row;
-                const uint32_t bot_base = top_base + paired_row_offset;
+                // channel -> column-within-chip: ASSUMED channel c -> offset (15-c), reading the
+                // datasheet's "1st value shifted = Channel 15" as "first column of the 16 =
+                // channel 15". Flip to `channel` directly if this comes out mirrored within each
+                // 16-column chip block on real hardware.
+                uint32_t col_offset = 15 - channel;
 
-                for (uint32_t col = 0; col < DISPLAY_WIDTH; col++)
+                for (uint32_t bit = 0; bit < 16; bit++) // MSB first, same convention as every other command
                 {
-                    const uint32_t t = top_base + col * 3;
-                    const uint32_t b = bot_base + col * 3;
+                    uint16_t mask = 1u << (15 - bit);
 
-                    frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[t] & mask) >> shift) << 5) |
-                                                (((storage_.rgb_buffer_[t + 1] & mask) >> shift) << 4) |
-                                                (((storage_.rgb_buffer_[t + 2] & mask) >> shift) << 3) |
-                                                (((storage_.rgb_buffer_[b] & mask) >> shift) << 2) |
-                                                (((storage_.rgb_buffer_[b + 1] & mask) >> shift) << 1) |
-                                                (((storage_.rgb_buffer_[b + 2] & mask) >> shift) << 0);
+                    for (uint32_t chip = 0; chip < CHIPS_PER_LANE; chip++)
+                    {
+                        uint32_t col = chip * 16 + col_offset;
+                        uint32_t top = (row * DISPLAY_WIDTH + col) * 3;
+                        uint32_t bot = top + paired_row_offset;
+
+                        frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[top] & mask) != 0) << 5) |
+                                                    (((storage_.rgb_buffer_[top + 1] & mask) != 0) << 4) |
+                                                    (((storage_.rgb_buffer_[top + 2] & mask) != 0) << 3) |
+                                                    (((storage_.rgb_buffer_[bot] & mask) != 0) << 2) |
+                                                    (((storage_.rgb_buffer_[bot + 1] & mask) != 0) << 1) |
+                                                    (((storage_.rgb_buffer_[bot + 2] & mask) != 0) << 0);
+                    }
                 }
-
-                frame_buffer_[fb_index++] = is_least_significant_bit; // one control byte per row-visit
             }
         }
-        swap_frame_buffer_pending_ = true; // signal frame_buffer switch
-
-        printf(">>>build_bitplanes swap_frame_buffer_pending=%d\n", swap_frame_buffer_pending_);
+        swap_frame_buffer_pending_ = true;
     }
 }
 
@@ -1074,7 +1232,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base - p * rows_per_bank;
-                                storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                                write_pixel_rgb(fb_index, src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1085,7 +1243,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base + p * rows_per_bank;
-                                storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
+                                write_pixel_rgb(fb_index, src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1162,8 +1320,8 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             const int dx2 = phys_h * Cfg.panel.matrix_panel_width + local_col2;
                             const int dy2 = v * Cfg.panel.matrix_panel_height + local_row2;
 
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx, dy, 0, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx2, dy2, 0, W, H);
+                            write_pixel_rgb(fb_index, src, dx, dy, 0, W, H);
+                            write_pixel_rgb(fb_index, src, dx2, dy2, 0, W, H);
                         }
                     }
                 }
@@ -1204,27 +1362,27 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                     {
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base1, dy1, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base0, dy0, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base2, dy2, i, W, H);
                         }
                     }
                     else
                     {
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base1, dy1, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base3, dy3, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base1, dy1, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base3, dy3, i, W, H);
                         }
 
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base0, dy0, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base2, dy2, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base0, dy0, i, W, H);
+                            write_pixel_rgb(fb_index, src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
@@ -1240,7 +1398,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
     }
     else
     {
-        build_bitplanes();
+        build_pixel_stream();
     }
 }
 
@@ -1299,7 +1457,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
         // chain_rows == 1. SCAN_DEPTH is the authoritative source.
         constexpr int rows_per_bank = SCAN_DEPTH;
 
-        int32_t fb_index = 0;
+        size_t fb_index = 0;
 
         for (int row = 0; row < rows_per_bank; row++) // row: current row
         {
@@ -1329,7 +1487,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base - p * rows_per_bank;
-                                storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+                                write_pixel(fb_index, src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1340,7 +1498,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base + p * rows_per_bank;
-                                storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
+                                write_pixel(fb_index, src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1415,8 +1573,8 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                             const int dx2 = phys_h * Cfg.panel.matrix_panel_width + local_col2;
                             const int dy2 = v * Cfg.panel.matrix_panel_height + local_row2;
 
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx, dy, 0, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx2, dy2, 0, W, H);
+                            write_pixel(fb_index, src, dx, dy, 0, W, H);
+                            write_pixel(fb_index, src, dx2, dy2, 0, W, H);
                         }
                     }
                 }
@@ -1459,26 +1617,26 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                         //   - sign on quarter rows -> above
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                            write_pixel(fb_index, src, dx_base1, dy1, i, W, H);
+                            write_pixel(fb_index, src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                            write_pixel(fb_index, src, dx_base0, dy0, i, W, H);
+                            write_pixel(fb_index, src, dx_base2, dy2, i, W, H);
                         }
                     }
                     else
                     {
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base1, dy1, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base3, dy3, i, W, H);
+                            write_pixel(fb_index, src, dx_base1, dy1, i, W, H);
+                            write_pixel(fb_index, src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base0, dy0, i, W, H);
-                            storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base2, dy2, i, W, H);
+                            write_pixel(fb_index, src, dx_base0, dy0, i, W, H);
+                            write_pixel(fb_index, src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
@@ -1495,7 +1653,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
     }
     else
     {
-        build_bitplanes();
+        build_pixel_stream();
     }
 }
 #endif
