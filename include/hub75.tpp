@@ -628,39 +628,45 @@ void Hub75Driver<Cfg>::configure_pio()
 
                 printf("claiming icnd2153_row_program resulted in %d   row_lo=%d  row_hi=%d\n", row_ok, row_lo, row_hi);
 
+                // if (row_ok)
+                // {
+                //     printf("successfully claimed icnd2153_row_program\n");
+
+                //     // icnd2153_gclk only touches oen_pin (1 pin) - a single-pin range, distinct
+                //     // from both the stream (CLK/LE/data) and row (RA/RB/RC) pin groups above.
+                //     static constexpr uint32_t gclk_lo = Cfg.pins.oen_pin;
+                //     static constexpr uint32_t gclk_hi = Cfg.pins.oen_pin;
+
+                //     bool gckl_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
+                //                                       { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                //                                             &icnd2153_gclk_program,
+                //                                             &pio_config_.gclk_pio,
+                //                                             &pio_config_.sm_gclk,
+                //                                             &pio_config_.gclk_prog_offs,
+                //                                             gclk_lo,
+                //                                             gclk_hi - gclk_lo + 1,
+                //                                             true); });
+                //     if (gckl_ok)
+                //     {
+                //         printf("successfully claimed icnd2153_gclk_program\n");
+                //         placed = true;
+                //         break;
+                //     }
+
+                //     printf("gclk claim failed claimed icnd2153_gclk_program\n");
+                //     // gclk claim failed - undo the row claim before retrying the next PIO block,
+                //     // otherwise it leaks (pixel_stream's cleanup below only covers itself).
+                //     pio_remove_program_and_unclaim_sm(&icnd2153_row_program, pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs);
+                // }
+
+                // printf("remove icnd2153_pixel_stream_program\n");
+                // pio_remove_program_and_unclaim_sm(&icnd2153_pixel_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
                 if (row_ok)
-                {
-                    printf("successfully claimed icnd2153_row_program\n");
-
-                    // icnd2153_gclk only touches oen_pin (1 pin) - a single-pin range, distinct
-                    // from both the stream (CLK/LE/data) and row (RA/RB/RC) pin groups above.
-                    static constexpr uint32_t gclk_lo = Cfg.pins.oen_pin;
-                    static constexpr uint32_t gclk_hi = Cfg.pins.oen_pin;
-
-                    bool gckl_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                                                      { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                            &icnd2153_gclk_program,
-                                                            &pio_config_.gclk_pio,
-                                                            &pio_config_.sm_gclk,
-                                                            &pio_config_.gclk_prog_offs,
-                                                            gclk_lo,
-                                                            gclk_hi - gclk_lo + 1,
-                                                            true); });
-                    if (gckl_ok)
                     {
                         printf("successfully claimed icnd2153_gclk_program\n");
                         placed = true;
                         break;
                     }
-
-                    printf("gclk claim failed claimed icnd2153_gclk_program\n");
-                    // gclk claim failed - undo the row claim before retrying the next PIO block,
-                    // otherwise it leaks (pixel_stream's cleanup below only covers itself).
-                    pio_remove_program_and_unclaim_sm(&icnd2153_row_program, pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs);
-                }
-
-                printf("remove icnd2153_pixel_stream_program\n");
-                pio_remove_program_and_unclaim_sm(&icnd2153_pixel_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
             }
 
             printf("release_pio_block_for_row_stream\n");
@@ -674,9 +680,9 @@ void Hub75Driver<Cfg>::configure_pio()
 
         icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
 
-        icnd2153_gclk_program_init(pio_config_.gclk_pio, pio_config_.sm_gclk, pio_config_.gclk_prog_offs, Cfg.pins.oen_pin, 138);
+        // icnd2153_gclk_program_init(pio_config_.gclk_pio, pio_config_.sm_gclk, pio_config_.gclk_prog_offs, Cfg.pins.oen_pin, 138);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH);
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, 137);
         printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
 }
@@ -811,7 +817,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               &pixel_chan_config,
                               &pio_config_.data_pio->txf[pio_config_.sm_data],
                               &dma_buffer_,
-                              dma_encode_transfer_count(2 + SCAN_DEPTH * 16 * DISPLAY_WIDTH),
+                              dma_encode_transfer_count(4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH),
                               false);
 
         // pixel ctrl channel
@@ -1130,8 +1136,11 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 
         uint32_t fb_index = 0;
 
-        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
         frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
+        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
+
+        frame_buffer_[fb_index++] = (126) & 0xFF;
+        frame_buffer_[fb_index++] = ((126) >> 8) & 0xFF;
 
         for (uint32_t row = 0; row < SCAN_DEPTH; row++)
         {

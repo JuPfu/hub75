@@ -485,8 +485,8 @@ private:
     {
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
 
-        alignas(4) uint8_t frame_buffer1_[2 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
-        alignas(4) uint8_t frame_buffer2_[2 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
+        alignas(4) uint8_t frame_buffer1_[4 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
+        alignas(4) uint8_t frame_buffer2_[4 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;
