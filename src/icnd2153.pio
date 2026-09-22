@@ -1,153 +1,172 @@
 .pio_version 0
 
+; ==============================================================================
+; PROGRAM 1: ROW & GCLK (PWM CLOCK) CONTROLLER
+; ==============================================================================
 .program icnd2153_row
 
-; GCLK (alias OEN) pin
+; Side-set pin: GCLK / OE (HUB75 OE line, driving ICND2153 GCLK input pin 21)
+; Side-set bit 0: GCLK
 .side_set 1
 
 .wrap_target
-    mov x, isr       side 0      ; reload rows-remaining-this-frame
-    ;irq nowait 2     side 0     ; request VSYNC from the data SM
-    ;wait 1 irq 3     side 0      ; wait for its "VSYNC sent" ack
+frame_start:
+    ; ------------------------------------------------------------------
+    ; 1. FRAME RESTART & VSYNC HANDSHAKE
+    ; ------------------------------------------------------------------
+    mov x, isr            side 0b0  ; Reload row count (num_scan_rows - 1); GCLK low
+    irq nowait 2          side 0b0  ; Signal VSYNC (Frame Start) to pixel_stream SM
+    wait 1 irq 3          side 0b0  ; Wait for pixel_stream SM to finish VSYNC sequence
 
-    ; rowsel_base_pin group is (RA, RB, RC); RB (middle bit) is currently
-    ; unused/reserved and always driven low - only RA/RC form the shift-chain.
-    set pins, 0b101 [3] side 0   ; seed row 0 into the RA/RC shift-chain: RA=1 RC=1
-    set pins, 0b000 [3] side 0   ; RA=0 RC=0
+    ; ------------------------------------------------------------------
+    ; 2. SEED ROW 0 (Reset address decoder)
+    ; ------------------------------------------------------------------
+    set pins, 0b101 [3]   side 0b0  ; Step decoder (RA=1, RC=1)
+    set pins, 0b000 [3]   side 0b0  ; Step decoder (RA=0, RC=0) -> Row 0 selected
 
 row_loop:
-    irq nowait 2     side 0     ; request VSYNC from the data SM
-    wait 1 irq 3     side 0      ; wait for its "VSYNC sent" ack
-    mov y, osr            side 0   ; reload burst length (osr preloaded once at init - see below; never consumed by an OUT, so it stays put)
+    ; ------------------------------------------------------------------
+    ; 3. GENERATE GCLK BURST FOR CURRENT ROW DISPLAY
+    ; ------------------------------------------------------------------
+    mov y, osr            side 0b0  ; Reload burst length count into Y
 gclk_loop:
-    nop                [3] side 1   ; GCLK high
-    jmp y--, gclk_loop [3] side 0   ; GCLK low; loop gclk_pulses times total
+    nop         [3]       side 0b1  ; GCLK high
+    jmp y--, gclk_loop [3] side 0b0  ; GCLK low; toggles GCLK pulses for grayscale counter
 
-    set pins, 0b001 [3]   side 0   ; RA=1 - advance to next row
-    set pins, 0b000 [3]   side 0   ; RA=0
+    ; ------------------------------------------------------------------
+    ; 4. ADVANCE TO NEXT ROW
+    ; ------------------------------------------------------------------
+    set pins, 0b001 [3]   side 0b0  ; Pulse RA=1 to increment line selection decoder
+    set pins, 0b000 [3]   side 0b0  ; Pulse RA=0
 
-    jmp x--, row_loop     side 0
+    jmp x--, row_loop     side 0b0  ; Decrement row count X; process next row if X >= 0
 .wrap
 
 % c-sdk {
-    static inline void icnd2153_row_program_init(PIO pio, uint sm, uint offset, uint rowsel_base_pin, uint oen_pin, uint32_t num_scan_rows, uint32_t gclk_pulses)
+#include "hardware/clocks.h"
+
+static inline void icnd2153_row_program_init(
+    PIO pio,
+    uint sm,
+    uint offset,
+    uint rowsel_base_pin,          // 3 consecutive pins: RA, RB, RC
+    uint gclk_pin,                 // HUB75 OE pin (ICND2153 GCLK Pin 21)
+    uint32_t num_scan_rows,        // e.g. 32 for 1/32 scan
+    uint32_t gclk_pulses_per_burst // e.g. 138
+)
+{
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_clear_fifos(pio, sm);
+
+    // Set pin directions
+    pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 3, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
+
+    for (uint i = 0; i < 3; i++)
     {
-        pio_sm_set_enabled(pio, sm, false);
-        pio_sm_clear_fifos(pio, sm);
-
-        pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 3, true);
-        pio_sm_set_consecutive_pindirs(pio, sm, oen_pin, 1, true);
-        for (uint i = 0; i < 3; i++)
-            pio_gpio_init(pio, rowsel_base_pin + i);
-        pio_gpio_init(pio, oen_pin);
-
-        pio_sm_config c = icnd2153_row_program_get_default_config(offset);
-        sm_config_set_set_pins(&c, rowsel_base_pin, 3);
-        sm_config_set_sideset_pins(&c, oen_pin);
-        // No OUT instructions remain in this program (gclk burst length is now
-        // read via a non-consuming MOV from a one-time-preloaded OSR - see
-        // below), so autopull is moot; left at a harmless default.
-        sm_config_set_out_shift(&c, true, false, 32);
-
-        sm_config_set_clkdiv(&c, 10.0f);
-
-        pio_sm_init(pio, sm, offset, &c);
-
-        // Seed x = num_scan_rows - 1 (frame-reload constant, held in isr - see
-        // the .program comments; this is the only time isr is ever written
-        // after init).
-        pio_sm_put(pio, sm, num_scan_rows - 1);
-        pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
-
-        // Seed y = gclk_pulses - 1, held permanently in osr (mov y, osr never
-        // drains it, unlike an OUT would) - this is the only time osr is
-        // ever written after init, and no DMA/FIFO traffic is needed for it
-        // at runtime.
-        pio_sm_put(pio, sm, gclk_pulses - 1);
-        pio_sm_exec(pio, sm, pio_encode_pull(false, false));
-
-        pio_sm_set_enabled(pio, sm, true);
+        pio_gpio_init(pio, rowsel_base_pin + i);
     }
+    pio_gpio_init(pio, gclk_pin);
+
+    pio_sm_config c = icnd2153_row_program_get_default_config(offset);
+
+    // Map SET pins to row selection multiplexer (RA/RB/RC)
+    sm_config_set_set_pins(&c, rowsel_base_pin, 3);
+
+    // Map SIDE-SET pin (1 bit) to GCLK
+    sm_config_set_sideset_pins(&c, gclk_pin);
+
+    sm_config_set_out_shift(&c, true, false, 32);
+    sm_config_set_clkdiv(&c, 10.0f);
+
+    pio_sm_init(pio, sm, offset, &c);
+
+    // Seed row count (num_scan_rows - 1) into ISR
+    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
+    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
+
+    // Seed GCLK burst count (gclk_pulses_per_burst - 1) into OSR
+    pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
+    pio_sm_exec(pio, sm, pio_encode_out(pio_osr, 32));
+
+    pio_sm_set_enabled(pio, sm, true);
+}
 %}
 
+
+; ==============================================================================
+; PROGRAM 2: PIXEL DATA & COMMAND STREAMER
+; ==============================================================================
 .program icnd2153_pixel_stream
-; CLK pin
-; LAT pin
-; GCLK pin
-.side_set 3
+
+; Out pins: Parallel RGB Data Lines (6 consecutive pins: R0, G0, B0, R1, G1, B1)
+; Side-set bit 0: DCLK (Data Clock)
+; Side-set bit 1: LE / LAT (Latch Enable)
+.side_set 2
 
 .wrap_target
- ;   wait 1 irq 2                side 0b000  ; wait for icnd2153_row's VSYNC request
+    wait 1 irq 2                side 0b00  ; Wait for VSYNC request from row SM (LE=0, DCLK=0)
 
- ;   set x, 2                    side 0b000 [3]
-;vsync_loop:                                ; send VSYNC
- ;   nop             [3]         side 0b011
- ;   jmp x--, vsync_loop         side 0b010
+    set x, 2                    side 0b00
+vsync_loop:                                ; Send VSYNC command sequence
+    nop             [3]         side 0b10  ; LE=1, DCLK=0
+    jmp x--, vsync_loop         side 0b11  ; LE=1, DCLK=1
 
- ;   irq nowait 3                side 0b000  ; acknowledge: VSYNC sent
+    irq nowait 3                side 0b00  ; ACK VSYNC ready back to row SM
 
-    mov isr, null                side 0b000  ; clear before accumulating this frame's transaction count
-    out isr, 8                    side 0b000  ; byte 0 (LSB)
-    out isr, 8                    side 0b000  ; byte 1
-    mov x, isr                    side 0b000  ; x = transactions this frame
-
-    mov isr, null                    side 0b000  ; clear again - isr's next job is 126, fresh every frame
-    out isr, 8                        side 0b000  ; 
-    out isr, 8                        side 0b000  ; 
+    ; --------------------------------------------------------------------------
+    ; HEADER PARSING (Autopull pulls 32-bit words automatically on 'out')
+    ; --------------------------------------------------------------------------
+    out x, 32                   side 0b00  ; Word 1: X = Total transactions per frame - 1
+    out isr, 32                 side 0b00  ; Word 2: ISR = Pixel pulses per transaction - 1
 
 transactions:
-
-    set y, 2                    side 0b000 [3]
-    wait 1 irq 2                side 0b000  ; wait for icnd2153_row's VSYNC request
-vsync_loop:                                ; send VSYNC
-    nop             [3]         side 0b011
-    jmp y--, vsync_loop         side 0b010
-
-    irq nowait 3                side 0b000  ; acknowledge: VSYNC sent
-    mov y, isr                  side 0b000
+    mov y, isr                  side 0b00
 normal_pulse:
-    out pins, 6       [2]       side 0b000
-    out null, 2       [3]       side 0b101
-    jmp y--, normal_pulse       side 0b000
+    out pins, 6     [2]         side 0b00  ; 6 bits RGB data (LE=0, DCLK=0)
+    out null, 2     [3]         side 0b01  ; Clock data on DCLK rising edge (LE=0, DCLK=1)
+    jmp y--, normal_pulse       side 0b00
 
-    out pins, 6       [3]       side 0b000  ; last pulse with DATA_LATCH
-    out null, 2       [3]       side 0b011
-    jmp x--, transactions       side 0b000
+    out pins, 6     [3]         side 0b00  ; Last pixel word in transaction
+    out null, 2     [3]         side 0b10  ; Issue DATA_LATCH command (LE=1, DCLK=0)
+    jmp x--, transactions       side 0b00  ; Loop across frame transactions
 .wrap
 
 % c-sdk {
-    static inline void icnd2153_pixel_stream_program_init(PIO pio, uint sm, uint offset, uint rgb_base_pin, uint clk_pin)
+static inline void icnd2153_pixel_stream_program_init(
+    PIO pio,
+    uint sm,
+    uint offset,
+    uint rgb_base_pin,
+    uint dclk_pin // Side-set bit 0: DCLK, Side-set bit 1: LE / LAT
+)
+{
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_clear_fifos(pio, sm);
+
+    pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, dclk_pin, 2, true);
+
+    for (uint i = 0; i < 6; i++)
     {
-        pio_sm_set_enabled(pio, sm, false);
-        pio_sm_clear_fifos(pio, sm);
-
-        pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
-        pio_sm_set_consecutive_pindirs(pio, sm, clk_pin, 3, true);
-        for (uint i = 0; i < 6; i++)
-            pio_gpio_init(pio, rgb_base_pin + i);
-        pio_gpio_init(pio, clk_pin);
-        pio_gpio_init(pio, clk_pin + 1);
-        pio_gpio_init(pio, clk_pin + 2);
-
-        pio_sm_config c = icnd2153_pixel_stream_program_get_default_config(offset);
-        sm_config_set_out_pins(&c, rgb_base_pin, 6);
-        sm_config_set_sideset_pins(&c, clk_pin);
-        // autopush MUST be false here: isr is filled to the full 32-bit
-        // threshold every frame by "out isr, 32" (see .program), and with
-        // PIO_FIFO_JOIN_TX below the RX FIFO has zero depth - autopush=true
-        // would make the SM stall forever trying to push isr into a FIFO
-        // that no longer exists. isr/x/y are managed explicitly via mov,
-        // so autopush isn't needed anyway.
-        sm_config_set_in_shift(&c, true, false, 8);
-        sm_config_set_out_shift(&c, true, false, 8);
-        sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
-
-        sm_config_set_clkdiv(&c, 10.0f);
-
-        pio_sm_init(pio, sm, offset, &c);
-
-        pio_sm_set_enabled(pio, sm, true);
+        pio_gpio_init(pio, rgb_base_pin + i);
     }
+    pio_gpio_init(pio, dclk_pin);     // DCLK
+    pio_gpio_init(pio, dclk_pin + 1); // LE / LAT
+
+    pio_sm_config c = icnd2153_pixel_stream_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, rgb_base_pin, 6);
+    sm_config_set_sideset_pins(&c, dclk_pin);
+
+    // Enable 32-bit autopull for continuous DMA stream shifting
+    sm_config_set_out_shift(&c, true, true, 32);
+
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+    sm_config_set_clkdiv(&c, 10.0f);
+
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
 %}
 
 ; =============================================================================

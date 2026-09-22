@@ -73,8 +73,6 @@ void Hub75DriverBase::global_ctrl_irq_handler()
 
     for (size_t i = 0; i < n; ++i)
         instances[i]->handle_ctrl_irq();
-
-   
 }
 
 void Hub75DriverBase::global_bitplane_irq_handler()
