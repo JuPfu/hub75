@@ -25,6 +25,7 @@ frame_start:
     set pins, 0b000 [3]   side 0b0  ; Step decoder (RA=0, RC=0) -> Row 0 selected
 
 row_loop:
+    wait 1 irq 1          side 0b0 
     ; ------------------------------------------------------------------
     ; 3. GENERATE GCLK BURST FOR CURRENT ROW DISPLAY
     ; ------------------------------------------------------------------
@@ -83,11 +84,12 @@ static inline void icnd2153_row_program_init(
 
     // Seed row count (num_scan_rows - 1) into ISR
     pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
-    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false)); // FIFO -> OSR
+    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));   // OSR -> ISR
 
     // Seed GCLK burst count (gclk_pulses_per_burst - 1) into OSR
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
-    pio_sm_exec(pio, sm, pio_encode_out(pio_osr, 32));
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false)); // FIFO -> OSR, done
 
     pio_sm_set_enabled(pio, sm, true);
 }
@@ -117,8 +119,8 @@ vsync_loop:                                ; Send VSYNC command sequence
     ; --------------------------------------------------------------------------
     ; HEADER PARSING (Autopull pulls 32-bit words automatically on 'out')
     ; --------------------------------------------------------------------------
-    out x, 32                   side 0b00  ; Word 1: X = Total transactions per frame - 1
-    out isr, 32                 side 0b00  ; Word 2: ISR = Pixel pulses per transaction - 1
+    out x, 16                   side 0b00  ; Half-Word 1: X = Total transactions per frame (scan_depth - 1)
+    out isr, 16                 side 0b00  ; Half-Word 2: ISR = Pixel pulses per transaction (display_width - 2)
 
 transactions:
     mov y, isr                  side 0b00
@@ -129,6 +131,9 @@ normal_pulse:
 
     out pins, 6     [3]         side 0b00  ; Last pixel word in transaction
     out null, 2     [3]         side 0b10  ; Issue DATA_LATCH command (LE=1, DCLK=0)
+
+    irq nowait 1                side 0b00
+
     jmp x--, transactions       side 0b00  ; Loop across frame transactions
 .wrap
 

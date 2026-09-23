@@ -67,11 +67,16 @@ void Hub75Driver<Cfg>::create()
     }
 
     register_instance();
+
+    build_pixel_stream();
+    
+    printf("<<<create driver finished!!!\n");
 }
 
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::start()
 {
+    printf(">>>start driver!!!\n");
     dma_buffer_ = storage_.frame_buffer2_;
     frame_buffer_ = storage_.frame_buffer1_;
 
@@ -98,6 +103,7 @@ void Hub75Driver<Cfg>::start()
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
+    printf("<<<start driver finished!!!\n");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -264,7 +270,7 @@ void Hub75Driver<Cfg>::timing_init(float clk_sys_hz, float clkdiv)
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_ctrl_irq()
 {
-    printf("IN handle_ctrl_irq\n");
+    printf("IN handle_ctrl_irq %d\n", frame_count_);
 
     if (dma_channel_get_irq0_status(row_ctrl_chan_))
     {
@@ -312,6 +318,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
 
         if (swap_frame_buffer_pending_)
         {
+            printf("IN handle_ctrl_irq swap frame buffer = %d\n", swap_frame_buffer_pending_);
             // dma_buffer_  -> active front buffer (DMA streams from it)
             // frame_buffer_ -> back buffer (refilled by handle_bitplane_irq)
             // Swap: the new back buffer becomes the new front buffer.
@@ -662,11 +669,11 @@ void Hub75Driver<Cfg>::configure_pio()
                 // printf("remove icnd2153_pixel_stream_program\n");
                 // pio_remove_program_and_unclaim_sm(&icnd2153_pixel_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
                 if (row_ok)
-                    {
-                        printf("successfully claimed icnd2153_gclk_program\n");
-                        placed = true;
-                        break;
-                    }
+                {
+                    printf("successfully claimed icnd2153_row_program\n");
+                    placed = true;
+                    break;
+                }
             }
 
             printf("release_pio_block_for_row_stream\n");
@@ -816,7 +823,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         dma_channel_configure(pixel_chan_,
                               &pixel_chan_config,
                               &pio_config_.data_pio->txf[pio_config_.sm_data],
-                              &dma_buffer_,
+                              dma_buffer_,
                               dma_encode_transfer_count(4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH),
                               false);
 
@@ -1136,11 +1143,12 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 
         uint32_t fb_index = 0;
 
-        frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
-        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
+        // As 32-bit autopull is enabled for continuous DMA stream shifting pass values with low byte first
+        frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;        // low byte
+        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF; // high byte
 
-        frame_buffer_[fb_index++] = (126) & 0xFF;
-        frame_buffer_[fb_index++] = ((126) >> 8) & 0xFF;
+        frame_buffer_[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;        // low byte
+        frame_buffer_[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF; // high byte
 
         for (uint32_t row = 0; row < SCAN_DEPTH; row++)
         {
