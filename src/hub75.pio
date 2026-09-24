@@ -122,6 +122,95 @@ dark_loop:
 %}
 
 ; =============================================================================
+; PROGRAM: hub75_row_sm5368_abc
+; =============================================================================
+; Row control for SM5368 panels using three row-select pins:
+;   A = row clk
+;   B = BK
+;   C = row data
+;
+; The DMA row word packs two 3-bit pin states:
+;   bits [2:0] = phase 0 (A low, B high, C=data)
+;   bits [5:3] = phase 1 (A high, B high, C=data)
+;
+.program hub75_row_sm5368_abc
+
+.side_set 2
+; Bit 0: LATCH (STB)
+; Bit 1: OEn (Output Enable, active LOW: 0=ON, 1=OFF)
+
+    irq nowait 1        side 0b10
+
+.wrap_target
+    wait 1 irq 0        side 0b10
+
+    mov x, y            side 0b10
+latch_guard_wait_sm5368:
+    jmp x-- latch_guard_wait_sm5368 side 0b10
+
+    nop         [3]     side 0b11
+    nop         [3]     side 0b10
+
+    mov x, y            side 0b10
+wait_latch_settle_sm5368:
+    jmp x-- wait_latch_settle_sm5368 side 0b10
+
+    irq nowait 1        side 0b10
+
+    out pins, 3         side 0b10
+    out pins, 3         side 0b10
+    out null, 26        side 0b10
+
+    out x, 32           side 0b10
+addr_wait_sm5368:
+    jmp x-- addr_wait_sm5368 side 0b10
+
+    out x, 32           side 0b10
+oe_guard_wait_sm5368:
+    jmp x-- oe_guard_wait_sm5368 side 0b10
+
+    out x, 32           side 0b10
+lit_loop_sm5368:
+    jmp x-- lit_loop_sm5368 side 0b00
+
+    out x, 32           side 0b10
+dark_loop_sm5368:
+    jmp x-- dark_loop_sm5368 side 0b10
+
+.wrap
+
+% c-sdk {
+    static inline void hub75_row_sm5368_abc_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch, bool inverted_stb)
+    {
+        pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
+        pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
+
+        for (uint i = row_base_pin; i < row_base_pin + n_row_pins; ++i)
+            pio_gpio_init(pio, i);
+
+        pio_gpio_init(pio, latch_base_pin);
+        pio_gpio_init(pio, latch_base_pin + 1);
+
+        if ( inverted_stb) {
+            // Inverts the STROBE (latch) pin output at the GPIO pad level.
+            // The PIO SM continues to output standard active-HIGH pulses, but the physical pin outputs active-LOW signals to the panel!
+            gpio_set_outover(latch_base_pin, GPIO_OVERRIDE_INVERT);
+        }
+
+        pio_sm_config c = hub75_row_sm5368_abc_program_get_default_config(offset);
+        sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
+        sm_config_set_sideset_pins(&c, latch_base_pin);
+        sm_config_set_in_shift(&c, true, true, 32);
+        sm_config_set_out_shift(&c, true, true, 32);
+
+        pio_sm_init(pio, sm, offset, &c);
+        pio_sm_exec(pio, sm, pio_encode_out(pio_y, 32));
+        pio_sm_put(pio, sm, t_latch);
+        pio_sm_set_enabled(pio, sm, true);
+    }
+%}
+
+; =============================================================================
 ; PROGRAM: hub75_bitplane_stream
 ; =============================================================================
 ; Streams pixel data (bitplanes) into HUB75 shift registers.
