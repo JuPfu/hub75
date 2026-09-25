@@ -152,7 +152,7 @@ void Hub75Driver<Cfg>::compute_bcm_cycles(uint32_t bitplane, uint32_t brightness
 template <Hub75Config Cfg>
 uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
 {
-    if constexpr (Cfg.panel.address_kind == RowAddressing::SM5368_ABC)
+    if constexpr (Cfg.panel.address_type == RowAddressing::SM5368_ABC)
     {
         constexpr uint32_t ROW_CLK = 1u << 0u;  // A
         constexpr uint32_t ROW_BK = 1u << 1u;   // B
@@ -505,7 +505,7 @@ void Hub75Driver<Cfg>::configure_pio()
             // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
             // level (see hub75_row_program_init), so there is only one row program.
             bool row_ok = false;
-            if constexpr (Cfg.panel.address_kind == RowAddressing::SM5368_ABC)
+            if constexpr (Cfg.panel.address_type == RowAddressing::SM5368_ABC)
             {
                 row_ok = hub75_claim_on_pio(candidate, [&]
                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
@@ -554,7 +554,7 @@ void Hub75Driver<Cfg>::configure_pio()
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     // base_latch_wait_cycles passed as parameter to hub75_row program.
     // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
-    if constexpr (Cfg.panel.address_kind == RowAddressing::SM5368_ABC)
+    if constexpr (Cfg.panel.address_type == RowAddressing::SM5368_ABC)
     {
         hub75_row_sm5368_abc_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
     }
