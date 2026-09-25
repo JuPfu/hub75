@@ -153,6 +153,7 @@ struct Hub75ColorConfig
     // This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
     bool balanced_light_output = true;
 
+    // swap red and blue
     bool swap_rb_pins = false;
 
     uint32_t ccm_rg_shift = 31; // bits of Green added into Red output   (31 = off)
@@ -366,11 +367,6 @@ private:
     static_assert(Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0, "Panel height must be divisible by ROWS_IN_PARALLEL!");
     static_assert(((Cfg.panel.address_type == RowAddressing::Standard) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
 
-    // add Standard     sc
-    // 0        0  => 1
-    // 0        1  => 1
-    // 1        0  => 0
-    // 1        1  => 1
     // --- panel/addressing constants -----------------------------------------------------------
 
     static constexpr uint32_t LINE_OFFSET =
@@ -380,9 +376,7 @@ private:
     static constexpr int32_t stride_row = static_cast<int32_t>(Cfg.panel.matrix_panel_width * Cfg.panel.chain_cols);
     static constexpr int32_t stride_to_paired_row = static_cast<int32_t>(SCAN_DEPTH * DISPLAY_WIDTH);
 
-    static_assert(static_cast<size_t>(SCAN_DEPTH) * Cfg.panel.chain_rows * Cfg.panel.chain_cols *
-                          Cfg.panel.matrix_panel_width * ROWS_IN_PARALLEL ==
-                      TOTAL_PIXELS,
+    static_assert(static_cast<size_t>(SCAN_DEPTH) * Cfg.panel.chain_rows * Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width * ROWS_IN_PARALLEL == TOTAL_PIXELS,
                   "rgb_buffer total writes must equal TOTAL_PIXELS - check rowsel_n_pins vs matrix_panel_height, and chain_rows/chain_cols");
 
     // --- BCM sequence -------------------------------------------------------------------------
