@@ -93,7 +93,7 @@ struct Hub75PanelConfig
     // Scan rate 1:4  for a 32x16 matrix panel means 16 pixel height divided by 4  pixel results in 4 rows lit simultaneously.
     RowMapping panel_kind = RowMapping::Standard;
 
-    RowAddressing address_kind = RowAddressing::Standard;
+    RowAddressing address_type = RowAddressing::Standard;
 
     // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set panel_chip to Hub75PanelChip::RUL6024
     Hub75PanelChip panel_chip = Hub75PanelChip::GENERIC;
@@ -364,7 +364,7 @@ private:
 
     // Static safety assertions to prevent bad configurations at compile time
     static_assert(Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0, "Panel height must be divisible by ROWS_IN_PARALLEL!");
-    static_assert(((Cfg.panel.address_kind == RowAddressing::Standard) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
+    static_assert(((Cfg.panel.address_type == RowAddressing::Standard) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
 
     // add Standard     sc
     // 0        0  => 1
