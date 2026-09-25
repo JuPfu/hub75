@@ -63,10 +63,14 @@ wait_latch_settle:
 
     ; -------------------------------------------------------------------------
     ; 5. ADDRESSING + t_addr: set row AFTER latch is fully stable, then
-    ;    consume the rest of the same packed word as the address-settle delay
+    ;    consume the rest of the same packed word as the address-settle delay.
+    ;    The word is split 6 + 26:
+    ;      bits [4:0] = row address (A-E), bit 5 unused and discarded because
+    ;                   OUT_COUNT is rowsel_n_pins
+    ;      bits [31:6] = t_addr
     ; -------------------------------------------------------------------------
-    out pins, 5          side 0b10   ; Output A–E row address (low 5 bits of packed word)
-    out x, 27            side 0b10   ; load t_addr delay (upper 27 bits) into X register
+    out pins, 6          side 0b10   ; Output A–E row address
+    out x, 26            side 0b10   ; load t_addr delay (upper 26 bits) into X register
 addr_wait:
     jmp x-- addr_wait side 0b10
 
@@ -126,12 +130,13 @@ dark_loop:
 ; =============================================================================
 ; Row control for SM5368 panels using three row-select pins:
 ;   A = row clk
-;   B = BK
+;   B = BK  (discharge enable - anti-ghosting; per RT5956/RT5958D pinout)
 ;   C = row data
 ;
-; The DMA row word packs two 3-bit pin states:
-;   bits [2:0] = phase 0 (A low, B high, C=data)
-;   bits [5:3] = phase 1 (A high, B high, C=data)
+; The DMA row word packs two 3-bit pin states plus the address-settle delay:
+;   bits [2:0]   = phase 0 (A low, B high, C=data)
+;   bits [5:3]   = phase 1 (A high, B high, C=data)
+;   bits [31:6]  = t_addr
 ;
 .program hub75_row_sm5368_abc
 
@@ -157,23 +162,28 @@ wait_latch_settle_sm5368:
 
     irq nowait 1        side 0b10
 
+    ; -------------------------------------------------------------------------
+    ; 5. ADDRESSING + t_addr: two `out pins, 3`, not one `out pins, 6` - A is the row
+    ;    shift register's clock, so C has to be stable before A rises. Each `out pins`
+    ;    drives all three lines at once, so presenting and clocking take two.
+    ; -------------------------------------------------------------------------
     out pins, 3         side 0b10
     out pins, 3         side 0b10
-    out null, 26        side 0b10
-
-    out x, 32           side 0b10
+    out x, 26           side 0b10   ; load t_addr delay (upper 26 bits) into X register
 addr_wait_sm5368:
     jmp x-- addr_wait_sm5368 side 0b10
 
-    out x, 32           side 0b10
-oe_guard_wait_sm5368:
-    jmp x-- oe_guard_wait_sm5368 side 0b10
-
-    out x, 32           side 0b10
+    ; -------------------------------------------------------------------------
+    ; 6. DISPLAY (BCM ON phase)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b10   ; load lit_cycles
 lit_loop_sm5368:
     jmp x-- lit_loop_sm5368 side 0b00
 
-    out x, 32           side 0b10
+    ; -------------------------------------------------------------------------
+    ; 7. BLANKING (BCM OFF phase)
+    ; -------------------------------------------------------------------------
+    out x, 32           side 0b10   ; load dark_cycles
 dark_loop_sm5368:
     jmp x-- dark_loop_sm5368 side 0b10
 
