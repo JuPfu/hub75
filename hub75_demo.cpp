@@ -21,7 +21,7 @@ constexpr Hub75Config panel_cfg{
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
-        .address_kind = RowAddressing::SM5368_ABC,
+        .address_type = RowAddressing::SM5368_ABC,
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
