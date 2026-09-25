@@ -263,13 +263,13 @@ constexpr Hub75Config make_hub75_config(Hub75PanelProfile profile, Hub75Config b
 // and addressing for one row in a specific bitplane slice.
 //
 // Memory layout (packed, DMA streamed):
-//   [0] addr_delay  : bits[4:0] row_address (A..E lines), bits[31:5] t_addr (PIO cycles)
+//   [0] addr_delay  : bits[5:0] row address, bits[31:6] t_addr (PIO cycles)
 //   [1] lit_cycles  : OE active duration (LEDs ON)
 //   [2] dark_cycles : OE inactive duration (LEDs OFF)
 //
-// addr_delay is packed this way because the hub75_row PIO program consumes it as one
-// 32-bit DMA word: `out pins, 5` peels off the row address, then `out x, 27` takes the
-// rest straight into the address-settle wait loop.
+// addr_delay is packed this way because the row PIO program consumes it as one
+// 32-bit DMA word: `out pins, 6` peels off the address field, then `out x, 26`
+// takes the rest straight into the address-settle wait loop.
 //
 // Must remain tightly packed (no padding) - consumed sequentially by DMA -> PIO.
 struct Hub75RowCmd
@@ -432,7 +432,10 @@ private:
                                               ? Cfg.pins.rowsel_n_pins
                                               : 5; // Default standard to 5 address pins (A-E)
 
-    static constexpr uint32_t ADDR_MASK = (1u << ADDR_PINS) - 1u;
+    // Width of the row-address field in the low end of Hub75RowCmd::addr_delay. Must match the
+    // `out pins, N` / `out x, 32-N` split in src/hub75.pio, which every row program uses.
+    static constexpr uint32_t ROW_ADDR_BITS = 6u;
+    static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS < 32u, "Row address field must leave room for t_addr in the 32-bit DMA word");
 
     // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
     static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);

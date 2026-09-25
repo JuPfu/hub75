@@ -168,7 +168,7 @@ uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
     }
     else
     {
-        return row & ADDR_MASK;
+        return row;
     }
 }
 
@@ -214,9 +214,9 @@ void Hub75Driver<Cfg>::build_row_cmd_buffer(uint32_t brightness_fp)
         {
             uint32_t t_addr = timing_config_.addr_cycles + (bp >> 1); // address settle
             Hub75RowCmd *cmd = &row_cmd_buffer_[idx++];
-            // low 5 bits = row address (hub75_row PIO consumes exactly 5 bits via `out pins, 5`),
-            // upper 27 bits = t_addr, taken by the following `out x, 27`
-            cmd->addr_delay = (t_addr << 5) | (encode_row_address(row) & 0x1Fu);
+            // Low ROW_ADDR_BITS = row address, peeled off by `out pins, ROW_ADDR_BITS`; the upper
+            // 32-ROW_ADDR_BITS = t_addr, taken by the following `out x, 32-ROW_ADDR_BITS`.
+            cmd->addr_delay = (t_addr << ROW_ADDR_BITS) | encode_row_address(row);
             cmd->lit_cycles = lit_cycles;
             cmd->dark_cycles = dark_cycles;
         }
