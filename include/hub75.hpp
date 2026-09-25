@@ -35,6 +35,12 @@ enum class RowMapping
     S31,      // four rows lit simultaneously - four-way interleaved quarter mapping, panels marketed as "...S31"
 };
 
+enum class RowAddressing
+{
+    Standard,
+    SM5368_ABC
+};
+
 // Selects the panel-chip init sequence sent before streaming starts.
 enum class Hub75PanelChip
 {
@@ -87,6 +93,8 @@ struct Hub75PanelConfig
     // Scan rate 1:4  for a 32x16 matrix panel means 16 pixel height divided by 4  pixel results in 4 rows lit simultaneously.
     RowMapping panel_kind = RowMapping::Standard;
 
+    RowAddressing address_kind = RowAddressing::Standard;
+
     // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set panel_chip to Hub75PanelChip::RUL6024
     Hub75PanelChip panel_chip = Hub75PanelChip::GENERIC;
 
@@ -113,8 +121,8 @@ struct Hub75ScreenConfig
 // Wiring of the HUB75 matrix.
 struct Hub75PinConfig
 {
-    uint32_t data_base_pin = 0; // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
-    uint32_t data_n_pins = 6;   // count of consecutive color pins usually 6
+    uint32_t data_base_pin = 0;   // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
+    uint32_t data_n_pins = 6;     // count of consecutive color pins usually 6
     uint32_t rowsel_base_pin = 6; // start gpio pin of address pins
     uint32_t rowsel_n_pins = 5;   // count of consecutive address pins - adapt to the number of address pins of your panel
     uint32_t clk_pin = 11;
@@ -144,6 +152,8 @@ struct Hub75ColorConfig
     // High-weight bit-planes are split into multiple smaller slices within the BCM sequence.
     // This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
     bool balanced_light_output = true;
+
+    bool swap_rb_pins = false;
 
     uint32_t ccm_rg_shift = 31; // bits of Green added into Red output   (31 = off)
     uint32_t ccm_rb_shift = 31; // bits of Blue  added into Red output   (31 = off)
@@ -250,7 +260,8 @@ private:
     // global IRQ handlers below (which read the same state, possibly on the other core).
     // Initialized eagerly here (dynamic init of an inline variable runs on core0 before main(),
     // i.e. before core1 could ever be launched), so there's no lazy-init race to solve too.
-    static inline critical_section_t s_instance_lock = [] {
+    static inline critical_section_t s_instance_lock = []
+    {
         critical_section_t cs;
         critical_section_init(&cs);
         return cs;
@@ -285,12 +296,12 @@ public:
             ? DISPLAY_WIDTH
             : DISPLAY_HEIGHT;
     static_assert(SCREEN_WIDTH == ((Cfg.screen.rotation == Hub75Rotation::DEG_90 || Cfg.screen.rotation == Hub75Rotation::DEG_270)
-                                        ? Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height
-                                        : Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width),
+                                       ? Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height
+                                       : Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width),
                   "Width/height mismatch for rotated display");
     static_assert(SCREEN_HEIGHT == ((Cfg.screen.rotation == Hub75Rotation::DEG_90 || Cfg.screen.rotation == Hub75Rotation::DEG_270)
-                                         ? Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width
-                                         : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
+                                        ? Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width
+                                        : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
                   "Width/height mismatch for rotated display");
 
     Hub75Driver() = default;
@@ -317,12 +328,50 @@ public:
     void setIntensity(float intensity, bool linear_brightness_control = true);
 
 private:
-    // --- panel/addressing constants -----------------------------------------------------------
-    static constexpr uint32_t ADDR_PINS = Cfg.pins.rowsel_n_pins;
+private:
+    // Helper to calculate minimum address pins required for N scan steps
+    static constexpr uint32_t req_address_pins(uint32_t states)
+    {
+        uint32_t pins = 0;
+        while ((1u << pins) < states)
+        {
+            pins++;
+        }
+        return pins;
+    }
+
+    // --- Panel / Addressing Deductions -----------------------------------------------------------
+
+    // 1. Resolve effective address pin count (fallback to auto-deduction if 0 or default)
+    static constexpr uint32_t ADDR_PINS = (Cfg.pins.rowsel_n_pins > 0)
+                                              ? Cfg.pins.rowsel_n_pins
+                                              : 5; // Default standard to 5 address pins (A-E)
+
     static constexpr uint32_t ADDR_MASK = (1u << ADDR_PINS) - 1u;
-    static constexpr uint32_t SCAN_DEPTH = 1u << ADDR_PINS; // e.g. 16 for 1/16 scan
-    static constexpr uint32_t ROWS_IN_PARALLEL = Cfg.panel.matrix_panel_height / SCAN_DEPTH;
-    static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH; // alias, used for RowMapping::Split panels
+
+    // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
+    static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);
+
+    // is the height dimension of the matrix a power of two value ?
+    static constexpr bool PanelHeightisPowerOfTwo = !(Cfg.panel.matrix_panel_height == 0) && !(Cfg.panel.matrix_panel_height & (Cfg.panel.matrix_panel_height - 1));
+
+    // 3. Determine SCAN_DEPTH and ROWS_IN_PARALLEL automatically
+    static constexpr uint32_t ROWS_IN_PARALLEL = PanelHeightisPowerOfTwo ? (Cfg.panel.matrix_panel_height / MAX_SCAN_DEPTH) : 2;
+
+    static constexpr uint32_t SCAN_DEPTH = Cfg.panel.matrix_panel_height / ROWS_IN_PARALLEL;
+
+    static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH;
+
+    // Static safety assertions to prevent bad configurations at compile time
+    static_assert(Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0, "Panel height must be divisible by ROWS_IN_PARALLEL!");
+    static_assert(((Cfg.panel.address_kind == RowAddressing::Standard) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
+
+    // add Standard     sc
+    // 0        0  => 1
+    // 0        1  => 1
+    // 1        0  => 0
+    // 1        1  => 1
+    // --- panel/addressing constants -----------------------------------------------------------
 
     static constexpr uint32_t LINE_OFFSET =
         ((Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols) >> 1u) * ROWS_IN_PARALLEL;

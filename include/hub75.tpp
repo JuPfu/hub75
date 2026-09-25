@@ -152,7 +152,24 @@ void Hub75Driver<Cfg>::compute_bcm_cycles(uint32_t bitplane, uint32_t brightness
 template <Hub75Config Cfg>
 uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
 {
-    return row & ADDR_MASK;
+    if constexpr (Cfg.panel.address_kind == RowAddressing::SM5368_ABC)
+    {
+        constexpr uint32_t ROW_CLK = 1u << 0u;  // A
+        constexpr uint32_t ROW_BK = 1u << 1u;   // B
+        constexpr uint32_t ROW_DATA = 1u << 2u; // C
+
+        // SM5368 uses a one-hot row shift register:
+        // row 0 injects a '1', all following rows clock that bit forward.
+        uint32_t data_bit = (row == 0u) ? ROW_DATA : 0u;
+        uint32_t phase0 = ROW_BK | data_bit;
+        uint32_t phase1 = ROW_CLK | ROW_BK | data_bit;
+
+        return phase0 | (phase1 << 3u);
+    }
+    else
+    {
+        return row & ADDR_MASK;
+    }
 }
 
 // Build row command buffer for a complete frame: timing + addressing sequences for all
@@ -487,15 +504,31 @@ void Hub75Driver<Cfg>::configure_pio()
 
             // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
             // level (see hub75_row_program_init), so there is only one row program.
-            bool row_ok = hub75_claim_on_pio(candidate, [&]
-                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                   &hub75_row_program,
-                                                   &pio_config_.row_pio,
-                                                   &pio_config_.sm_row,
-                                                   &pio_config_.row_prog_offs,
-                                                   row_lo,
-                                                   row_hi - row_lo + 1,
-                                                   true); });
+            bool row_ok = false;
+            if constexpr (Cfg.panel.address_kind == RowAddressing::SM5368_ABC)
+            {
+                row_ok = hub75_claim_on_pio(candidate, [&]
+                                            { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                  &hub75_row_sm5368_abc_program,
+                                                  &pio_config_.row_pio,
+                                                  &pio_config_.sm_row,
+                                                  &pio_config_.row_prog_offs,
+                                                  row_lo,
+                                                  row_hi - row_lo + 1,
+                                                  true); });
+            }
+            else
+            {
+                row_ok = hub75_claim_on_pio(candidate, [&]
+                                            { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                  &hub75_row_program,
+                                                  &pio_config_.row_pio,
+                                                  &pio_config_.sm_row,
+                                                  &pio_config_.row_prog_offs,
+                                                  row_lo,
+                                                  row_hi - row_lo + 1,
+                                                  true); });
+            }
 
             if (row_ok)
             {
@@ -521,8 +554,14 @@ void Hub75Driver<Cfg>::configure_pio()
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     // base_latch_wait_cycles passed as parameter to hub75_row program.
     // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
-    hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
-
+    if constexpr (Cfg.panel.address_kind == RowAddressing::SM5368_ABC)
+    {
+        hub75_row_sm5368_abc_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
+    }
+    else
+    {
+        hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
+    }
     // State machine for "parallelized" building of the bit-plane structure. No IRQ/GPIO use
     // (see src/hub75.pio), so unlike stream/row it isn't restricted to any particular block or
     // exclusive to one instance - the plain claim call already searches every block itself.
@@ -717,7 +756,14 @@ uint32_t Hub75Driver<Cfg>::pack_lut_rgb(uint32_t colour)
     uint32_t gv = cie_green_table()[(colour >> 8u) & 0xFFu];
     uint32_t bv = cie_blue_table()[colour & 0xFFu];
     apply_ccm(rv, gv, bv);
-    return (bv << 20u) | (gv << 10u) | rv;
+    if constexpr (Cfg.color.swap_rb_pins)
+    {
+        return (rv << 20u) | (gv << 10u) | bv;
+    }
+    else
+    {
+        return (bv << 20u) | (gv << 10u) | rv;
+    }
 }
 
 // Apply LUT and pack into 30-bit RGB (10 bits per channel)
@@ -728,7 +774,14 @@ uint32_t Hub75Driver<Cfg>::pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b)
     uint32_t gv = cie_green_table()[g];
     uint32_t bv = cie_blue_table()[b];
     apply_ccm(rv, gv, bv);
-    return (bv << 20u) | (gv << 10u) | rv;
+    if constexpr (Cfg.color.swap_rb_pins)
+    {
+        return (rv << 20u) | (gv << 10u) | bv;
+    }
+    else
+    {
+        return (bv << 20u) | (gv << 10u) | rv;
+    }
 }
 
 // Returns the flat src-buffer index for display coordinate (dx, dy)

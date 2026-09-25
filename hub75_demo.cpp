@@ -15,12 +15,13 @@
 // Matches a single generic 64x64 panel wired to GPIO 0-13.
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,
-        .matrix_panel_height = 64,
+        .matrix_panel_width = 96,
+        .matrix_panel_height = 48,
         .chain_rows = 1,
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
+        .address_kind = RowAddressing::SM5368_ABC,
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
@@ -34,7 +35,7 @@ constexpr Hub75Config panel_cfg{
         .data_base_pin = 0,
         .data_n_pins = 6,
         .rowsel_base_pin = 6,
-        .rowsel_n_pins = 5,
+        .rowsel_n_pins = 3,
         .clk_pin = 11,
         .strobe_pin = 12,
         .oen_pin = 13,
@@ -43,6 +44,7 @@ constexpr Hub75Config panel_cfg{
         .bitplanes = 10,
         .separate_cie_channels = true,
         .balanced_light_output = true,
+        .swap_rb_pins = false,
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
