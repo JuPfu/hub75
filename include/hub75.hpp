@@ -110,6 +110,11 @@ struct Hub75PanelConfig
 
     RowAddressing address_type = RowAddressing::Standard;
 
+    // Scan depth: the number of distinct row addresses, i.e. the "N" in the panel's stated 1:N
+    // scan rate. 0 derives it from the height and rowsel_n_pins; set it when the panel's scan rate
+    // is not what those imply. Must leave 2 or 4 rows lit per address.
+    uint32_t scan_depth = 0;
+
     // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set panel_chip to Hub75PanelChip::RUL6024
     Hub75PanelChip panel_chip = Hub75PanelChip::GENERIC;
 
@@ -441,15 +446,31 @@ private:
     static constexpr bool PanelHeightisPowerOfTwo = !(Cfg.panel.matrix_panel_height == 0) && !(Cfg.panel.matrix_panel_height & (Cfg.panel.matrix_panel_height - 1));
 
     // 3. Determine SCAN_DEPTH and ROWS_IN_PARALLEL automatically
-    static constexpr uint32_t ROWS_IN_PARALLEL = PanelHeightisPowerOfTwo ? (Cfg.panel.matrix_panel_height / MAX_SCAN_DEPTH) : 2;
+    //
+    // The pow2 path derives the scan depth from the address line count, which only carries meaning
+    // for binary addressing. SM5368's 3 lines are row clock, BK and data, not a binary address, so
+    // `1 << 3` states nothing about scan depth - it always takes the two-rows-in-parallel path.
+    static constexpr uint32_t SCAN_DEPTH =
+        (Cfg.panel.scan_depth > 0u)
+            ? Cfg.panel.scan_depth
+            : ((PanelHeightisPowerOfTwo && (Cfg.panel.address_type == RowAddressing::Standard))
+                   ? MAX_SCAN_DEPTH
+                   : (Cfg.panel.matrix_panel_height / 2u));
 
-    static constexpr uint32_t SCAN_DEPTH = Cfg.panel.matrix_panel_height / ROWS_IN_PARALLEL;
+    // Must precede the division below, which would otherwise divide by zero.
+    static_assert(SCAN_DEPTH > 0u && SCAN_DEPTH <= Cfg.panel.matrix_panel_height, "Scan depth must be within 1..matrix_panel_height - raise rowsel_n_pins or lower panel.scan_depth");
+
+    static constexpr uint32_t ROWS_IN_PARALLEL = Cfg.panel.matrix_panel_height / SCAN_DEPTH;
 
     static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH;
 
     // Static safety assertions to prevent bad configurations at compile time
-    static_assert(Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0, "Panel height must be divisible by ROWS_IN_PARALLEL!");
+    static_assert((ROWS_IN_PARALLEL == 0u) || (Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0), "Panel height must be divisible by ROWS_IN_PARALLEL!");
     static_assert(((Cfg.panel.address_type == RowAddressing::Standard) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
+
+    // A HUB75 connector carries two RGB data groups, so each address lights 2 rows; or 4
+    // where a panel wires two rows in series behind each group.
+    static_assert(ROWS_IN_PARALLEL == 2u || ROWS_IN_PARALLEL == 4u, "Rows lit per address must be 2, or 4 for rows wired in series - adjust matrix_panel_height or panel.scan_depth");
 
     // --- panel/addressing constants -----------------------------------------------------------
 
