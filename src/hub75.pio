@@ -167,10 +167,7 @@ latch_guard_wait_sm5368:
     ; -------------------------------------------------------------------------
     ; 2. LATCH: clean pulse (HIGH followed by LOW in register stabilisation)
     ; -------------------------------------------------------------------------
-    nop         [3]     side 0b11
-    nop         [3]     side 0b10
-
-    mov x, y            side 0b10
+    mov x, y    [3]     side 0b11   ; STB=1, OE=1  (Latch HIGH)
 
     ; -------------------------------------------------------------------------
     ; 3. LATCH SETTLE: allow internal register stabilisation
