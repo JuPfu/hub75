@@ -38,7 +38,7 @@ enum class RowMapping
 enum class RowAddressing
 {
     Standard,
-    SM5368_ABC
+    SM5368_ABC,
 };
 
 // Named presets bundling the handful of fields that actually vary panel-to-panel
@@ -263,20 +263,15 @@ constexpr Hub75Config make_hub75_config(Hub75PanelProfile profile, Hub75Config b
 // and addressing for one row in a specific bitplane slice.
 //
 // Memory layout (packed, DMA streamed):
+//   Row advance via pin-mapped addressing (binary addressing)
+//   [0] addr_delay  : bits[4:0] row address, bits[31:5] t_addr (PIO cycles)
+//   Row advance via shift register enum class RowAddressing::SM5368_ABC
 //   [0] addr_delay  : bits[5:0] row address, bits[31:6] t_addr (PIO cycles)
 //   [1] lit_cycles  : OE active duration (LEDs ON)
 //   [2] dark_cycles : OE inactive duration (LEDs OFF)
 //
-// The row address supports up to six bits even though standard HUB75 panels only have
-// 5 address pins. This is to support panels which do not use direct pin-mapped binary
-// addressing but rather address rows through a shift register like the SM5368:
-// those need two three-bit "commands" sent to clock out the current row address.
-// See the hub75_row_sm5368_abc PIO program for details.
-//
-// Unused bits are silently discarded by the PIO subsystem (e.g. 6 bits vs rowsel_n_pins=3).
-//
 // addr_delay is packed this way because the row PIO program consumes it as one
-// 32-bit DMA word: `out pins, 6` peels off the address field, then `out x, 26`
+// 32-bit DMA word: The first `out` peels off the address field, the second `out`
 // takes the rest straight into the address-settle wait loop.
 //
 // Must remain tightly packed (no padding) - consumed sequentially by DMA -> PIO.
@@ -435,10 +430,9 @@ private:
     // 6 bits are reserved to support panels that address rows through a shift register instead
     // of direct pin-mapped binary addressing, like the SM5368 (see encode_row_address() and
     // the hub75_row_sm5368_abc PIO program).
-    static constexpr uint32_t ROW_ADDR_BITS = 6u;
-    static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS < 32u, "Row address field must leave room for t_addr in the 32-bit DMA word");
+    static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Standard ? 5u : 6u;
+    static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS <= 6u, "Row address field must leave room for t_addr in the 32-bit DMA word");
     static_assert(ADDR_PINS <= ROW_ADDR_BITS, "rowsel_n_pins must fit the row-address field - more address pins than ROW_ADDR_BITS pushes row bits into t_addr");
-
     // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
     static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);
 

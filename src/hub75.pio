@@ -21,7 +21,7 @@
 ;   - Trigger prefetch of next row while current row is displayed
 ;
 ; Data format (via DMA, 3 words per row/bit-plane):
-;   1. addr_delay  (packed: bits[5:0]=row_address, bits[31:6]=t_addr delay, PIO cycles)
+;   1. addr_delay  (packed: bits[4:0]=row_address, bits[31:5]=t_addr delay, PIO cycles)
 ;   2. lit_cycles  (OEn active → LEDs ON)
 ;   3. dark_cycles (OEn inactive → LEDs OFF)
 ;
@@ -64,17 +64,12 @@ wait_latch_settle:
     ; -------------------------------------------------------------------------
     ; 5. ADDRESSING + t_addr: set row AFTER latch is fully stable, then
     ;    consume the rest of the same packed word as the address-settle delay.
-    ;    The word is split 6 + 26:
-    ;      bits [4:0] = row address (A–E). The 6th bit only carries meaning for a
-    ;                    shift-register addressing scheme (hub75_row_sm5368_abc):
-    ;                    a Standard panel drives a binary row number on its
-    ;                    rowsel_n_pins (1-5) lines, and OUT_COUNT masks off
-    ;                    whatever it has no pin for. 6 bits are consumed either
-    ;                    way, lining up with the panel cmd structure.
-    ;      bits [31:6] = t_addr
+    ;    The word is split 5 + 27:
+    ;      bits [4:0] = row address (A–E)
+    ;      bits [31:5] = t_addr
     ; -------------------------------------------------------------------------
-    out pins, 6          side 0b10   ; Output row address (surplus bits masked by OUT_COUNT)
-    out x, 26            side 0b10   ; load t_addr delay (upper 26 bits) into X register
+    out pins, 5          side 0b10   ; Output A–E row address (low 5 bits of packed word)
+    out x, 27            side 0b10   ; load t_addr delay (upper 27 bits) into X register
 addr_wait:
     jmp x-- addr_wait side 0b10
 
@@ -194,8 +189,8 @@ wait_latch_settle_sm5368:
     ;        phase1 = 0b011  OSR bits [5:3]   ; rows 1..N-1  (A=1, clocks it forward)
     ;    t_addr delay        OSR bits [31:6]
     ; -------------------------------------------------------------------------
-    out pins, 3         side 0b10
-    out pins, 3         side 0b10
+    out pins, 3         side 0b10  ; phase0
+    out pins, 3         side 0b10  ; phase1
     out x, 26           side 0b10   ; load t_addr delay (upper 26 bits) into X register
 addr_wait_sm5368:
     jmp x-- addr_wait_sm5368 side 0b10
