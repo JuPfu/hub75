@@ -215,7 +215,7 @@ void Hub75Driver<Cfg>::build_row_cmd_buffer(uint32_t brightness_fp)
             uint32_t t_addr = timing_config_.addr_cycles + (bp >> 1); // address settle
             Hub75RowCmd *cmd = &row_cmd_buffer_[idx++];
             // Low ROW_ADDR_BITS = row address, the remaining 32-ROW_ADDR_BITS = t_addr.
-            // t_addr format is panel dependent, can be binary (standard) or a shift-register
+            // t_addr format is panel dependent, can be binary or a shift-register
             // command sequence (ABCShiftRegister).
             cmd->addr_delay = (t_addr << ROW_ADDR_BITS) | encode_row_address(row);
             cmd->lit_cycles = lit_cycles;

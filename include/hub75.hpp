@@ -37,7 +37,7 @@ enum class RowMapping
 
 enum class RowAddressing
 {
-    Standard, // binary row number, A..E being the row-select pins
+    Binary, // the row number in binary, A..E being the row-select pins
     // One-hot row number clocked through a shift register in the row driver, on three
     // row-select pins: A = row clock, B = BK (discharge enable), C = row data. Row 0
     // injects the 1, every following row clocks it one step on. Used by 74HC595-type
@@ -112,7 +112,7 @@ struct Hub75PanelConfig
     // Scan rate 1:4  for a 32x16 matrix panel means 16 pixel height divided by 4  pixel results in 4 rows lit simultaneously.
     RowMapping panel_kind = RowMapping::Standard;
 
-    RowAddressing address_type = RowAddressing::Standard;
+    RowAddressing address_type = RowAddressing::Binary;
 
     // Scan mode: the number of distinct row addresses, i.e. the "N" in the panel's stated 1:N
     // scan rate. 0 derives it from the height and rowsel_n_pins; set it when the panel's scan rate
@@ -219,18 +219,18 @@ constexpr Hub75PanelProfileValues hub75_panel_profile_values(Hub75PanelProfile p
     switch (profile)
     {
     case Hub75PanelProfile::P64X32_1_16:
-        return {64, 32, 4, RowAddressing::Standard, false};
+        return {64, 32, 4, RowAddressing::Binary, false};
     case Hub75PanelProfile::P64X64_1_32:
-        return {64, 64, 5, RowAddressing::Standard, false};
+        return {64, 64, 5, RowAddressing::Binary, false};
     case Hub75PanelProfile::P80X40_1_20:
-        return {80, 40, 5, RowAddressing::Standard, false};
+        return {80, 40, 5, RowAddressing::Binary, false};
     case Hub75PanelProfile::P96X48_1_24:
-        return {96, 48, 5, RowAddressing::Standard, false};
+        return {96, 48, 5, RowAddressing::Binary, false};
     case Hub75PanelProfile::P96X48_1_24_SR:
         return {96, 48, 3, RowAddressing::ABCShiftRegister, true};
     case Hub75PanelProfile::CUSTOM:
     default:
-        return {0, 0, 0, RowAddressing::Standard, false};
+        return {0, 0, 0, RowAddressing::Binary, false};
     }
 }
 
@@ -427,7 +427,7 @@ public:
 private:
     // --- Panel / Addressing Deductions -----------------------------------------------------------
 
-    // 1. Number of row-select pins the panel exposes: A..E on a Standard panel, clk/BK/data on
+    // 1. Number of row-select pins the panel exposes: A..E for binary addressing, clk/BK/data on
     //    a shift-register panel. It cannot be deduced from the panel height: a 64-row panel is 5 lines
     //    with 2 rows lit at once (P64X64_1_32) or 4 lines with 4 (RowMapping::S31, see README).
     //    So it has to be configured, and it is not always 5.
@@ -439,7 +439,7 @@ private:
     // 6 bits are reserved to support panels that address rows through a shift register instead
     // of direct pin-mapped binary addressing, like the SM5368 (see encode_row_address() and
     // the hub75_row_abc_shift_register PIO program).
-    static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Standard ? 5u : 6u;
+    static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Binary ? 5u : 6u;
     static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS <= 6u, "Row address field must leave room for t_addr in the 32-bit DMA word");
     static_assert(ADDR_PINS <= ROW_ADDR_BITS, "rowsel_n_pins must fit the row-address field - more address pins than ROW_ADDR_BITS pushes row bits into t_addr");
     // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
@@ -456,7 +456,7 @@ private:
     static constexpr uint32_t SCAN_DEPTH =
         (Cfg.panel.scan_mode > 0u)
             ? Cfg.panel.scan_mode
-            : ((PanelHeightisPowerOfTwo && (Cfg.panel.address_type == RowAddressing::Standard))
+            : ((PanelHeightisPowerOfTwo && (Cfg.panel.address_type == RowAddressing::Binary))
                    ? MAX_SCAN_DEPTH
                    : (Cfg.panel.matrix_panel_height / 2u));
 
@@ -470,7 +470,7 @@ private:
 
     // Static safety assertions to prevent bad configurations at compile time
     static_assert((ROWS_IN_PARALLEL == 0u) || (Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0), "Panel height must be divisible by ROWS_IN_PARALLEL!");
-    static_assert(((Cfg.panel.address_type == RowAddressing::Standard) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
+    static_assert(((Cfg.panel.address_type == RowAddressing::Binary) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
 
     // A HUB75 connector carries two RGB data groups, so each address lights 2 rows; or 4
     // where a panel wires two rows in series behind each group.
