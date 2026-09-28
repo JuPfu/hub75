@@ -270,7 +270,7 @@ constexpr Hub75Config make_hub75_config(Hub75PanelProfile profile, Hub75Config b
 // Memory layout (packed, DMA streamed):
 //   Row advance via pin-mapped addressing (binary addressing)
 //   [0] addr_delay  : bits[4:0] row address, bits[31:5] t_addr (PIO cycles)
-//   Row advance via shift register enum class RowAddressing::SM5368_ABC
+//   Row advance via shift register (enum class RowAddressing::SM5368_ABC)
 //   [0] addr_delay  : bits[5:0] row address, bits[31:6] t_addr (PIO cycles)
 //   [1] lit_cycles  : OE active duration (LEDs ON)
 //   [2] dark_cycles : OE inactive duration (LEDs OFF)

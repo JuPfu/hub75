@@ -138,7 +138,7 @@ dark_loop:
 ;   bits [31:6]  = t_addr
 ; The two `out pins, 3` at the start of step 5 re-drive A/B/C on two clock edges — that is what
 ; advances the shift register. hub75_row has no shift register behind it and uses direct binary
-; addressing via `out pins, 6`, so the two programs differ only in that instruction.
+; addressing via `out pins, 5`, so all three of step 5's outputs differ between the two programs.
 ;
 .program hub75_row_sm5368_abc
 
