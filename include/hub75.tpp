@@ -152,13 +152,13 @@ void Hub75Driver<Cfg>::compute_bcm_cycles(uint32_t bitplane, uint32_t brightness
 template <Hub75Config Cfg>
 uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
 {
-    if constexpr (Cfg.panel.address_type == RowAddressing::SM5368_ABC)
+    if constexpr (Cfg.panel.address_type == RowAddressing::ABCShiftRegister)
     {
         constexpr uint32_t ROW_CLK = 1u << 0u;  // A
         constexpr uint32_t ROW_BK = 1u << 1u;   // B
         constexpr uint32_t ROW_DATA = 1u << 2u; // C
 
-        // SM5368 uses a one-hot row shift register:
+        // The row driver uses a one-hot row shift register:
         // row 0 injects a '1', all following rows clock that bit forward.
         uint32_t data_bit = (row == 0u) ? ROW_DATA : 0u;
         uint32_t phase0 = ROW_BK | data_bit;
@@ -216,7 +216,7 @@ void Hub75Driver<Cfg>::build_row_cmd_buffer(uint32_t brightness_fp)
             Hub75RowCmd *cmd = &row_cmd_buffer_[idx++];
             // Low ROW_ADDR_BITS = row address, the remaining 32-ROW_ADDR_BITS = t_addr.
             // t_addr format is panel dependent, can be binary (standard) or a shift-register
-            // command sequence (SM5368).
+            // command sequence (ABCShiftRegister).
             cmd->addr_delay = (t_addr << ROW_ADDR_BITS) | encode_row_address(row);
             cmd->lit_cycles = lit_cycles;
             cmd->dark_cycles = dark_cycles;
@@ -506,11 +506,11 @@ void Hub75Driver<Cfg>::configure_pio()
             // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
             // level (see hub75_row_program_init), so there is only one row program.
             bool row_ok = false;
-            if constexpr (Cfg.panel.address_type == RowAddressing::SM5368_ABC)
+            if constexpr (Cfg.panel.address_type == RowAddressing::ABCShiftRegister)
             {
                 row_ok = hub75_claim_on_pio(candidate, [&]
                                             { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                  &hub75_row_sm5368_abc_program,
+                                                  &hub75_row_abc_shift_register_program,
                                                   &pio_config_.row_pio,
                                                   &pio_config_.sm_row,
                                                   &pio_config_.row_prog_offs,
@@ -555,9 +555,9 @@ void Hub75Driver<Cfg>::configure_pio()
     // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
     // base_latch_wait_cycles passed as parameter to hub75_row program.
     // inverted_stb inverts the STROBE pin at the GPIO pad level for panels with inverted latch polarity.
-    if constexpr (Cfg.panel.address_type == RowAddressing::SM5368_ABC)
+    if constexpr (Cfg.panel.address_type == RowAddressing::ABCShiftRegister)
     {
-        hub75_row_sm5368_abc_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
+        hub75_row_abc_shift_register_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
     }
     else
     {
