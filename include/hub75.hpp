@@ -38,7 +38,7 @@ enum class RowMapping
 enum class RowAddressing
 {
     Standard,
-    SM5368_ABC
+    SM5368_ABC,
 };
 
 // Named presets bundling the handful of fields that actually vary panel-to-panel
@@ -268,13 +268,16 @@ constexpr Hub75Config make_hub75_config(Hub75PanelProfile profile, Hub75Config b
 // and addressing for one row in a specific bitplane slice.
 //
 // Memory layout (packed, DMA streamed):
-//   [0] addr_delay  : bits[4:0] row_address (A..E lines), bits[31:5] t_addr (PIO cycles)
+//   Row advance via pin-mapped addressing (binary addressing)
+//   [0] addr_delay  : bits[4:0] row address, bits[31:5] t_addr (PIO cycles)
+//   Row advance via shift register enum class RowAddressing::SM5368_ABC
+//   [0] addr_delay  : bits[5:0] row address, bits[31:6] t_addr (PIO cycles)
 //   [1] lit_cycles  : OE active duration (LEDs ON)
 //   [2] dark_cycles : OE inactive duration (LEDs OFF)
 //
-// addr_delay is packed this way because the hub75_row PIO program consumes it as one
-// 32-bit DMA word: `out pins, 5` peels off the row address, then `out x, 27` takes the
-// rest straight into the address-settle wait loop.
+// addr_delay is packed this way because the row PIO program consumes it as one
+// 32-bit DMA word: The first `out` peels off the address field, the second `out`
+// takes the rest straight into the address-settle wait loop.
 //
 // Must remain tightly packed (no padding) - consumed sequentially by DMA -> PIO.
 struct Hub75RowCmd
@@ -418,30 +421,24 @@ public:
     void setIntensity(float intensity, bool linear_brightness_control = true);
 
 private:
-private:
-    // Helper to calculate minimum address pins required for N scan steps
-    static constexpr uint32_t req_address_pins(uint32_t states)
-    {
-        uint32_t pins = 0;
-        while ((1u << pins) < states)
-        {
-            pins++;
-        }
-        return pins;
-    }
-
     // --- Panel / Addressing Deductions -----------------------------------------------------------
 
-    // 1. Resolve effective address pin count (fallback to auto-deduction if 0 or default)
-    static constexpr uint32_t ADDR_PINS = (Cfg.pins.rowsel_n_pins > 0)
-                                              ? Cfg.pins.rowsel_n_pins
-                                              : 5; // Default standard to 5 address pins (A-E)
+    // 1. Number of row-select pins the panel exposes: A..E on a Standard panel, clk/BK/data on
+    //    an SM5368 panel. It cannot be deduced from the panel height: a 64-row panel is 5 lines
+    //    with 2 rows lit at once (P64X64_1_32) or 4 lines with 4 (RowMapping::S31, see README).
+    //    So it has to be configured, and it is not always 5.
+    static constexpr uint32_t ADDR_PINS = Cfg.pins.rowsel_n_pins;
+    static_assert(ADDR_PINS >= 1u && ADDR_PINS <= 5u, "rowsel_n_pins must be set to the row-select pin count of the panel (1-5) - 0 is unset, and no supported panel exposes more than 5");
 
-    static constexpr uint32_t ADDR_MASK = (1u << ADDR_PINS) - 1u;
-
-    // 2. Addressing capacity of a binary address field: 5 lines address 32 states. It says
-    //    nothing about an SM5368, whose 3 lines are row clock, BK and data rather than a binary
-    //    address. Both cases are handled differently below.
+    // Width of the row-address field in the low end of Hub75RowCmd::addr_delay. Must match the
+    // `out pins, N` / `out x, 32-N` split in src/hub75.pio, for all row programs.
+    // 6 bits are reserved to support panels that address rows through a shift register instead
+    // of direct pin-mapped binary addressing, like the SM5368 (see encode_row_address() and
+    // the hub75_row_sm5368_abc PIO program).
+    static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Standard ? 5u : 6u;
+    static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS <= 6u, "Row address field must leave room for t_addr in the 32-bit DMA word");
+    static_assert(ADDR_PINS <= ROW_ADDR_BITS, "rowsel_n_pins must fit the row-address field - more address pins than ROW_ADDR_BITS pushes row bits into t_addr");
+    // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
     static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);
 
     // is the height dimension of the matrix a power of two value ?
