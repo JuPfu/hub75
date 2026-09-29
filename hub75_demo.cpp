@@ -22,6 +22,7 @@ constexpr Hub75Config panel_cfg{
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
         .address_type = RowAddressing::ABCShiftRegister,
+        .scan_mode = 24, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
         .sm_clockdiv_factor = 1.0f,
@@ -44,7 +45,7 @@ constexpr Hub75Config panel_cfg{
         .bitplanes = 10,
         .separate_cie_channels = true,
         .balanced_light_output = true,
-        .swap_rb_pins = false,
+        .swap_rb_pins = true,
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },

@@ -442,6 +442,7 @@ private:
     static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Binary ? 5u : 6u;
     static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS <= 6u, "Row address field must leave room for t_addr in the 32-bit DMA word");
     static_assert(ADDR_PINS <= ROW_ADDR_BITS, "rowsel_n_pins must fit the row-address field - more address pins than ROW_ADDR_BITS pushes row bits into t_addr");
+    static_assert(Cfg.panel.address_type != RowAddressing::ABCShiftRegister || Cfg.pins.rowsel_n_pins == 3, "For ABCShiftRegister row address type rowsel_n_pins must be set to 3!");
     // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
     static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);
 
