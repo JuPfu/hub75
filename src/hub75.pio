@@ -125,9 +125,9 @@ dark_loop:
 %}
 
 ; =============================================================================
-; PROGRAM: hub75_row_sm5368_abc
+; PROGRAM: hub75_row_abc_shift_register
 ; =============================================================================
-; Row control for SM5368 panels using three row-select pins:
+; Row control for ABC shift-register panels using three row-select pins:
 ;   A = row clk
 ;   B = BK  (discharge enable - anti-ghosting; per RT5956/RT5958D pinout)
 ;   C = row data
@@ -138,9 +138,9 @@ dark_loop:
 ;   bits [31:6]  = t_addr
 ; The two `out pins, 3` at the start of step 5 re-drive A/B/C on two clock edges — that is what
 ; advances the shift register. hub75_row has no shift register behind it and uses direct binary
-; addressing via `out pins, 6`, so the two programs differ only in that instruction.
+; addressing via `out pins, 5`, so all three of step 5's outputs differ between the two programs.
 ;
-.program hub75_row_sm5368_abc
+.program hub75_row_abc_shift_register
 
 .side_set 2
 ; Bit 0: LATCH (STB)
@@ -156,8 +156,8 @@ dark_loop:
     wait 1 irq 0        side 0b10   ; OEn=1 (panel OFF)
 
     mov x, y            side 0b10
-latch_guard_wait_sm5368:
-    jmp x-- latch_guard_wait_sm5368 side 0b10
+latch_guard_wait_abc_sr:
+    jmp x-- latch_guard_wait_abc_sr side 0b10
 
     ; -------------------------------------------------------------------------
     ; 2. LATCH: clean pulse (HIGH followed by LOW in register stabilisation)
@@ -167,8 +167,8 @@ latch_guard_wait_sm5368:
     ; -------------------------------------------------------------------------
     ; 3. LATCH SETTLE: allow internal register stabilisation
     ; -------------------------------------------------------------------------
-wait_latch_settle_sm5368:
-    jmp x-- wait_latch_settle_sm5368 side 0b10
+wait_latch_settle_abc_sr:
+    jmp x-- wait_latch_settle_abc_sr side 0b10
 
     ; -------------------------------------------------------------------------
     ; 4. PREFETCH next row data (parallel to blanking)
@@ -181,7 +181,7 @@ wait_latch_settle_sm5368:
     ;    BK  [1:1]   Discharge enable control
     ;    DIN [2:2]   Data in
     ;
-    ;    For Waveshare's SM5368, the following values are sent for row addressing of the shift
+    ;    For the ABC shift register, the following values are sent for row addressing of the shift
     ;    register. Row 0 injects the one-hot 1, every row after that clocks it one step on:
     ;        phase0 = 0b110  OSR bits [2:0]   ; row 0        (C=1, injects the 1)
     ;        phase1 = 0b111  OSR bits [5:3]   ; row 0        (A=1, clocks it in)
@@ -192,27 +192,27 @@ wait_latch_settle_sm5368:
     out pins, 3         side 0b10  ; phase0
     out pins, 3         side 0b10  ; phase1
     out x, 26           side 0b10   ; load t_addr delay (upper 26 bits) into X register
-addr_wait_sm5368:
-    jmp x-- addr_wait_sm5368 side 0b10
+addr_wait_abc_sr:
+    jmp x-- addr_wait_abc_sr side 0b10
 
     ; -------------------------------------------------------------------------
     ; 6. DISPLAY (BCM ON phase)
     ; -------------------------------------------------------------------------
     out x, 32           side 0b10   ; load lit_cycles
-lit_loop_sm5368:
-    jmp x-- lit_loop_sm5368 side 0b00   ; OE=0 → LEDs ON
+lit_loop_abc_sr:
+    jmp x-- lit_loop_abc_sr side 0b00   ; OE=0 → LEDs ON
 
     ; -------------------------------------------------------------------------
     ; 7. BLANKING (BCM OFF phase)
     ; -------------------------------------------------------------------------
     out x, 32           side 0b10   ; load dark_cycles
-dark_loop_sm5368:
-    jmp x-- dark_loop_sm5368 side 0b10   ; OE=1 → LEDs OFF
+dark_loop_abc_sr:
+    jmp x-- dark_loop_abc_sr side 0b10   ; OE=1 → LEDs OFF
 
 .wrap
 
 % c-sdk {
-    static inline void hub75_row_sm5368_abc_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch, bool inverted_stb)
+    static inline void hub75_row_abc_shift_register_program_init(PIO pio, uint sm, uint offset, uint row_base_pin, uint n_row_pins, uint latch_base_pin, uint t_latch, bool inverted_stb)
     {
         pio_sm_set_consecutive_pindirs(pio, sm, row_base_pin, n_row_pins, true);
         pio_sm_set_consecutive_pindirs(pio, sm, latch_base_pin, 2, true);
@@ -229,7 +229,7 @@ dark_loop_sm5368:
             gpio_set_outover(latch_base_pin, GPIO_OVERRIDE_INVERT);
         }
 
-        pio_sm_config c = hub75_row_sm5368_abc_program_get_default_config(offset);
+        pio_sm_config c = hub75_row_abc_shift_register_program_get_default_config(offset);
         sm_config_set_out_pins(&c, row_base_pin, n_row_pins);
         sm_config_set_sideset_pins(&c, latch_base_pin);
         sm_config_set_in_shift(&c, true, true, 32);
