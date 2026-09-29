@@ -270,7 +270,7 @@ void Hub75Driver<Cfg>::timing_init(float clk_sys_hz, float clkdiv)
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_ctrl_irq()
 {
-    printf("IN handle_ctrl_irq %d\n", frame_count_);
+    // printf("IN handle_ctrl_irq %d\n", frame_count_);
 
     if (dma_channel_get_irq0_status(row_ctrl_chan_))
     {
@@ -318,7 +318,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
 
         if (swap_frame_buffer_pending_)
         {
-            printf("IN handle_ctrl_irq swap frame buffer = %d\n", swap_frame_buffer_pending_);
+            // printf("IN handle_ctrl_irq swap frame buffer = %d\n", swap_frame_buffer_pending_);
             // dma_buffer_  -> active front buffer (DMA streams from it)
             // frame_buffer_ -> back buffer (refilled by handle_bitplane_irq)
             // Swap: the new back buffer becomes the new front buffer.
@@ -824,13 +824,13 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               &pixel_chan_config,
                               &pio_config_.data_pio->txf[pio_config_.sm_data],
                               dma_buffer_,
-                              dma_encode_transfer_count(4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH),
+                              dma_encode_transfer_count((4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH)),
                               false);
 
         // pixel ctrl channel
         dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
 
-        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
+        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_8);
         channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
         channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
 

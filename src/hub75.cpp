@@ -62,7 +62,7 @@ void Hub75DriverBase::unregister_instance()
 // on the other core.
 void Hub75DriverBase::global_ctrl_irq_handler()
 {
-    printf("global_ctrl_irq_handler\n");
+    // printf("global_ctrl_irq_handler\n");
 
     Hub75DriverBase *instances[MAX_INSTANCES];
     critical_section_enter_blocking(&s_instance_lock);

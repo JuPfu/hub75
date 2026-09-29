@@ -6,7 +6,6 @@
 .program icnd2153_row
 
 ; Side-set pin: GCLK / OE (HUB75 OE line, driving ICND2153 GCLK input pin 21)
-; Side-set bit 0: GCLK
 .side_set 1
 
 .wrap_target
@@ -14,7 +13,7 @@ frame_start:
     ; ------------------------------------------------------------------
     ; 1. FRAME RESTART & VSYNC HANDSHAKE
     ; ------------------------------------------------------------------
-    mov x, isr            side 0b0  ; Reload row count (num_scan_rows - 1); GCLK low
+    mov x, osr            side 0b0  ; Reload row count (num_scan_rows - 1); GCLK low
     irq nowait 2          side 0b0  ; Signal VSYNC (Frame Start) to pixel_stream SM
     wait 1 irq 3          side 0b0  ; Wait for pixel_stream SM to finish VSYNC sequence
 
@@ -27,25 +26,20 @@ frame_start:
 row_loop:
     set y, 15              side 0b0   ; expect 16 "channel done" signals for this row
 wait_channels:
-    wait 1 irq 1            side 0b0  ; consume one channel-completion...
-    jmp y--, wait_channels  side 0b0  ; ...16 times total
+    ; Wait for pixel_stream to signal that the current line's PWM data is fully shifted & latched
+    wait 1 irq 1          side 0b0  ; Clear & wait for line-done IRQ from pixel_stream
 
-    ; ------------------------------------------------------------------
-    ; 3. GENERATE GCLK BURST FOR CURRENT ROW DISPLAY
-    ; ------------------------------------------------------------------
-    ; --- only now has the ENTIRE row's data been shifted + latched ---
-    mov y, osr            side 0b0  ; Reload burst length count into Y
+    ; Output GCLK pulse burst for PWM grayscale cycle
+    mov y, isr            side 0b0  ; Load GCLK burst count (pulses - 1) from ISR
 gclk_loop:
-    nop         [3]       side 0b1  ; GCLK high
-    jmp y--, gclk_loop [3] side 0b0  ; GCLK low; toggles GCLK pulses for grayscale counter
+    nop         [1]       side 0b1  ; GCLK high
+    jmp y--, gclk_loop [1] side 0b0  ; GCLK low
 
-    ; ------------------------------------------------------------------
-    ; 4. ADVANCE TO NEXT ROW
-    ; ------------------------------------------------------------------
-    set pins, 0b001 [3]   side 0b0  ; Pulse RA=1 to increment line selection decoder
-    set pins, 0b000 [3]   side 0b0  ; Pulse RA=0
+    ; Increment Row Address Decoder
+    set pins, 0b001 [3]   side 0b0  ; RA=1 pulse
+    set pins, 0b000 [3]   side 0b0  ; RA=0 pulse
 
-    jmp x--, row_loop     side 0b0  ; Decrement row count X; process next row if X >= 0
+    jmp x--, row_loop     side 0b0  ; Next row
 .wrap
 
 % c-sdk {
@@ -87,14 +81,14 @@ static inline void icnd2153_row_program_init(
 
     pio_sm_init(pio, sm, offset, &c);
 
-    // Seed row count (num_scan_rows - 1) into ISR
-    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
-    pio_sm_exec(pio, sm, pio_encode_pull(false, false)); // FIFO -> OSR
-    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));   // OSR -> ISR
-
-    // Seed GCLK burst count (gclk_pulses_per_burst - 1) into OSR
+    // Store GCLK burst count in ISR
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
-    pio_sm_exec(pio, sm, pio_encode_pull(false, false)); // FIFO -> OSR, done
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false));
+    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
+
+    // Store Scan Depth in OSR
+    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false)); // Stays in OSR for re-use
 
     pio_sm_set_enabled(pio, sm, true);
 }
@@ -112,14 +106,14 @@ static inline void icnd2153_row_program_init(
 .side_set 2
 
 .wrap_target
-    wait 1 irq 2                side 0b00  ; Wait for VSYNC request from row SM (LE=0, DCLK=0)
+    wait 1 irq 2                side 0b00  ; Wait for Frame Start from row SM
 
     set x, 2                    side 0b00
-vsync_loop:                                ; Send VSYNC command sequence
+vsync_loop:                                ; Send VSYNC command sequence (3 LE-high pulses)
     nop             [3]         side 0b10  ; LE=1, DCLK=0
     jmp x--, vsync_loop         side 0b11  ; LE=1, DCLK=1
 
-    irq nowait 3                side 0b00  ; ACK VSYNC ready back to row SM
+    irq nowait 3                side 0b00  ; Handshake ACK back to row SM (VSYNC done)
 
     ; --------------------------------------------------------------------------
     ; HEADER PARSING (Autopull pulls 32-bit words automatically on 'out')
@@ -245,19 +239,18 @@ static inline void icnd2153_pixel_stream_program_init(
 
     ; ---- Phase 2: shift register data in, LE low (not yet part of the command signature) ----
 data_loop:
-    pull block
     out pins, 6              ; drive this cycle's 6 data lanes (1 bit/lane, all chips identical)
+    out null, 2
     set pins, 0b101 [7]      ; PWCLK/OEN=1 LE=0 CLK=1  (chip samples data on this rising edge)
     set pins, 0b100 [7]      ; PWCLK/OEN=1 LE=0 CLK=0
     jmp x-- data_loop
 
     ; ---- Phase 3: shift the final cmd_signature bits in with LE held high ----
     ;              (LE-high pulse *count*, not the data itself, selects the command)
-    pull block
     out x, 32                ; x = cmd_signature - 1   e.g. 4->3 for WR_CFG1, 14->13 for PRE_ACT
 le_data_loop:
-    pull block
     out pins, 6              ; still real shift-register data — LE doesn't gate data, only marks the command
+    out null, 2
     set pins, 0b111 [7]      ; PWCLK/OEN=1 LE=1 CLK=1  (data sampled on this rising edge)
     set pins, 0b110 [7]      ; PWCLK/OEN=1 LE=1 CLK=0
     jmp x-- le_data_loop
@@ -292,7 +285,7 @@ le_data_loop:
         pio_sm_config c = icnd2153_write_register_program_get_default_config(offset);
         sm_config_set_out_pins(&c, rgb_base_pin, 6);
         sm_config_set_set_pins(&c, clock_base_pin, 3);
-        sm_config_set_out_shift(&c, true, false, 32); // shift_right=true, autopull off (all pulls explicit)
+        sm_config_set_out_shift(&c, true, true, 32); // shift_right=true, autopull off (all pulls explicit)
 
         // Divides the PIO clock relative to sys_clk
         sm_config_set_clkdiv(&c, 10.0f);
