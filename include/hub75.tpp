@@ -69,7 +69,7 @@ void Hub75Driver<Cfg>::create()
     register_instance();
 
     build_pixel_stream();
-    
+
     printf("<<<create driver finished!!!\n");
 }
 
@@ -271,6 +271,8 @@ template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_ctrl_irq()
 {
     // printf("IN handle_ctrl_irq %d\n", frame_count_);
+    // printf("Row SM PC: %d, Pixel SM PC: %d\n", pio_sm_get_pc(pio_config_.row_pio, pio_config_.sm_row), pio_sm_get_pc(pio_config_.data_pio, pio_config_.sm_data));
+    // printf("ROW PIO equal to DATA_PIO ? %u  %u\n", pio_config_.row_pio, pio_config_.data_pio);
 
     if (dma_channel_get_irq0_status(row_ctrl_chan_))
     {
@@ -689,7 +691,7 @@ void Hub75Driver<Cfg>::configure_pio()
 
         // icnd2153_gclk_program_init(pio_config_.gclk_pio, pio_config_.sm_gclk, pio_config_.gclk_prog_offs, Cfg.pins.oen_pin, 138);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, 137);
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, 138);
         printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
 }
@@ -804,7 +806,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
         dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
 
-        channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_8);
+        channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_32);
         channel_config_set_read_increment(&pixel_chan_config, true);
         channel_config_set_write_increment(&pixel_chan_config, false);
 
@@ -824,13 +826,13 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               &pixel_chan_config,
                               &pio_config_.data_pio->txf[pio_config_.sm_data],
                               dma_buffer_,
-                              dma_encode_transfer_count((4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH)),
+                              dma_encode_transfer_count((4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH) / 4), // 16 bit transfer - 2 bytes simultaneously
                               false);
 
         // pixel ctrl channel
         dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
 
-        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_8);
+        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
         channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
         channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
 
@@ -1138,42 +1140,39 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        constexpr uint32_t CHIPS_PER_LANE = DISPLAY_WIDTH / 16;          // 8 for a 128-wide panel
-        constexpr uint32_t paired_row_offset = stride_to_paired_row * 3; // *3: rgb_buffer_ interleaves R,G,B per pixel
+        constexpr uint32_t CHIPS_PER_LANE    = DISPLAY_WIDTH / 16;
+        constexpr uint32_t paired_row_offset = stride_to_paired_row * 3;
 
         uint32_t fb_index = 0;
 
-        // As 32-bit autopull is enabled for continuous DMA stream shifting pass values with low byte first
-        frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;        // low byte
-        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF; // high byte
+        // Header word (little endian)
+        frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
+        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
+        frame_buffer_[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
+        frame_buffer_[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
 
-        frame_buffer_[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;        // low byte
-        frame_buffer_[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF; // high byte
-
-        for (uint32_t row = 0; row < SCAN_DEPTH; row++)
+        for (uint32_t row = 0; row < SCAN_DEPTH; row++)              // 32 scan rows
         {
-            for (uint32_t channel = 0; channel < 16; channel++)
+            for (uint32_t channel = 0; channel < 16; channel++)      // 16 transactions per row
             {
-                // channel -> column-within-chip: ASSUMED channel c -> offset (15-c), reading the
-                // datasheet's "1st value shifted = Channel 15" as "first column of the 16 =
-                // channel 15". Flip to `channel` directly if this comes out mirrored within each
-                // 16-column chip block on real hardware.
-                uint32_t col_offset = 15 - channel;
+                const uint32_t col_offset = 15 - channel;            // first packet = OUT15
 
-                for (uint32_t bit = 0; bit < 16; bit++) // MSB first, same convention as every other command
+                // One transaction = DISPLAY_WIDTH bytes:
+                // all 16 bits of the farthest chip first, then the next chip, ...
+                for (int32_t chip = CHIPS_PER_LANE - 1; chip >= 0; --chip)
                 {
-                    uint16_t mask = 1u << (15 - bit);
+                    const uint32_t col = static_cast<uint32_t>(chip) * 16 + col_offset;
+                    const uint32_t top = (row * DISPLAY_WIDTH + col) * 3;
+                    const uint32_t bot = top + paired_row_offset;
 
-                    for (uint32_t chip = 0; chip < CHIPS_PER_LANE; chip++)
+                    for (uint32_t bit = 0; bit < 16; bit++)          // MSB first
                     {
-                        uint32_t col = chip * 16 + col_offset;
-                        uint32_t top = (row * DISPLAY_WIDTH + col) * 3;
-                        uint32_t bot = top + paired_row_offset;
+                        const uint16_t mask = 1u << (15 - bit);
 
-                        frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[top] & mask) != 0) << 5) |
+                        frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[top]     & mask) != 0) << 5) |
                                                     (((storage_.rgb_buffer_[top + 1] & mask) != 0) << 4) |
                                                     (((storage_.rgb_buffer_[top + 2] & mask) != 0) << 3) |
-                                                    (((storage_.rgb_buffer_[bot] & mask) != 0) << 2) |
+                                                    (((storage_.rgb_buffer_[bot]     & mask) != 0) << 2) |
                                                     (((storage_.rgb_buffer_[bot + 1] & mask) != 0) << 1) |
                                                     (((storage_.rgb_buffer_[bot + 2] & mask) != 0) << 0);
                     }

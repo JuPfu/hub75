@@ -28,6 +28,7 @@ row_loop:
 wait_channels:
     ; Wait for pixel_stream to signal that the current line's PWM data is fully shifted & latched
     wait 1 irq 1          side 0b0  ; Clear & wait for line-done IRQ from pixel_stream
+    jmp y--, wait_channels  side 0b0  ; ...16 times total
 
     ; Output GCLK pulse burst for PWM grayscale cycle
     mov y, isr            side 0b0  ; Load GCLK burst count (pulses - 1) from ISR
@@ -118,8 +119,8 @@ vsync_loop:                                ; Send VSYNC command sequence (3 LE-h
     ; --------------------------------------------------------------------------
     ; HEADER PARSING (Autopull pulls 32-bit words automatically on 'out')
     ; --------------------------------------------------------------------------
-    out x, 16                   side 0b00  ; Half-Word 1: X = Total transactions per frame (scan_depth - 1)
-    out isr, 16                 side 0b00  ; Half-Word 2: ISR = Pixel pulses per transaction (display_width - 2)
+    out x, 16                  side 0b00  ; X = Total transactions per frame (scan_depth - 1)
+    out isr, 16                side 0b00  ; ISR = Pixel pulses per transaction (display_width - 2)
 
 transactions:
     mov y, isr                  side 0b00
@@ -128,8 +129,8 @@ normal_pulse:
     out null, 2     [3]         side 0b01  ; Clock data on DCLK rising edge (LE=0, DCLK=1)
     jmp y--, normal_pulse       side 0b00
 
-    out pins, 6     [3]         side 0b00  ; Last pixel word in transaction
-    out null, 2     [3]         side 0b10  ; Issue DATA_LATCH command (LE=1, DCLK=0)
+    out pins, 6     [3]         side 0b10  ; Last pixel word in transaction
+    out null, 2     [3]         side 0b11  ; Issue DATA_LATCH command (LE=1, DCLK=0)
 
     irq nowait 1                side 0b00
 
@@ -239,18 +240,19 @@ static inline void icnd2153_pixel_stream_program_init(
 
     ; ---- Phase 2: shift register data in, LE low (not yet part of the command signature) ----
 data_loop:
+    pull block
     out pins, 6              ; drive this cycle's 6 data lanes (1 bit/lane, all chips identical)
-    out null, 2
     set pins, 0b101 [7]      ; PWCLK/OEN=1 LE=0 CLK=1  (chip samples data on this rising edge)
     set pins, 0b100 [7]      ; PWCLK/OEN=1 LE=0 CLK=0
     jmp x-- data_loop
 
     ; ---- Phase 3: shift the final cmd_signature bits in with LE held high ----
-    ;              (LE-high pulse *count*, not the data itself, selects the command)
+    pull block
     out x, 32                ; x = cmd_signature - 1   e.g. 4->3 for WR_CFG1, 14->13 for PRE_ACT
+    set pins, 0b110 [7]      ; LE up first, CLK still low (LE setup)
 le_data_loop:
-    out pins, 6              ; still real shift-register data — LE doesn't gate data, only marks the command
-    out null, 2
+    pull block               ; still real shift-register data — LE doesn't gate data, only marks the command
+    out pins, 6
     set pins, 0b111 [7]      ; PWCLK/OEN=1 LE=1 CLK=1  (data sampled on this rising edge)
     set pins, 0b110 [7]      ; PWCLK/OEN=1 LE=1 CLK=0
     jmp x-- le_data_loop
@@ -285,7 +287,7 @@ le_data_loop:
         pio_sm_config c = icnd2153_write_register_program_get_default_config(offset);
         sm_config_set_out_pins(&c, rgb_base_pin, 6);
         sm_config_set_set_pins(&c, clock_base_pin, 3);
-        sm_config_set_out_shift(&c, true, true, 32); // shift_right=true, autopull off (all pulls explicit)
+        sm_config_set_out_shift(&c, true, false, 32); // shift_right=true, autopull off (all pulls explicit)
 
         // Divides the PIO clock relative to sys_clk
         sm_config_set_clkdiv(&c, 10.0f);

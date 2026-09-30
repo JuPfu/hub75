@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include "hub75.hpp" // for Hub75Config
 
 // =============================================================================
 // icnd2153.h
@@ -47,7 +48,7 @@ static constexpr uint16_t ICND2153_CFG1_VALUE = 0x1F70; //0x0F70; // 0x1F70; // 
 static constexpr uint16_t ICND2153_CFG2_VALUE = 0xFF9C; // 0xffff; //0x7F9C;
 // static constexpr uint16_t ICND2153_CFG2_VALUE_GREEN = 0x679C;
 // static constexpr uint16_t ICND2153_CFG2_VALUE_BLUE = 0x5F9C;
-static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7; // 0x40F3; // 0x40F7; 0b0001 0010 1010 1100 => 0x0262
+static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7; // 0x40F3; // 0x40F7; 0b0001 0010 1010 1100 => 0x12AC
 static constexpr uint16_t ICND2153_CFG4_VALUE = 0x0040; // 0x0000; // 0x0040;
 static constexpr uint16_t ICND2153_CFG5_VALUE = 0x0008; // 0x0000; // 0x0008; // debug register (REG5) example value
 
@@ -55,13 +56,12 @@ static constexpr uint16_t ICND2153_CFG5_VALUE = 0x0008; // 0x0000; // 0x0008; //
 // icnd2153_initialize()
 //
 // Claims a free PIO state machine covering the GPIO range used by this
-// RUL6024 chain (data pins + CLK/LE/OEN), runs the WREG1/WREG2
-// configuration sequence, then releases the state machine and PIO program
-// again so normal HUB75 scanning (hub75_row / hub75_bitplane_stream) can
-// use that PIO block afterwards.
+// ICND2153 chain (data pins + CLK/LE/OEN), runs the configuration sequence, 
+// then releases the state machine and PIO program again so ICND2153 scanning 
+// (icnd2153_row / icnd2153_pixel_stream) can use that PIO block afterwards.
 //
 // Not reentrant: internally caches Cfg in a single file-scope static, so
-// only one RUL6024 chain can be initialized "in flight" at a time.
+// only one ICND2153 chain can be initialized "in flight" at a time.
 // Safe to call once per chain, sequentially, at start-up.
 // -----------------------------------------------------------------------------
 void icnd2153_initialize(Hub75Config Cfg);

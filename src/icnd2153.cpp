@@ -133,7 +133,7 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 // Runs the configuration sequence for one ICND2153 chain — see the sequence
 // and open-questions notes at the top of this file.
 // -----------------------------------------------------------------------------
-void icnd2153_setup(PIO pio, uint sm, uint offset)
+static void icnd2153_setup(PIO pio, uint sm, uint offset)
 {
     uint32_t display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols;
 
@@ -188,7 +188,7 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
 
     // Data latch command
-    icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
+    // icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
 
     // Vertical sync. signal
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
@@ -199,6 +199,13 @@ void icnd2153_setup(PIO pio, uint sm, uint offset)
     // icn2053_send_datapacket()'s `sect == 7 ? 1 : 0`) — that belongs in
     // icnd2153_bitplane_stream's own LE side-set, not in this one-time
     // register-configuration sequence.
+}
+
+static void icnd2153_wait_idle(PIO pio, uint sm, uint offset)
+{
+    while (!pio_sm_is_tx_fifo_empty(pio, sm)) tight_loop_contents();
+    while (pio_sm_get_pc(pio, sm) != offset)  tight_loop_contents();
+    pio_sm_exec(pio, sm, pio_encode_set(pio_pins, 0b100));
 }
 
 // -----------------------------------------------------------------------------
@@ -243,16 +250,13 @@ void icnd2153_initialize(Hub75Config Cfg)
             true))
     {
         panic("Failed to claim PIO SM for icnd2153_write_register_program\n");
-    }
-
-    if (sm < 0)
-    {
-        printf("icnd2153_initialize: No free SM on this PIO instance!\n");
         return;
     }
 
     // setup initialisation sequence and emit it to panel
     icnd2153_setup(pio, sm, offset);
+
+    icnd2153_wait_idle(pio, sm, offset);
 
     // disable state machine
     pio_sm_set_enabled(pio, sm, false);
