@@ -451,6 +451,7 @@ data_loop:
     ;              (LE-high pulse *count*, not the data itself, selects the command)
     pull block
     out x, 32                ; x = cmd_signature - 1   e.g. 11->10 for WREG1, 12->11 for WREG2
+    set pins, 0b110 [7]
 le_data_loop:
     pull block
     out pins, 6              ; still real shift-register data — LE doesn't gate data, only marks the command
@@ -538,6 +539,7 @@ le_data_loop:
     {
         static const uint32_t latch_dummy[4] = {0, 0, 0, 0};
         const uint32_t le_length_data_latch = 3; // CMD_DATA_LATCH, see rul6024.h
+        rul6024_write_register(pio, sm, /*display_width=*/4, /*le=*/3, latch_dummy);
     }
     // Issues the RESET_OEN command: per rul6024.h's LE-length table this is
     // a *two-step* command, not a single one - one transaction with LE
