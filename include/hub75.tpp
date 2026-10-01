@@ -1163,19 +1163,17 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
         frame_buffer_[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
         frame_buffer_[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
-
-        for (uint32_t row = 0; row < SCAN_DEPTH; row++) // 32 scan rows
+        for (uint32_t row = 0; row < SCAN_DEPTH; row++)
         {
-            for (uint32_t channel = 0; channel < 16; channel++) // 16 transactions per row
+            for (uint32_t channel = 0; channel < 16; channel++) // 0 = first packet = OUT15
             {
-                const uint32_t col_offset = 15 - channel; // first packet = OUT15
+                // MEASURED on the panel: OUT15 drives the leftmost pixel of a chip's 16-column block
+                const uint32_t col_offset = channel;
 
-                // One transaction = DISPLAY_WIDTH bytes:
-                // all 16 bits of the farthest chip first, then the next chip, ...
-                for (int32_t chip = CHIPS_PER_LANE - 1; chip >= 0; --chip)
+                // First-sent chip is the farthest in the chain = the leftmost 16-column block
+                for (uint32_t chip = 0; chip < CHIPS_PER_LANE; ++chip)
                 {
-                    const uint32_t col = static_cast<uint32_t>(chip) * 16 + col_offset;
-
+                    const uint32_t col = chip * 16 + col_offset;
                     const uint32_t top = ((row * DISPLAY_WIDTH + col) * ROWS_IN_PARALLEL) * 3;
                     const uint32_t bot = top + 3;
 
