@@ -223,7 +223,7 @@ int main()
     struct repeating_timer timer;
     if (demo_index < 0)
     {
-        demo_index = 0;
+          = 0;
         add_repeating_timer_ms(-15.0 / 1.0 * 1000.0, skip_to_next_demo, NULL, &timer);
     }
 
