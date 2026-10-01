@@ -115,6 +115,18 @@ static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 static constexpr uint8_t ICND2153_DATA_HIGH = 0x3f;
 static constexpr uint8_t ICND2153_DATA_LOW = 0x00;
 
+// lane bit i -> R1,G1,B1,R2,G2,B2 (bit 0..5)
+static void prepare_register_dma_lanes(const uint16_t v[6], uint32_t *dst, uint32_t dw)
+{
+    for (uint32_t chip = 0; chip < dw / 16; ++chip)
+        for (int bit = 15; bit >= 0; --bit) {
+            uint32_t w = 0;
+            for (int l = 0; l < 6; ++l) w |= ((v[l] >> bit) & 1u) << l;
+            *dst++ = w;
+        }
+}
+const uint16_t cfg2_lane[6] = {0x7F9C, 0x679C, 0x5F9C, 0x7F9C, 0x679C, 0x5F9C};
+
 static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display_width)
 {
     int repeats_per_chain = display_width / 16; // one 16-bit register per chained chip
@@ -161,6 +173,9 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
     // Enable all output channels
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_EN_OP);
 
+    // Vertical sync. signal
+    icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
+
     // ---- 2. Configuration registers 1..4, then the debug register (REG5) ----
     // Pre-active command
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
@@ -190,9 +205,6 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
     // Data latch command
     // icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
 
-    // Vertical sync. signal
-    icnd2153_write_control_command(pio, sm, ICND2153_CMD_VSYNC);
-
     // NOTE: no trailing DATA_LATCH here. Per the icn2053.c reference,
     // DATA_LATCH is issued as the trailing LE-high pulse on the *last*
     // grayscale data packet of each row during normal scanning (see
@@ -203,8 +215,10 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
 
 static void icnd2153_wait_idle(PIO pio, uint sm, uint offset)
 {
-    while (!pio_sm_is_tx_fifo_empty(pio, sm)) tight_loop_contents();
-    while (pio_sm_get_pc(pio, sm) != offset)  tight_loop_contents();
+    while (!pio_sm_is_tx_fifo_empty(pio, sm))
+        tight_loop_contents();
+    while (pio_sm_get_pc(pio, sm) != offset)
+        tight_loop_contents();
     pio_sm_exec(pio, sm, pio_encode_set(pio_pins, 0b100));
 }
 

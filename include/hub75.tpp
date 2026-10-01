@@ -99,6 +99,12 @@ void Hub75Driver<Cfg>::start()
     dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
 
     dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true);
+
+    if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
+    {
+        icnd2153_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
+    }
+
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
@@ -316,6 +322,11 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
                 frame_freq_us_ = 0; // clear until next measurement
             }
             frame_count_++;
+        }
+
+        if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
+        {
+            icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
         }
 
         if (swap_frame_buffer_pending_)
@@ -847,7 +858,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         dma_channel_configure(pixel_ctrl_chan_, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan_].read_addr, &dma_buffer_, dma_encode_transfer_count(1), false);
 
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
-        pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
+        // pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
     }
 }
 
@@ -1140,7 +1151,9 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        constexpr uint32_t CHIPS_PER_LANE    = DISPLAY_WIDTH / 16;
+        static_assert(ROWS_IN_PARALLEL == 2 && Cfg.panel.chain_rows == 1, "PWM stream assumes 2 parallel rows and a single chain row");
+
+        constexpr uint32_t CHIPS_PER_LANE = DISPLAY_WIDTH / 16;
         constexpr uint32_t paired_row_offset = stride_to_paired_row * 3;
 
         uint32_t fb_index = 0;
@@ -1151,30 +1164,31 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         frame_buffer_[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
         frame_buffer_[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
 
-        for (uint32_t row = 0; row < SCAN_DEPTH; row++)              // 32 scan rows
+        for (uint32_t row = 0; row < SCAN_DEPTH; row++) // 32 scan rows
         {
-            for (uint32_t channel = 0; channel < 16; channel++)      // 16 transactions per row
+            for (uint32_t channel = 0; channel < 16; channel++) // 16 transactions per row
             {
-                const uint32_t col_offset = 15 - channel;            // first packet = OUT15
+                const uint32_t col_offset = 15 - channel; // first packet = OUT15
 
                 // One transaction = DISPLAY_WIDTH bytes:
                 // all 16 bits of the farthest chip first, then the next chip, ...
                 for (int32_t chip = CHIPS_PER_LANE - 1; chip >= 0; --chip)
                 {
                     const uint32_t col = static_cast<uint32_t>(chip) * 16 + col_offset;
-                    const uint32_t top = (row * DISPLAY_WIDTH + col) * 3;
-                    const uint32_t bot = top + paired_row_offset;
 
-                    for (uint32_t bit = 0; bit < 16; bit++)          // MSB first
+                    const uint32_t top = ((row * DISPLAY_WIDTH + col) * ROWS_IN_PARALLEL) * 3;
+                    const uint32_t bot = top + 3;
+
+                    for (uint32_t bit = 0; bit < 16; bit++) // MSB first
                     {
                         const uint16_t mask = 1u << (15 - bit);
 
-                        frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[top]     & mask) != 0) << 5) |
-                                                    (((storage_.rgb_buffer_[top + 1] & mask) != 0) << 4) |
-                                                    (((storage_.rgb_buffer_[top + 2] & mask) != 0) << 3) |
-                                                    (((storage_.rgb_buffer_[bot]     & mask) != 0) << 2) |
-                                                    (((storage_.rgb_buffer_[bot + 1] & mask) != 0) << 1) |
-                                                    (((storage_.rgb_buffer_[bot + 2] & mask) != 0) << 0);
+                        frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[top] & mask) != 0) << 0) |     // top R    -> data_base_pin + 0
+                                                    (((storage_.rgb_buffer_[top + 1] & mask) != 0) << 1) | // top G
+                                                    (((storage_.rgb_buffer_[top + 2] & mask) != 0) << 2) | // top B
+                                                    (((storage_.rgb_buffer_[bot] & mask) != 0) << 3) |     // bottom R
+                                                    (((storage_.rgb_buffer_[bot + 1] & mask) != 0) << 4) | // bottom G
+                                                    (((storage_.rgb_buffer_[bot + 2] & mask) != 0) << 5);  // bottom B
                     }
                 }
             }

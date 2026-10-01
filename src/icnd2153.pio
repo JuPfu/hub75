@@ -4,43 +4,37 @@
 ; PROGRAM 1: ROW & GCLK (PWM CLOCK) CONTROLLER
 ; ==============================================================================
 .program icnd2153_row
-
-; Side-set pin: GCLK / OE (HUB75 OE line, driving ICND2153 GCLK input pin 21)
 .side_set 1
 
 .wrap_target
-frame_start:
-    ; ------------------------------------------------------------------
-    ; 1. FRAME RESTART & VSYNC HANDSHAKE
-    ; ------------------------------------------------------------------
-    mov x, osr            side 0b0  ; Reload row count (num_scan_rows - 1); GCLK low
-    irq nowait 2          side 0b0  ; Signal VSYNC (Frame Start) to pixel_stream SM
-    wait 1 irq 3          side 0b0  ; Wait for pixel_stream SM to finish VSYNC sequence
+scan_pass:
+    mov y, status        side 0b0   ; all ones while TX FIFO is empty (no token)
+    jmp y--, seed_row    side 0b0   ; no token: keep refreshing
+
+    ; ---- token pending: GCLK is idle, send VSYNC and release the pixel SM ----
+    pull block           side 0b0   ; consume token, OSR = rows - 1
+    irq nowait 2         side 0b0   ; pixel SM: VSYNC + start of frame
+    wait 1 irq 3         side 0b0   ; VSYNC done
 
     ; ------------------------------------------------------------------
     ; 2. SEED ROW 0 (Reset address decoder)
     ; ------------------------------------------------------------------
-    set pins, 0b101 [3]   side 0b0  ; Step decoder (RA=1, RC=1)
-    set pins, 0b000 [3]   side 0b0  ; Step decoder (RA=0, RC=0) -> Row 0 selected
+seed_row:
+    mov x, osr           side 0b0  
+    set pins, 0b101 [15]  side 0b0   ; Step decoder (RA=1, RC=1)
+    set pins, 0b000 [15]  side 0b0   ; Step decoder (RA=0, RC=0) -> Row 0 selected
 
 row_loop:
-    set y, 15              side 0b0   ; expect 16 "channel done" signals for this row
-wait_channels:
-    ; Wait for pixel_stream to signal that the current line's PWM data is fully shifted & latched
-    wait 1 irq 1          side 0b0  ; Clear & wait for line-done IRQ from pixel_stream
-    jmp y--, wait_channels  side 0b0  ; ...16 times total
-
-    ; Output GCLK pulse burst for PWM grayscale cycle
-    mov y, isr            side 0b0  ; Load GCLK burst count (pulses - 1) from ISR
+    mov y, isr           side 0b0
 gclk_loop:
-    nop         [1]       side 0b1  ; GCLK high
-    jmp y--, gclk_loop [1] side 0b0  ; GCLK low
+    nop                  side 0b1   ; GCLK high, 1 PIO cycle
+    jmp y--, gclk_loop   side 0b0   ; GCLK low, 1 PIO cycle -> 2 cycles per pulse
 
-    ; Increment Row Address Decoder
-    set pins, 0b001 [3]   side 0b0  ; RA=1 pulse
-    set pins, 0b000 [3]   side 0b0  ; RA=0 pulse
-
-    jmp x--, row_loop     side 0b0  ; Next row
+    set pins, 0b001 [15] side 0b0   ; row advance (unchanged pulses)
+    set pins, 0b000 [15] side 0b0
+    nop             [15] side 0b0
+    nop             [15] side 0b0   ; gap = 66 cycles
+    jmp x--, row_loop    side 0b0
 .wrap
 
 % c-sdk {
@@ -70,31 +64,32 @@ static inline void icnd2153_row_program_init(
     pio_gpio_init(pio, gclk_pin);
 
     pio_sm_config c = icnd2153_row_program_get_default_config(offset);
-
-    // Map SET pins to row selection multiplexer (RA/RB/RC)
     sm_config_set_set_pins(&c, rowsel_base_pin, 3);
-
-    // Map SIDE-SET pin (1 bit) to GCLK
     sm_config_set_sideset_pins(&c, gclk_pin);
-
     sm_config_set_out_shift(&c, true, false, 32);
-    sm_config_set_clkdiv(&c, 10.0f);
-
+    sm_config_set_mov_status(&c, STATUS_TX_LESSTHAN, 1);   // new
+    sm_config_set_clkdiv(&c, 3.75f);                       // 40 MHz @150 MHz: GCLK = 20 MHz
     pio_sm_init(pio, sm, offset, &c);
 
-    // Store GCLK burst count in ISR
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
     pio_sm_exec(pio, sm, pio_encode_pull(false, false));
-    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
-
-    // Store Scan Depth in OSR
+    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));     // ISR = burst - 1
     pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
-    pio_sm_exec(pio, sm, pio_encode_pull(false, false)); // Stays in OSR for re-use
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false));   // OSR = rows - 1
+}
 
+static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
+{
+    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);       // first token: VSYNC + frame start
     pio_sm_set_enabled(pio, sm, true);
 }
-%}
 
+static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_rows)
+{
+    if (pio_sm_is_tx_fifo_empty(pio, sm))                  // never block in the IRQ, never stack tokens
+        pio_sm_put(pio, sm, num_scan_rows - 1);
+}
+%}
 
 ; ==============================================================================
 ; PROGRAM 2: PIXEL DATA & COMMAND STREAMER
@@ -131,8 +126,6 @@ normal_pulse:
 
     out pins, 6     [3]         side 0b10  ; Last pixel word in transaction
     out null, 2     [3]         side 0b11  ; Issue DATA_LATCH command (LE=1, DCLK=0)
-
-    irq nowait 1                side 0b00
 
     jmp x--, transactions       side 0b00  ; Loop across frame transactions
 .wrap
