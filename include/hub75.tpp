@@ -95,8 +95,8 @@ void Hub75Driver<Cfg>::start()
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         dma_channel_set_read_addr(row_ctrl_chan_, &dma_row_cmd_buffer_, false);
+        dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
     }
-    dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
 
     dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true);
 
@@ -302,9 +302,9 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
         }
     }
 
-    if (dma_channel_get_irq0_status(pixel_ctrl_chan_))
+    if (dma_channel_get_irq0_status(pixel_chan_))
     {
-        dma_channel_acknowledge_irq0(pixel_ctrl_chan_);
+        dma_channel_acknowledge_irq0(pixel_chan_);
 
         if constexpr (Cfg.frame_rate_debug)
         {
@@ -331,17 +331,15 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
 
         if (swap_frame_buffer_pending_)
         {
-            // printf("IN handle_ctrl_irq swap frame buffer = %d\n", swap_frame_buffer_pending_);
-            // dma_buffer_  -> active front buffer (DMA streams from it)
-            // frame_buffer_ -> back buffer (refilled by handle_bitplane_irq)
-            // Swap: the new back buffer becomes the new front buffer.
             uint8_t *new_front = frame_buffer_;
-            frame_buffer_ = (new_front == storage_.frame_buffer1_) ? storage_.frame_buffer2_ : storage_.frame_buffer1_;
+            frame_buffer_ = dma_buffer_;
+            // frame_buffer_ = (new_front == storage_.frame_buffer1_) ? storage_.frame_buffer2_ : storage_.frame_buffer1_;
             dma_buffer_ = new_front;
-            dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
-
             swap_frame_buffer_pending_ = false;
         }
+        __dmb();
+        dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true); // restart: count is reloaded
+        icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
     }
 }
 
@@ -439,10 +437,12 @@ void Hub75Driver<Cfg>::setup_display_irq()
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
+
         dma_channel_set_irq0_enabled(row_ctrl_chan_, true);
+        dma_channel_set_irq0_enabled(pixel_ctrl_chan_, true);
     }
-    dma_channel_set_irq0_enabled(pixel_ctrl_chan_, true);
-    printf("setup_display_irq dma_channel_set_irq0_enabled pixel_ctrl_chan_\n");
+    else
+        dma_channel_set_irq0_enabled(pixel_chan_, true); // frame done = last word handed to the PIO
 }
 
 template <Hub75Config Cfg>
@@ -806,14 +806,8 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
     }
     else
     {
-        // icnd2153_row_program
-        // self sufficient - no control handler needed
-        // row counter is reset in icnd2153_row_program no input from DMA!!!
-        // Trigger start of icnd2153_row_program -> runs forever
-        //
         // icnd2153_pixel_stream receives pixel data fed by DMA
         pixel_chan_ = dma_claim_unused_channel(true);
-        pixel_ctrl_chan_ = dma_claim_unused_channel(true);
 
         dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
 
@@ -824,8 +818,6 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         channel_config_set_dreq(&pixel_chan_config, pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true));
 
         channel_config_set_high_priority(&pixel_chan_config, true);
-
-        channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan_);
 
         // Due to DMA channel row_chan the complete pre-build pixel stream can be passed to DMA channel pixel_chan.
         // The pixel_chan iterates over all (row, channel) DATA_LATCH transactions in one big swoop.
@@ -840,25 +832,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               dma_encode_transfer_count((4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH) / 4), // 16 bit transfer - 2 bytes simultaneously
                               false);
 
-        // pixel ctrl channel
-        dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
-
-        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
-        channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
-        channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
-
-        channel_config_set_dreq(&pixel_ctrl_chan_config, DREQ_FORCE);
-
-        channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
-
-        channel_config_set_chain_to(&pixel_ctrl_chan_config, pixel_chan_);
-
-        // When pixel_chan has finished a complete frame (each row in each bitplane) has been emitted.
-        // The pixel_ctrl_chan resets the start address of pixel_chan to dma_buffer.
-        dma_channel_configure(pixel_ctrl_chan_, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan_].read_addr, &dma_buffer_, dma_encode_transfer_count(1), false);
-
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
-        // pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
     }
 }
 
@@ -1151,6 +1125,11 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
+        uint32_t irq_state = save_and_disable_interrupts();
+        // swap_frame_buffer_pending_ = false; // a swap during this build would send half a frame
+        uint8_t *const out = frame_buffer_; // this build's buffer, fixed for the whole function
+        restore_interrupts(irq_state);
+
         static_assert(ROWS_IN_PARALLEL == 2 && Cfg.panel.chain_rows == 1, "PWM stream assumes 2 parallel rows and a single chain row");
 
         constexpr uint32_t CHIPS_PER_LANE = DISPLAY_WIDTH / 16;
@@ -1159,10 +1138,10 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         uint32_t fb_index = 0;
 
         // Header word (little endian)
-        frame_buffer_[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
-        frame_buffer_[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
-        frame_buffer_[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
-        frame_buffer_[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
+        out[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
+        out[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
+        out[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
+        out[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
         for (uint32_t row = 0; row < SCAN_DEPTH; row++)
         {
             for (uint32_t channel = 0; channel < 16; channel++) // 0 = first packet = OUT15
@@ -1177,20 +1156,29 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
                     const uint32_t top = ((row * DISPLAY_WIDTH + col) * ROWS_IN_PARALLEL) * 3;
                     const uint32_t bot = top + 3;
 
+                    const uint16_t r0 = cie_red_table()[storage_.rgb_buffer_[top + 2]];
+                    const uint16_t g0 = cie_green_table()[storage_.rgb_buffer_[top + 0]];
+                    const uint16_t b0 = cie_blue_table()[storage_.rgb_buffer_[top + 1]];
+
+                    const uint16_t r1 = cie_red_table()[storage_.rgb_buffer_[bot + 2]];
+                    const uint16_t g1 = cie_green_table()[storage_.rgb_buffer_[bot + 0]];
+                    const uint16_t b1 = cie_blue_table()[storage_.rgb_buffer_[bot + 1]];
+
                     for (uint32_t bit = 0; bit < 16; bit++) // MSB first
                     {
                         const uint16_t mask = 1u << (15 - bit);
 
-                        frame_buffer_[fb_index++] = (((storage_.rgb_buffer_[top] & mask) != 0) << 0) |     // top R    -> data_base_pin + 0
-                                                    (((storage_.rgb_buffer_[top + 1] & mask) != 0) << 1) | // top G
-                                                    (((storage_.rgb_buffer_[top + 2] & mask) != 0) << 2) | // top B
-                                                    (((storage_.rgb_buffer_[bot] & mask) != 0) << 3) |     // bottom R
-                                                    (((storage_.rgb_buffer_[bot + 1] & mask) != 0) << 4) | // bottom G
-                                                    (((storage_.rgb_buffer_[bot + 2] & mask) != 0) << 5);  // bottom B
+                        out[fb_index++] = (((r0 & mask) != 0) << 0) | // top R    -> data_base_pin + 0
+                                          (((g0 & mask) != 0) << 1) | // top G
+                                          (((b0 & mask) != 0) << 2) | // top B
+                                          (((r1 & mask) != 0) << 3) | // bottom R
+                                          (((g1 & mask) != 0) << 4) | // bottom G
+                                          (((b1 & mask) != 0) << 5);  // bottom B
                     }
                 }
             }
         }
+        __dmb();
         swap_frame_buffer_pending_ = true;
     }
 }
