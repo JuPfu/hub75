@@ -25,7 +25,7 @@ constexpr Hub75Config panel_cfg{
         .scan_mode = 24, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
-        .sm_clockdiv_factor = 1.0f,
+        .sm_clockdiv_factor = 4.0f,
         .base_latch_ns = 180,
         .base_addr_ns = 260,
     },
@@ -61,6 +61,7 @@ static Panel driver;
 // one matching Panel's actual size via if constexpr, so the other three are never referenced
 // and the compiler discards them (each is `static`, internal linkage, unused).
 #include "taylor_swift_128x64.h"
+#include "taylor_swift_96x48.h"
 #include "taylor_swift_64x128.h"
 #include "taylor_swift_64x64.h"
 #include "matreshka_32x16.h"
@@ -69,6 +70,8 @@ const uint8_t *demo_image()
 {
     if constexpr (Panel::SCREEN_WIDTH == 128 && Panel::SCREEN_HEIGHT == 64)
         return taylor_swift_128x64;
+    else if constexpr (Panel::SCREEN_WIDTH == 96 && Panel::SCREEN_HEIGHT == 48)
+        return taylor_swift_96x48;
     else if constexpr (Panel::SCREEN_WIDTH == 64 && Panel::SCREEN_HEIGHT == 128)
         return taylor_swift_64x128;
     else if constexpr (Panel::SCREEN_WIDTH == 64 && Panel::SCREEN_HEIGHT == 64)
