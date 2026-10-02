@@ -384,7 +384,7 @@ private:
     static constexpr size_t bcm_sequence_length = BCM_SEQUENCE.size();
     static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint32_t);
 
-    static constexpr uint32_t CCM_MAX_VAL = (Cfg.color.bitplanes == 10) ? 1023u : 255u;
+    static constexpr uint32_t CCM_MAX_VAL = (1u << Cfg.color.bitplanes) - 1u;
     static constexpr uint32_t BRIGHTNESS_FP_SHIFT = 16u;
     static constexpr float SM_CLOCKDIV = (Cfg.panel.sm_clockdiv_factor < 1.0f) ? 1.0f : Cfg.panel.sm_clockdiv_factor;
     static constexpr int FRAME_MEASURE_INTERVAL = 100; // for testing/debugging only, see Cfg.frame_rate_debug
