@@ -832,7 +832,24 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               dma_encode_transfer_count((4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH) / 4), // 16 bit transfer - 2 bytes simultaneously
                               false);
 
-        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
+        uint32_t sys_clk_hz = clock_get_hz(clk_sys);
+
+        float value = sys_clk_hz / (5.0f * 1000000.0f) - 15.0f;
+
+        // icnd2153 pixel stream can run between 15 MHz and value MHz
+        float max_clockdiv = sys_clk_hz / (15.0f * 1000000.0f);
+        float min_clockdiv = sys_clk_hz / (value * 1000000.0f);
+        float sm_clockdiv = std::min(min_clockdiv, max_clockdiv);
+
+        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
+
+        // icnd2153 row can run between 20 MHz and value MHz
+        value = sys_clk_hz / (5.0f * 1000000.f) - 10.0f;
+        max_clockdiv = sys_clk_hz / (20.0f * 1000000.0f);
+        min_clockdiv = sys_clk_hz / (value * 1000000.0f);
+        sm_clockdiv = std::min(min_clockdiv, max_clockdiv);
+
+        pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
 }
 
@@ -1158,7 +1175,7 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         out[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
 
         for (uint32_t row = 0; row < SCAN_DEPTH; ++row)
-            for (uint32_t channel = 0; channel < 16; ++channel)       // first packet = OUT15
+            for (uint32_t channel = 0; channel < 16; ++channel)        // first packet = OUT15
                 for (uint32_t chip = 0; chip < CHIPS_PER_LANE; ++chip) // first chip = leftmost block
                 {
                     const uint32_t col = chip * 16 + channel;

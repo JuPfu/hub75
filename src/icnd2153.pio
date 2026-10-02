@@ -68,7 +68,6 @@ static inline void icnd2153_row_program_init(
     sm_config_set_sideset_pins(&c, gclk_pin);
     sm_config_set_out_shift(&c, true, false, 32);
     sm_config_set_mov_status(&c, STATUS_TX_LESSTHAN, 1);   // new
-    sm_config_set_clkdiv(&c, 3.75f);                       // 40 MHz @150 MHz: GCLK = 20 MHz
     pio_sm_init(pio, sm, offset, &c);
 
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
@@ -160,8 +159,8 @@ static inline void icnd2153_pixel_stream_program_init(
     sm_config_set_out_shift(&c, true, true, 32);
 
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
-    sm_config_set_clkdiv(&c, 10.0f);
 
+   
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
