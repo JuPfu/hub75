@@ -43,7 +43,7 @@ constexpr Hub75Config panel_cfg{
     .color = {
         .bitplanes = 16,
         .separate_cie_channels = true,
-        .balanced_light_output = true,
+        .balanced_light_output = false,
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },

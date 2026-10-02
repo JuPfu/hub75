@@ -115,28 +115,26 @@ static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 static constexpr uint8_t ICND2153_DATA_HIGH = 0x3f;
 static constexpr uint8_t ICND2153_DATA_LOW = 0x00;
 
-// lane bit i -> R1,G1,B1,R2,G2,B2 (bit 0..5)
-static void prepare_register_dma_lanes(const uint16_t v[6], uint32_t *dst, uint32_t dw)
+// Expands six 16-bit lane values into `display_width` words (one per CLK pulse), MSB first,
+// repeated once per chained chip. Bit n of every word goes to data lane n (data_base_pin + n).
+static void prepare_register_dma_lanes(const uint16_t lane_value[6], uint32_t *dst, uint32_t display_width)
 {
-    for (uint32_t chip = 0; chip < dw / 16; ++chip)
-        for (int bit = 15; bit >= 0; --bit) {
+    const uint32_t chips = display_width / 16; // one 16-bit register per chained chip
+    for (uint32_t chip = 0; chip < chips; ++chip)
+        for (int bit = 15; bit >= 0; --bit)
+        {
             uint32_t w = 0;
-            for (int l = 0; l < 6; ++l) w |= ((v[l] >> bit) & 1u) << l;
+            for (uint32_t lane = 0; lane < 6; ++lane)
+                w |= ((static_cast<uint32_t>(lane_value[lane]) >> bit) & 1u) << lane;
             *dst++ = w;
         }
 }
-const uint16_t cfg2_lane[6] = {0x7F9C, 0x679C, 0x5F9C, 0x7F9C, 0x679C, 0x5F9C};
 
+// Same value on every lane (REG1, REG3, REG4, REG5)
 static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display_width)
 {
-    int repeats_per_chain = display_width / 16; // one 16-bit register per chained chip
-    for (int chip = 0; chip < repeats_per_chain; ++chip)
-    {
-        for (int bit = 15; bit >= 0; --bit) // MSB first
-        {
-            *dst++ = (value & (1u << bit)) ? ICND2153_DATA_HIGH : ICND2153_DATA_LOW;
-        }
-    }
+    const uint16_t lanes[6] = {value, value, value, value, value, value};
+    prepare_register_dma_lanes(lanes, dst, display_width);
 }
 
 // -----------------------------------------------------------------------------
@@ -159,7 +157,15 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
     prepare_register_dma(ICND2153_CFG1_VALUE, cfg1_buf, display_width);
-    prepare_register_dma(ICND2153_CFG2_VALUE, cfg2_buf, display_width); // TODO: RED/GREEN/BLUE — see icnd2153.h
+
+    // REG2 carries the pre-charge level, which depends on the LED colour the lane drives.
+    uint16_t cfg2_lane[6];
+    for (uint32_t n = 0; n < 6; ++n)
+        cfg2_lane[n] = ICND2153_CFG2_PER_COLOUR
+                           ? static_cast<uint16_t>(ICND2153_CFG2_BY_COLOUR[icnd2153_lane_colour(n)] | ICND2153_CFG2_EXTRA)
+                           : ICND2153_CFG2_VALUE;
+    prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
+
     prepare_register_dma(ICND2153_CFG3_VALUE, cfg3_buf, display_width);
     prepare_register_dma(ICND2153_CFG4_VALUE, cfg4_buf, display_width);
     prepare_register_dma(ICND2153_CFG5_VALUE, dbg_buf, display_width);

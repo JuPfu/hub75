@@ -11,9 +11,9 @@ scan_pass:
     mov y, status        side 0b0   ; all ones while TX FIFO is empty (no token)
     jmp y--, seed_row    side 0b0   ; no token: keep refreshing
 
-    ; ---- token pending: GCLK is idle, send VSYNC and release the pixel SM ----
+    ; ---- token pending: GCLK is idle, send VSYNC and release the pixel state machine ----
     pull block           side 0b0   ; consume token, OSR = rows - 1
-    irq nowait 2         side 0b0   ; pixel SM: VSYNC + start of frame
+    irq nowait 2         side 0b0   ; pixel state machine: VSYNC + start of frame
     wait 1 irq 3         side 0b0   ; VSYNC done
 
     ; ------------------------------------------------------------------
@@ -21,8 +21,8 @@ scan_pass:
     ; ------------------------------------------------------------------
 seed_row:
     mov x, osr           side 0b0  
-    set pins, 0b101 [15]  side 0b0   ; Step decoder (RA=1, RC=1)
-    set pins, 0b000 [15]  side 0b0   ; Step decoder (RA=0, RC=0) -> Row 0 selected
+    set pins, 0b101 [15] side 0b0   ; Step decoder (RA=1, RC=1)
+    set pins, 0b000 [15] side 0b0   ; Step decoder (RA=0, RC=0) -> Row 0 selected
 
 row_loop:
     mov y, isr           side 0b0
