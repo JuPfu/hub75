@@ -1120,64 +1120,53 @@ inline void Hub75Driver<Cfg>::write_pixel_rgb(size_t &fb_index, const uint8_t *s
     }
 }
 
+// v[0..5] = top R,G,B, bottom R,G,B (16-bit, already corrected). Writes 16 bytes, MSB first.
+static inline void pwm_expand_channels_(const uint16_t *v, uint8_t *dst)
+{
+    for (uint32_t bit = 0; bit < 16; ++bit)
+    {
+        const uint32_t sh = 15u - bit;
+        uint32_t w = 0;
+        for (uint32_t k = 0; k < 6; ++k)
+            w |= ((static_cast<uint32_t>(v[k]) >> sh) & 1u) << ICND2153_LANE_OF[k];
+        dst[bit] = static_cast<uint8_t>(w);
+    }
+}
+
 template <Hub75Config Cfg>
 __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_stream()
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        uint32_t irq_state = save_and_disable_interrupts();
-        // swap_frame_buffer_pending_ = false; // a swap during this build would send half a frame
-        uint8_t *const out = frame_buffer_; // this build's buffer, fixed for the whole function
-        restore_interrupts(irq_state);
-
         static_assert(ROWS_IN_PARALLEL == 2 && Cfg.panel.chain_rows == 1, "PWM stream assumes 2 parallel rows and a single chain row");
+        static_assert(Cfg.color.bitplanes == 16, "PWM stream carries 16 bit per channel");
+
+        // Back-pressure: do not touch the back buffer while a finished frame still waits for its swap.
+        // The timeout only matters if the DMA is not running (e.g. update() before start()).
+        // const absolute_time_t t_end = make_timeout_time_ms(250);
+        // while (swap_frame_buffer_pending_ && !time_reached(t_end))
+        //     tight_loop_contents();
+        // __dmb();
+        uint8_t *const out = frame_buffer_;
 
         constexpr uint32_t CHIPS_PER_LANE = DISPLAY_WIDTH / 16;
-        constexpr uint32_t paired_row_offset = stride_to_paired_row * 3;
-
         uint32_t fb_index = 0;
 
-        // Header word (little endian)
         out[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
         out[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
         out[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
         out[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
-        for (uint32_t row = 0; row < SCAN_DEPTH; row++)
-        {
-            for (uint32_t channel = 0; channel < 16; channel++) // 0 = first packet = OUT15
-            {
-                // MEASURED on the panel: OUT15 drives the leftmost pixel of a chip's 16-column block
-                const uint32_t col_offset = channel;
 
-                // First-sent chip is the farthest in the chain = the leftmost 16-column block
-                for (uint32_t chip = 0; chip < CHIPS_PER_LANE; ++chip)
+        for (uint32_t row = 0; row < SCAN_DEPTH; ++row)
+            for (uint32_t channel = 0; channel < 16; ++channel)       // first packet = OUT15
+                for (uint32_t chip = 0; chip < CHIPS_PER_LANE; ++chip) // first chip = leftmost block
                 {
-                    const uint32_t col = chip * 16 + col_offset;
-                    const uint32_t top = ((row * DISPLAY_WIDTH + col) * ROWS_IN_PARALLEL) * 3;
-                    const uint32_t bot = top + 3;
-
-                    const uint16_t r0 = cie_red_table()[storage_.rgb_buffer_[top + 2]];
-                    const uint16_t g0 = cie_green_table()[storage_.rgb_buffer_[top + 0]];
-                    const uint16_t b0 = cie_blue_table()[storage_.rgb_buffer_[top + 1]];
-
-                    const uint16_t r1 = cie_red_table()[storage_.rgb_buffer_[bot + 2]];
-                    const uint16_t g1 = cie_green_table()[storage_.rgb_buffer_[bot + 0]];
-                    const uint16_t b1 = cie_blue_table()[storage_.rgb_buffer_[bot + 1]];
-
-                    for (uint32_t bit = 0; bit < 16; bit++) // MSB first
-                    {
-                        const uint16_t mask = 1u << (15 - bit);
-
-                        out[fb_index++] = (((r0 & mask) != 0) << 0) | // top R    -> data_base_pin + 0
-                                          (((g0 & mask) != 0) << 1) | // top G
-                                          (((b0 & mask) != 0) << 2) | // top B
-                                          (((r1 & mask) != 0) << 3) | // bottom R
-                                          (((g1 & mask) != 0) << 4) | // bottom G
-                                          (((b1 & mask) != 0) << 5);  // bottom B
-                    }
+                    const uint32_t col = chip * 16 + channel;
+                    const uint16_t *p = &storage_.rgb_buffer_[((row * DISPLAY_WIDTH + col) * ROWS_IN_PARALLEL) * 3];
+                    pwm_expand_channels_(p, &out[fb_index]);
+                    fb_index += 16;
                 }
-            }
-        }
+
         __dmb();
         swap_frame_buffer_pending_ = true;
     }

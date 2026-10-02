@@ -52,6 +52,35 @@ static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7; // 0x40F3; // 0x40F7; 0b
 static constexpr uint16_t ICND2153_CFG4_VALUE = 0x0040; // 0x0000; // 0x0040;
 static constexpr uint16_t ICND2153_CFG5_VALUE = 0x0008; // 0x0000; // 0x0008; // debug register (REG5) example value
 
+// Logical channel index used by build_pixel_stream():
+//   0 = top R, 1 = top G, 2 = top B, 3 = bottom R, 4 = bottom G, 5 = bottom B
+// ICND2153_LANE_OF[k] = data lane (offset from data_base_pin) that must carry channel k.
+// Identity = HUB75 convention (R1 G1 B1 R2 G2 B2). MEASURE with debug_lane_bands(), then edit.
+static constexpr uint8_t ICND2153_LANE_OF[6] = {0, 1, 2, 3, 4, 5};
+
+constexpr bool icnd2153_lane_map_valid()
+{
+    uint32_t seen = 0;
+    for (uint32_t k = 0; k < 6; ++k)
+    {
+        if (ICND2153_LANE_OF[k] > 5) return false;
+        seen |= 1u << ICND2153_LANE_OF[k];
+    }
+    return seen == 0x3Fu;
+}
+static_assert(icnd2153_lane_map_valid(), "ICND2153_LANE_OF must be a permutation of 0..5");
+
+// Colour (0 = R, 1 = G, 2 = B) physically driven by data lane n
+constexpr uint32_t icnd2153_lane_colour(uint32_t lane)
+{
+    for (uint32_t k = 0; k < 6; ++k)
+        if (ICND2153_LANE_OF[k] == lane) return k % 3;
+    return 0;
+}
+
+// Software white balance, Q8 (256 = 1.0). Lower the colours that look too strong.
+static constexpr uint16_t ICND2153_WHITE_BALANCE_Q8[3] = {256, 256, 256};
+
 // -----------------------------------------------------------------------------
 // icnd2153_initialize()
 //
