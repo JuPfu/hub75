@@ -169,6 +169,8 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
 #endif
 
     // ---------------------------------------------------------------------
+    // After some more testing I come to the conclusion that the following call to rul6024_write_register is redundant,
+    // but as it does now harm (tell me if you think I should drop it) I will keep it:
     // The "rul6024_write_register(pio, sm, display_width, CMD_WREG2 + 1, wreg2_buf);" is doing the trick.
     // I do not know why - no documentation available.
     rul6024_write_register(pio, sm, display_width, CMD_WREG2 + 1, wreg2_buf);
