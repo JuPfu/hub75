@@ -15,17 +15,17 @@
 // Matches a single generic 64x64 panel wired to GPIO 0-13.
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 96,
-        .matrix_panel_height = 48,
+        .matrix_panel_width = 64,
+        .matrix_panel_height = 64,
         .chain_rows = 1,
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
-        .address_type = RowAddressing::ABCShiftRegister,
-        .scan_mode = 24, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
+        .address_type = RowAddressing::Binary,
+        .scan_mode = 0, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
-        .sm_clockdiv_factor = 4.0f,
+        .sm_clockdiv_factor = 1.0f,
         .base_latch_ns = 180,
         .base_addr_ns = 260,
     },
@@ -36,7 +36,7 @@ constexpr Hub75Config panel_cfg{
         .data_base_pin = 0,
         .data_n_pins = 6,
         .rowsel_base_pin = 6,
-        .rowsel_n_pins = 3,
+        .rowsel_n_pins = 5,
         .clk_pin = 11,
         .strobe_pin = 12,
         .oen_pin = 13,
@@ -45,11 +45,11 @@ constexpr Hub75Config panel_cfg{
         .bitplanes = 10,
         .separate_cie_channels = true,
         .balanced_light_output = true,
-        .swap_rb_pins = true,
+        .swap_rb_pins = false,
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = true,
+    .frame_rate_debug = false,
 };
 
 using Panel = Hub75Driver<panel_cfg>;
