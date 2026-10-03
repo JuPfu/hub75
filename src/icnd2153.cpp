@@ -145,7 +145,7 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 // -----------------------------------------------------------------------------
 static void icnd2153_setup(PIO pio, uint sm, uint offset)
 {
-    uint32_t display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols;
+    uint32_t display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols * cfg.panel.chain_rows;
 
     // Must happen before any register_slot() call below.
     ensure_register_dma_buffer_capacity(display_width);

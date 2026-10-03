@@ -648,39 +648,6 @@ void Hub75Driver<Cfg>::configure_pio()
 
                 printf("claiming icnd2153_row_program resulted in %d   row_lo=%d  row_hi=%d\n", row_ok, row_lo, row_hi);
 
-                // if (row_ok)
-                // {
-                //     printf("successfully claimed icnd2153_row_program\n");
-
-                //     // icnd2153_gclk only touches oen_pin (1 pin) - a single-pin range, distinct
-                //     // from both the stream (CLK/LE/data) and row (RA/RB/RC) pin groups above.
-                //     static constexpr uint32_t gclk_lo = Cfg.pins.oen_pin;
-                //     static constexpr uint32_t gclk_hi = Cfg.pins.oen_pin;
-
-                //     bool gckl_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                //                                       { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                //                                             &icnd2153_gclk_program,
-                //                                             &pio_config_.gclk_pio,
-                //                                             &pio_config_.sm_gclk,
-                //                                             &pio_config_.gclk_prog_offs,
-                //                                             gclk_lo,
-                //                                             gclk_hi - gclk_lo + 1,
-                //                                             true); });
-                //     if (gckl_ok)
-                //     {
-                //         printf("successfully claimed icnd2153_gclk_program\n");
-                //         placed = true;
-                //         break;
-                //     }
-
-                //     printf("gclk claim failed claimed icnd2153_gclk_program\n");
-                //     // gclk claim failed - undo the row claim before retrying the next PIO block,
-                //     // otherwise it leaks (pixel_stream's cleanup below only covers itself).
-                //     pio_remove_program_and_unclaim_sm(&icnd2153_row_program, pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs);
-                // }
-
-                // printf("remove icnd2153_pixel_stream_program\n");
-                // pio_remove_program_and_unclaim_sm(&icnd2153_pixel_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
                 if (row_ok)
                 {
                     printf("successfully claimed icnd2153_row_program\n");
@@ -829,7 +796,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               &pixel_chan_config,
                               &pio_config_.data_pio->txf[pio_config_.sm_data],
                               dma_buffer_,
-                              dma_encode_transfer_count((4 + SCAN_DEPTH * 16 * DISPLAY_WIDTH) / 4), // 16 bit transfer - 2 bytes simultaneously
+                              dma_encode_transfer_count(PWM_FRAME_BYTES / 4), // 16 bit transfer - 2 bytes simultaneously
                               false);
 
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
@@ -1155,34 +1122,48 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
-        static_assert(ROWS_IN_PARALLEL == 2 && Cfg.panel.chain_rows == 1, "PWM stream assumes 2 parallel rows and a single chain row");
+        static_assert(ROWS_IN_PARALLEL == 2, "PWM stream assumes 2 parallel rows");
         static_assert(Cfg.color.bitplanes == 16, "PWM stream carries 16 bit per channel");
 
-        // Back-pressure: do not touch the back buffer while a finished frame still waits for its swap.
-        // The timeout only matters if the DMA is not running (e.g. update() before start()).
-        // const absolute_time_t t_end = make_timeout_time_ms(250);
-        // while (swap_frame_buffer_pending_ && !time_reached(t_end))
-        //     tight_loop_contents();
-        // __dmb();
+        const absolute_time_t t_end = make_timeout_time_ms(250);
+        while (swap_frame_buffer_pending_ && !time_reached(t_end))
+            tight_loop_contents();
+        __dmb();
         uint8_t *const out = frame_buffer_;
 
-        constexpr uint32_t CHIPS_PER_LANE = DISPLAY_WIDTH / 16;
+        constexpr uint32_t CHIPS_PER_PANEL = Cfg.panel.matrix_panel_width / 16;
+        constexpr uint32_t PANELS = Cfg.panel.chain_rows * Cfg.panel.chain_cols;
+        constexpr uint32_t CHIPS_PER_LANE = PANELS * CHIPS_PER_PANEL;      // == CHAIN_WIDTH / 16
+
         uint32_t fb_index = 0;
 
         out[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
         out[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
-        out[fb_index++] = (DISPLAY_WIDTH - 2) & 0xFF;
-        out[fb_index++] = ((DISPLAY_WIDTH - 2) >> 8) & 0xFF;
+        out[fb_index++] = (CHAIN_WIDTH - 2) & 0xFF;
+        out[fb_index++] = ((CHAIN_WIDTH - 2) >> 8) & 0xFF;
 
         for (uint32_t row = 0; row < SCAN_DEPTH; ++row)
-            for (uint32_t channel = 0; channel < 16; ++channel)        // first packet = OUT15
-                for (uint32_t chip = 0; chip < CHIPS_PER_LANE; ++chip) // first chip = leftmost block
+        {
+            for (uint32_t channel = 0; channel < 16; ++channel)            // first packet = OUT15
+            {
+                for (uint32_t m = 0; m < CHIPS_PER_LANE; ++m)              // m = position in the transaction, first-sent first
                 {
-                    const uint32_t col = chip * 16 + channel;
-                    const uint16_t *p = &storage_.rgb_buffer_[((row * DISPLAY_WIDTH + col) * ROWS_IN_PARALLEL) * 3];
+                    // Chip whose pixels travel at this position. Panel order can be flipped
+                    // without touching the chip order inside a panel.
+                    const uint32_t chip = Cfg.panel.pwm_reverse_chain_order
+                                              ? (PANELS - 1 - m / CHIPS_PER_PANEL) * CHIPS_PER_PANEL + m % CHIPS_PER_PANEL
+                                              : m;
+
+                    // position inside this address row's pixel stream; update_bgr() already put
+                    // panels, serpentine reversal and the paired rows into this order
+                    const uint32_t pos = chip * 16 + channel;
+                    const uint16_t *p = &storage_.rgb_buffer_[((row * CHAIN_WIDTH + pos) * ROWS_IN_PARALLEL) * 3];
+
                     pwm_expand_channels_(p, &out[fb_index]);
                     fb_index += 16;
                 }
+            }
+        }
 
         __dmb();
         swap_frame_buffer_pending_ = true;

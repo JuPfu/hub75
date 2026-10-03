@@ -100,6 +100,10 @@ struct Hub75PanelConfig
     // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set panel_chip to Hub75PanelChip::RUL6024
     Hub75PanelChip panel_chip = Hub75PanelChip::GENERIC;
 
+    // PWM panels only: reverse the order of the PANELS inside a chain (the order of chips within a
+    // panel is not affected). Flip this if panels of a chain appear in the wrong positions.
+    bool pwm_reverse_chain_order = false;
+
     bool inverted_stb = false;
 
     // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
@@ -339,6 +343,16 @@ private:
     static constexpr uint32_t ROWS_IN_PARALLEL = Cfg.panel.matrix_panel_height / SCAN_DEPTH;
     static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH; // alias, used for RowMapping::Split panels
 
+    // ===>>> ICND2153 definitions
+    // Clock pulses per transaction = chips per lane x 16 = the WHOLE chain, not one chain row
+    static constexpr uint32_t CHAIN_WIDTH = Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols;
+    static constexpr uint32_t PWM_FRAME_BYTES = 4 + CHAIN_WIDTH * SCAN_DEPTH * 16; // header + 16 channels x 16 bit
+
+    static_assert(Cfg.panel.panel_class != PanelClass::PWM || Cfg.panel.matrix_panel_width % 16 == 0,
+                  "PWM panels: matrix_panel_width must be a multiple of 16 (one chip = 16 columns)");
+    static_assert(CHAIN_WIDTH <= 65536 && SCAN_DEPTH * 16 <= 65536, "pixel stream header fields are 16 bit");
+    // <<<=== ICND2153 definitions
+
     static constexpr uint32_t LINE_OFFSET = ((Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols) >> 1u) * ROWS_IN_PARALLEL;
     static constexpr int32_t BITPLANE_STREAM_LENGTH = static_cast<int32_t>(LINE_OFFSET);
 
@@ -484,9 +498,8 @@ private:
     struct Hub75Storage<PanelClass::PWM, CfgVal>
     {
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
-
-        alignas(4) uint8_t frame_buffer1_[4 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
-        alignas(4) uint8_t frame_buffer2_[4 + DISPLAY_WIDTH * SCAN_DEPTH * Cfg.color.bitplanes];
+        alignas(4) uint8_t frame_buffer1_[PWM_FRAME_BYTES];
+        alignas(4) uint8_t frame_buffer2_[PWM_FRAME_BYTES];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;

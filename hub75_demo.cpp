@@ -24,7 +24,7 @@ constexpr Hub75Config panel_cfg{
         .panel_kind = RowMapping::Standard,
         .panel_chip = Hub75PanelChip::ICND2153,
         .inverted_stb = false,
-        .sm_clockdiv_factor = 15.0f,
+        .sm_clockdiv_factor = 1.0f,
         .base_latch_ns = 180,
         .base_addr_ns = 260,
     },
@@ -47,7 +47,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
-    .frame_rate_debug = true,
+    .frame_rate_debug = false,
 };
 
 using Panel = Hub75Driver<panel_cfg>;
@@ -230,7 +230,7 @@ int main()
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
-    const float fps = 100.0f;
+    const float fps = 75.0f;
     const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel
