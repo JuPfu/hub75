@@ -15,15 +15,17 @@
 // Matches a single generic 64x64 panel wired to GPIO 0-13.
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,
-        .matrix_panel_height = 64,
+        .matrix_panel_width = 96,
+        .matrix_panel_height = 48,
         .chain_rows = 1,
         .chain_cols = 1,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
+        .address_type = RowAddressing::ABCShiftRegister,
+        .scan_mode = 24, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
         .panel_chip = Hub75PanelChip::GENERIC,
         .inverted_stb = false,
-        .sm_clockdiv_factor = 1.0f,
+        .sm_clockdiv_factor = 4.0f,
         .base_latch_ns = 180,
         .base_addr_ns = 260,
     },
@@ -34,7 +36,7 @@ constexpr Hub75Config panel_cfg{
         .data_base_pin = 0,
         .data_n_pins = 6,
         .rowsel_base_pin = 6,
-        .rowsel_n_pins = 5,
+        .rowsel_n_pins = 3,
         .clk_pin = 11,
         .strobe_pin = 12,
         .oen_pin = 13,
@@ -43,6 +45,7 @@ constexpr Hub75Config panel_cfg{
         .bitplanes = 10,
         .separate_cie_channels = true,
         .balanced_light_output = true,
+        .swap_rb_pins = true,
         .ccm_rg_shift = 6,
         .ccm_gb_shift = 7,
     },
@@ -58,6 +61,7 @@ static Panel driver;
 // one matching Panel's actual size via if constexpr, so the other three are never referenced
 // and the compiler discards them (each is `static`, internal linkage, unused).
 #include "taylor_swift_128x64.h"
+#include "taylor_swift_96x48.h"
 #include "taylor_swift_64x128.h"
 #include "taylor_swift_64x64.h"
 #include "matreshka_32x16.h"
@@ -66,6 +70,8 @@ const uint8_t *demo_image()
 {
     if constexpr (Panel::SCREEN_WIDTH == 128 && Panel::SCREEN_HEIGHT == 64)
         return taylor_swift_128x64;
+    else if constexpr (Panel::SCREEN_WIDTH == 96 && Panel::SCREEN_HEIGHT == 48)
+        return taylor_swift_96x48;
     else if constexpr (Panel::SCREEN_WIDTH == 64 && Panel::SCREEN_HEIGHT == 128)
         return taylor_swift_64x128;
     else if constexpr (Panel::SCREEN_WIDTH == 64 && Panel::SCREEN_HEIGHT == 64)

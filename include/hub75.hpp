@@ -35,6 +35,31 @@ enum class RowMapping
     S31,      // four rows lit simultaneously - four-way interleaved quarter mapping, panels marketed as "...S31"
 };
 
+enum class RowAddressing
+{
+    Binary, // the row number in binary, A..E being the row-select pins
+    // One-hot row number clocked through a shift register in the row driver, on three
+    // row-select pins: A = row clock, B = BK (discharge enable), C = row data. Row 0
+    // injects the 1, every following row clocks it one step on. Used by 74HC595-type
+    // row switchers, e.g. the SM5368 or the DP32020.
+    ABCShiftRegister,
+};
+
+// Named presets bundling the handful of fields that actually vary panel-to-panel
+// (matrix dimensions, address-pin count, row-addressing scheme, R/B swap) - modeled
+// after the PANEL_PROFILE cache variable in Waveshare's fork of this project. Pick
+// CUSTOM (the default) to set Hub75PanelConfig/Hub75PinConfig/Hub75ColorConfig fields
+// yourself; pick anything else and pass it through make_hub75_config() below.
+enum class Hub75PanelProfile
+{
+    CUSTOM,             // No preset applied - use explicit field values.
+    P64X32_1_16,        // 64x32 panel,  1:16 scan
+    P64X64_1_32,        // 64x64 panel,  1:32 scan
+    P80X40_1_20,        // 80x40 panel,  1:20 scan
+    P96X48_1_24,        // 96x48 panel,  1:24 scan
+    P96X48_1_24_SR,     // 96x48 panel,  1:24 scan, ABC shift-register row addressing, R/B swapped
+};
+
 // Selects the panel-chip init sequence sent before streaming starts.
 enum class Hub75PanelChip
 {
@@ -87,6 +112,13 @@ struct Hub75PanelConfig
     // Scan rate 1:4  for a 32x16 matrix panel means 16 pixel height divided by 4  pixel results in 4 rows lit simultaneously.
     RowMapping panel_kind = RowMapping::Standard;
 
+    RowAddressing address_type = RowAddressing::Binary;
+
+    // Scan mode: the number of distinct row addresses, i.e. the "N" in the panel's stated 1:N
+    // scan rate. 0 derives it from the height and rowsel_n_pins; set it when the panel's scan rate
+    // is not what those imply. Must leave 2 or 4 rows lit per address.
+    uint32_t scan_mode = 0;
+
     // e.g. P3-64*64-32S-V2.0 might have a RUL6024 chip, if so, set panel_chip to Hub75PanelChip::RUL6024
     Hub75PanelChip panel_chip = Hub75PanelChip::GENERIC;
 
@@ -113,8 +145,8 @@ struct Hub75ScreenConfig
 // Wiring of the HUB75 matrix.
 struct Hub75PinConfig
 {
-    uint32_t data_base_pin = 0; // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
-    uint32_t data_n_pins = 6;   // count of consecutive color pins usually 6
+    uint32_t data_base_pin = 0;   // start gpio pin of consecutive color pins e.g., r1, g1, b1, r2, g2, b2
+    uint32_t data_n_pins = 6;     // count of consecutive color pins usually 6
     uint32_t rowsel_base_pin = 6; // start gpio pin of address pins
     uint32_t rowsel_n_pins = 5;   // count of consecutive address pins - adapt to the number of address pins of your panel
     uint32_t clk_pin = 11;
@@ -145,6 +177,9 @@ struct Hub75ColorConfig
     // This increases the effective refresh rate and cuts down flicker at the cost of some more memory consumption.
     bool balanced_light_output = true;
 
+    // swap red and blue
+    bool swap_rb_pins = false;
+
     uint32_t ccm_rg_shift = 31; // bits of Green added into Red output   (31 = off)
     uint32_t ccm_rb_shift = 31; // bits of Blue  added into Red output   (31 = off)
     uint32_t ccm_gr_shift = 31; // bits of Red   added into Green output (31 = off)
@@ -164,17 +199,89 @@ struct Hub75Config
     bool frame_rate_debug = false;
 };
 
+// The fields a Hub75PanelProfile expands to. Kept as its own plain struct (rather than
+// a full Hub75Config) because a profile only ever touches fields spread across
+// Hub75PanelConfig, Hub75PinConfig and Hub75ColorConfig - everything else (wiring,
+// chaining, bit depth, color correction, ...) is left entirely up to the caller.
+struct Hub75PanelProfileValues
+{
+    uint32_t matrix_panel_width;
+    uint32_t matrix_panel_height;
+    uint32_t rowsel_n_pins;
+    RowAddressing address_type;
+    bool swap_rb_pins;
+};
+
+// See README.md / Waveshare's CMakeLists.txt for where these values come from.
+// To add support for a new panel, add a case here (and to Hub75PanelProfile above).
+constexpr Hub75PanelProfileValues hub75_panel_profile_values(Hub75PanelProfile profile)
+{
+    switch (profile)
+    {
+    case Hub75PanelProfile::P64X32_1_16:
+        return {64, 32, 4, RowAddressing::Binary, false};
+    case Hub75PanelProfile::P64X64_1_32:
+        return {64, 64, 5, RowAddressing::Binary, false};
+    case Hub75PanelProfile::P80X40_1_20:
+        return {80, 40, 5, RowAddressing::Binary, false};
+    case Hub75PanelProfile::P96X48_1_24:
+        return {96, 48, 5, RowAddressing::Binary, false};
+    case Hub75PanelProfile::P96X48_1_24_SR:
+        return {96, 48, 3, RowAddressing::ABCShiftRegister, true};
+    case Hub75PanelProfile::CUSTOM:
+    default:
+        return {0, 0, 0, RowAddressing::Binary, false};
+    }
+}
+
+// Applies `profile` on top of `base`: matrix_panel_width/height, rowsel_n_pins,
+// address_type and swap_rb_pins are overwritten from the profile's preset values;
+// every other field of `base` (wiring, chaining, bit depth, CCM, rotation, ...) passes
+// through unchanged. CUSTOM is a no-op, so a build can be switched between a named
+// profile and fully manual configuration without touching anything else.
+//
+// Usage:
+//
+//   inline constexpr Hub75Config MyConfig = make_hub75_config(
+//       Hub75PanelProfile::P96X48_1_24_SR,
+//       Hub75Config{
+//           .pins = {.data_base_pin = 0, .rowsel_base_pin = 6,
+//                     .clk_pin = 11, .strobe_pin = 12, .oen_pin = 13},
+//           .color = {.bitplanes = 10},
+//       });
+//
+// The profile's rowsel_n_pins/address_type/swap_rb_pins win over anything set in
+// `base.pins`/`base.color`/`base.panel` for those specific fields - so with a non-CUSTOM
+// profile there is no need (and no point) to also set matrix_panel_width/height,
+// rowsel_n_pins, address_type or swap_rb_pins on `base` yourself.
+constexpr Hub75Config make_hub75_config(Hub75PanelProfile profile, Hub75Config base = {})
+{
+    if (profile == Hub75PanelProfile::CUSTOM)
+        return base;
+
+    const Hub75PanelProfileValues v = hub75_panel_profile_values(profile);
+    base.panel.matrix_panel_width = v.matrix_panel_width;
+    base.panel.matrix_panel_height = v.matrix_panel_height;
+    base.panel.address_type = v.address_type;
+    base.pins.rowsel_n_pins = v.rowsel_n_pins;
+    base.color.swap_rb_pins = v.swap_rb_pins;
+    return base;
+}
+
 // Command structure for the row control PIO state machine. Each entry defines the timing
 // and addressing for one row in a specific bitplane slice.
 //
 // Memory layout (packed, DMA streamed):
-//   [0] addr_delay  : bits[4:0] row_address (A..E lines), bits[31:5] t_addr (PIO cycles)
+//   Row advance via pin-mapped addressing (binary addressing)
+//   [0] addr_delay  : bits[4:0] row address, bits[31:5] t_addr (PIO cycles)
+//   Row advance via shift register (enum class RowAddressing::ABCShiftRegister)
+//   [0] addr_delay  : bits[5:0] row address, bits[31:6] t_addr (PIO cycles)
 //   [1] lit_cycles  : OE active duration (LEDs ON)
 //   [2] dark_cycles : OE inactive duration (LEDs OFF)
 //
-// addr_delay is packed this way because the hub75_row PIO program consumes it as one
-// 32-bit DMA word: `out pins, 5` peels off the row address, then `out x, 27` takes the
-// rest straight into the address-settle wait loop.
+// addr_delay is packed this way because the row PIO program consumes it as one
+// 32-bit DMA word: The first `out` peels off the address field, the second `out`
+// takes the rest straight into the address-settle wait loop.
 //
 // Must remain tightly packed (no padding) - consumed sequentially by DMA -> PIO.
 struct Hub75RowCmd
@@ -250,7 +357,8 @@ private:
     // global IRQ handlers below (which read the same state, possibly on the other core).
     // Initialized eagerly here (dynamic init of an inline variable runs on core0 before main(),
     // i.e. before core1 could ever be launched), so there's no lazy-init race to solve too.
-    static inline critical_section_t s_instance_lock = [] {
+    static inline critical_section_t s_instance_lock = []
+    {
         critical_section_t cs;
         critical_section_init(&cs);
         return cs;
@@ -285,12 +393,12 @@ public:
             ? DISPLAY_WIDTH
             : DISPLAY_HEIGHT;
     static_assert(SCREEN_WIDTH == ((Cfg.screen.rotation == Hub75Rotation::DEG_90 || Cfg.screen.rotation == Hub75Rotation::DEG_270)
-                                        ? Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height
-                                        : Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width),
+                                       ? Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height
+                                       : Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width),
                   "Width/height mismatch for rotated display");
     static_assert(SCREEN_HEIGHT == ((Cfg.screen.rotation == Hub75Rotation::DEG_90 || Cfg.screen.rotation == Hub75Rotation::DEG_270)
-                                         ? Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width
-                                         : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
+                                        ? Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width
+                                        : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
                   "Width/height mismatch for rotated display");
 
     Hub75Driver() = default;
@@ -317,12 +425,59 @@ public:
     void setIntensity(float intensity, bool linear_brightness_control = true);
 
 private:
-    // --- panel/addressing constants -----------------------------------------------------------
+    // --- Panel / Addressing Deductions -----------------------------------------------------------
+
+    // 1. Number of row-select pins the panel exposes: A..E for binary addressing, clk/BK/data on
+    //    a shift-register panel. It cannot be deduced from the panel height: a 64-row panel is 5 lines
+    //    with 2 rows lit at once (P64X64_1_32) or 4 lines with 4 (RowMapping::S31, see README).
+    //    So it has to be configured, and it is not always 5.
     static constexpr uint32_t ADDR_PINS = Cfg.pins.rowsel_n_pins;
-    static constexpr uint32_t ADDR_MASK = (1u << ADDR_PINS) - 1u;
-    static constexpr uint32_t SCAN_DEPTH = 1u << ADDR_PINS; // e.g. 16 for 1/16 scan
+    static_assert(ADDR_PINS >= 1u && ADDR_PINS <= 5u, "rowsel_n_pins must be set to the row-select pin count of the panel (1-5) - 0 is unset, and no supported panel exposes more than 5");
+
+    // Width of the row-address field in the low end of Hub75RowCmd::addr_delay. Must match the
+    // `out pins, N` / `out x, 32-N` split in src/hub75.pio, for all row programs.
+    // 6 bits are reserved to support panels that address rows through a shift register instead
+    // of direct pin-mapped binary addressing, like the SM5368 (see encode_row_address() and
+    // the hub75_row_abc_shift_register PIO program).
+    static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Binary ? 5u : 6u;
+    static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS <= 6u, "Row address field must leave room for t_addr in the 32-bit DMA word");
+    static_assert(ADDR_PINS <= ROW_ADDR_BITS, "rowsel_n_pins must fit the row-address field - more address pins than ROW_ADDR_BITS pushes row bits into t_addr");
+    static_assert(Cfg.panel.address_type != RowAddressing::ABCShiftRegister || Cfg.pins.rowsel_n_pins == 3, "For ABCShiftRegister row address type rowsel_n_pins must be set to 3!");
+    // 2. Maximum addressing capability for the pin count (e.g. 5 pins -> 32 states)
+    static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);
+
+    // is the height dimension of the matrix a power of two value ?
+    static constexpr bool PanelHeightisPowerOfTwo = !(Cfg.panel.matrix_panel_height == 0) && !(Cfg.panel.matrix_panel_height & (Cfg.panel.matrix_panel_height - 1));
+
+    // 3. Determine SCAN_DEPTH and ROWS_IN_PARALLEL automatically
+    //
+    // The pow2 path derives the scan depth from the address line count, which only carries meaning
+    // for binary addressing. The shift register's 3 lines are row clock, BK and data, not a binary address,
+    // so `1 << 3` states nothing about scan depth - it always takes the two-rows-in-parallel path.
+    static constexpr uint32_t SCAN_DEPTH =
+        (Cfg.panel.scan_mode > 0u)
+            ? Cfg.panel.scan_mode
+            : ((PanelHeightisPowerOfTwo && (Cfg.panel.address_type == RowAddressing::Binary))
+                   ? MAX_SCAN_DEPTH
+                   : (Cfg.panel.matrix_panel_height / 2u));
+
+    // A HUB75 connector carries two RGB groups, so one address lights at least 2 rows. This is
+    // the floor that the ROWS_IN_PARALLEL == 2 || == 4 assert below narrows to the two real cases.
+    static_assert(SCAN_DEPTH <= Cfg.panel.matrix_panel_height / 2u, "Scan depth must be at most matrix_panel_height/2 - lower panel.scan_mode, or rowsel_n_pins when it is derived");
+
     static constexpr uint32_t ROWS_IN_PARALLEL = Cfg.panel.matrix_panel_height / SCAN_DEPTH;
-    static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH; // alias, used for RowMapping::Split panels
+
+    static constexpr uint32_t SCAN_GROUPS = SCAN_DEPTH;
+
+    // Static safety assertions to prevent bad configurations at compile time
+    static_assert((ROWS_IN_PARALLEL == 0u) || (Cfg.panel.matrix_panel_height % ROWS_IN_PARALLEL == 0), "Panel height must be divisible by ROWS_IN_PARALLEL!");
+    static_assert(((Cfg.panel.address_type == RowAddressing::Binary) ? (SCAN_DEPTH <= MAX_SCAN_DEPTH) : true), "Configured rowsel_n_pins is too small for the requested panel height!");
+
+    // A HUB75 connector carries two RGB data groups, so each address lights 2 rows; or 4
+    // where a panel wires two rows in series behind each group.
+    static_assert(ROWS_IN_PARALLEL == 2u || ROWS_IN_PARALLEL == 4u, "Rows lit per address must be 2, or 4 for rows wired in series - adjust matrix_panel_height or panel.scan_mode");
+
+    // --- panel/addressing constants -----------------------------------------------------------
 
     static constexpr uint32_t LINE_OFFSET =
         ((Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols) >> 1u) * ROWS_IN_PARALLEL;
@@ -331,9 +486,7 @@ private:
     static constexpr int32_t stride_row = static_cast<int32_t>(Cfg.panel.matrix_panel_width * Cfg.panel.chain_cols);
     static constexpr int32_t stride_to_paired_row = static_cast<int32_t>(SCAN_DEPTH * DISPLAY_WIDTH);
 
-    static_assert(static_cast<size_t>(SCAN_DEPTH) * Cfg.panel.chain_rows * Cfg.panel.chain_cols *
-                          Cfg.panel.matrix_panel_width * ROWS_IN_PARALLEL ==
-                      TOTAL_PIXELS,
+    static_assert(static_cast<size_t>(SCAN_DEPTH) * Cfg.panel.chain_rows * Cfg.panel.chain_cols * Cfg.panel.matrix_panel_width * ROWS_IN_PARALLEL == TOTAL_PIXELS,
                   "rgb_buffer total writes must equal TOTAL_PIXELS - check rowsel_n_pins vs matrix_panel_height, and chain_rows/chain_cols");
 
     // --- BCM sequence -------------------------------------------------------------------------
