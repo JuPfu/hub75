@@ -63,7 +63,7 @@ void Hub75Driver<Cfg>::create()
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         setup_bitplane_stream_irq();
-        build_row_cmd_buffer(brightness_fp_);
+        apply_brightness_();
     }
 
     register_instance();
@@ -117,6 +117,15 @@ void Hub75Driver<Cfg>::start()
 // -----------------------------------------------------------------------------------------
 
 template <Hub75Config Cfg>
+void Hub75Driver<Cfg>::apply_brightness_()
+{
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+        build_row_cmd_buffer(brightness_fp_);
+    else
+        build_pixel_stream(); // re-serialises the last rgb_buffer_ with the new scale
+}
+
+template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setBasisBrightness(uint8_t factor)
 {
     basis_factor_ = (factor > 0u) ? factor : 1u;
@@ -146,7 +155,7 @@ void Hub75Driver<Cfg>::setIntensity(float intensity, bool linear_brightness_cont
         brightness_fp_ = (uint32_t)(y * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
     }
 
-    build_row_cmd_buffer(brightness_fp_);
+    apply_brightness_();
 }
 
 template <Hub75Config Cfg>
@@ -1129,11 +1138,14 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         // while (swap_frame_buffer_pending_ && !time_reached(t_end))
         //     tight_loop_contents();
         // __dmb();
+
+        const uint32_t scale = pwm_scale_q16_(); // 0..65536
+
         uint8_t *const out = frame_buffer_;
 
         constexpr uint32_t CHIPS_PER_PANEL = Cfg.panel.matrix_panel_width / 16;
         constexpr uint32_t PANELS = Cfg.panel.chain_rows * Cfg.panel.chain_cols;
-        constexpr uint32_t CHIPS_PER_LANE = PANELS * CHIPS_PER_PANEL;      // == CHAIN_WIDTH / 16
+        constexpr uint32_t CHIPS_PER_LANE = PANELS * CHIPS_PER_PANEL; // == CHAIN_WIDTH / 16
 
         uint32_t fb_index = 0;
 
@@ -1144,9 +1156,9 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 
         for (uint32_t row = 0; row < SCAN_DEPTH; ++row)
         {
-            for (uint32_t channel = 0; channel < 16; ++channel)            // first packet = OUT15
+            for (uint32_t channel = 0; channel < 16; ++channel) // first packet = OUT15
             {
-                for (uint32_t m = 0; m < CHIPS_PER_LANE; ++m)              // m = position in the transaction, first-sent first
+                for (uint32_t m = 0; m < CHIPS_PER_LANE; ++m) // m = position in the transaction, first-sent first
                 {
                     // Chip whose pixels travel at this position. Panel order can be flipped
                     // without touching the chip order inside a panel.
@@ -1158,8 +1170,11 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
                     // panels, serpentine reversal and the paired rows into this order
                     const uint32_t pos = chip * 16 + channel;
                     const uint16_t *p = &storage_.rgb_buffer_[((row * CHAIN_WIDTH + pos) * ROWS_IN_PARALLEL) * 3];
+                    uint16_t v[6];
+                    for (uint32_t k = 0; k < 6; ++k)
+                        v[k] = static_cast<uint16_t>((static_cast<uint32_t>(p[k]) * scale + 32768u) >> 16);
+                    pwm_expand_channels_(v, &out[fb_index]);
 
-                    pwm_expand_channels_(p, &out[fb_index]);
                     fb_index += 16;
                 }
             }

@@ -529,7 +529,17 @@ private:
 
     // Brightness as fixed-point Q16 (because it may be changed at runtime).
     uint32_t brightness_fp_ = (1u << BRIGHTNESS_FP_SHIFT);
-    uint32_t basis_factor_ = 6u;
+
+    // default: HUB75 6 (on-time factor), PWM 255 (= 100 %)
+    uint32_t basis_factor_ = (Cfg.panel.panel_class == PanelClass::PWM) ? 255u : 6u;
+
+    void apply_brightness_();
+
+    // PWM: linear scale 0..65536 (Q16) = fine intensity * (coarse factor / 255)
+    uint32_t pwm_scale_q16_() const
+    {
+        return static_cast<uint32_t>((static_cast<uint64_t>(brightness_fp_) * basis_factor_ + 127u) / 255u);
+    }
 
     // Only touched when Cfg.frame_rate_debug is set.
     int frame_count_ = 0;
