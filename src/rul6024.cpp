@@ -110,6 +110,15 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
     }
 }
 
+static void rul6024_wait_idle(PIO pio, uint sm, uint offset)
+{
+    while (!pio_sm_is_tx_fifo_empty(pio, sm)) tight_loop_contents();
+    // FIFO empty is not enough: the SM may still be clocking the last word.
+    // Idle = stalled on the program's first instruction (`pull block`).
+    while (pio_sm_get_pc(pio, sm) != offset) tight_loop_contents();
+    pio_sm_exec(pio, sm, pio_encode_set(pio_pins, 0b100)); // OEN=1, LE=0, CLK=0
+}
+
 // -----------------------------------------------------------------------------
 // rul6024_setup()
 //
@@ -160,6 +169,8 @@ void rul6024_setup(PIO pio, uint sm, uint offset)
 #endif
 
     // ---------------------------------------------------------------------
+    // After some more testing I come to the conclusion that the following call to rul6024_write_register is redundant,
+    // but as it does now harm (tell me if you think I should drop it) I will keep it:
     // The "rul6024_write_register(pio, sm, display_width, CMD_WREG2 + 1, wreg2_buf);" is doing the trick.
     // I do not know why - no documentation available.
     rul6024_write_register(pio, sm, display_width, CMD_WREG2 + 1, wreg2_buf);
@@ -234,6 +245,9 @@ void rul6024_initialize(Hub75Config Cfg)
 
     // setup initialisation sequence and emit it to panel
     rul6024_setup(pio, sm, offset);
+
+    // drain FiFo before state machine is disabled
+    rul6024_wait_idle(pio, sm, offset);
 
     // disable state machine
     pio_sm_set_enabled(pio, sm, false);

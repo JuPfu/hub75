@@ -10,23 +10,11 @@ RED_CAP = 0.988
 GREEN_CAP = 1.00
 BLUE_CAP = 1.00
 
-# CCM cross-channel shifts — for documentation purposes only; 
-# the actual effect occurs at compile time as a template parameter in hub75.hpp.
-# shift=31 → deactivated, shift=6 → 1.6%, shift=7 → 0.8%
-CCM_SHIFTS = {
-    "RG": 6,   # green → red
-    "RB": 31,  # blue  → red     (off)
-    "GR": 31,  # red   → green   (off)
-    "GB": 7,   # blue  → green
-    "BR": 31,  # red   → blue    (off)
-    "BG": 31,  # green → blue    (off)
-}
-
 # (bitplanes, resolution) pairs to generate tables for.
 # In the template-driven version BITPLANES is a template parameter, not a
 # preprocessor macro, so every resolution's tables must exist unconditionally
 # and be selected at compile time (e.g. via if constexpr / partial specialization).
-RESOLUTIONS = [(16, 65536), (12, 4096), (10, 1024), (8, 256)]
+RESOLUTIONS = [(16, 65536), (10, 1024), (8, 256)]
 
 CHANNELS = [
     ("RED",   RED_CAP),

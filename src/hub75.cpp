@@ -32,8 +32,6 @@ void Hub75DriverBase::register_instance()
         irq_set_enabled(DMA_IRQ_0, true);
         irq_set_enabled(DMA_IRQ_1, true);
         s_irq_installed = true;
-
-        printf("register_instance done\n");
     }
 
     critical_section_exit(&s_instance_lock);
@@ -62,8 +60,6 @@ void Hub75DriverBase::unregister_instance()
 // on the other core.
 void Hub75DriverBase::global_ctrl_irq_handler()
 {
-    // printf("global_ctrl_irq_handler\n");
-
     Hub75DriverBase *instances[MAX_INSTANCES];
     critical_section_enter_blocking(&s_instance_lock);
     size_t n = s_instance_count;
@@ -77,7 +73,6 @@ void Hub75DriverBase::global_ctrl_irq_handler()
 
 void Hub75DriverBase::global_bitplane_irq_handler()
 {
-    printf("IN global_bitplane_irq_handler!!!\n");
     Hub75DriverBase *instances[MAX_INSTANCES];
     critical_section_enter_blocking(&s_instance_lock);
     size_t n = s_instance_count;
