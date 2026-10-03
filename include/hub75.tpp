@@ -1125,10 +1125,10 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         static_assert(ROWS_IN_PARALLEL == 2, "PWM stream assumes 2 parallel rows");
         static_assert(Cfg.color.bitplanes == 16, "PWM stream carries 16 bit per channel");
 
-        const absolute_time_t t_end = make_timeout_time_ms(250);
-        while (swap_frame_buffer_pending_ && !time_reached(t_end))
-            tight_loop_contents();
-        __dmb();
+        // const absolute_time_t t_end = make_timeout_time_ms(250);
+        // while (swap_frame_buffer_pending_ && !time_reached(t_end))
+        //     tight_loop_contents();
+        // __dmb();
         uint8_t *const out = frame_buffer_;
 
         constexpr uint32_t CHIPS_PER_PANEL = Cfg.panel.matrix_panel_width / 16;
