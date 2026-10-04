@@ -30,6 +30,9 @@ Hub75Driver<Cfg>::~Hub75Driver()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::create()
 {
+    assert(driver_state_ == DriverState::Constructed);
+    driver_state_ = DriverState::Created;
+
     dma_buffer_ = storage_.frame_buffer1_;
     frame_buffer_ = storage_.frame_buffer2_;
 
@@ -69,14 +72,14 @@ void Hub75Driver<Cfg>::create()
     register_instance();
 
     build_pixel_stream();
-
-    printf("<<<create driver finished!!!\n");
 }
 
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::start()
 {
-    printf(">>>start driver!!!\n");
+    assert(driver_state_ == DriverState::Created);
+    driver_state_ = DriverState::Started;
+
     dma_buffer_ = storage_.frame_buffer2_;
     frame_buffer_ = storage_.frame_buffer1_;
 
@@ -109,7 +112,6 @@ void Hub75Driver<Cfg>::start()
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
-    printf("<<<start driver finished!!!\n");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -195,18 +197,20 @@ float Hub75Driver<Cfg>::cie1931_inverse(float t)
 }
 
 template <Hub75Config Cfg>
-void Hub75Driver<Cfg>::compute_bcm_cycles(uint32_t bitplane, uint32_t brightness_fp, uint32_t &lit, uint32_t &dark) const
+std::array<uint32_t, 2> Hub75Driver<Cfg>::compute_bcm_cycles(uint32_t bitplane, uint32_t split_factor, uint32_t brightness_fp)
 {
     // Full BCM period for this bit plane: doubles with each plane (1, 2, 4, 8 ...)
     // scaled by basis_factor_ for coarse panel calibration.
-    uint32_t base = (basis_factor_ << bitplane);
+    uint32_t base_per_slice = (basis_factor_ << bitplane) / split_factor;
     // Lit portion: fraction of the full period during which OEn is asserted.
     // brightness_fp is Q16 fixed-point: 0 = off, 65536 = full brightness.
-    lit = (uint32_t)((base * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
+    uint32_t lit_cycles = (uint32_t)((base_per_slice * (uint64_t)brightness_fp) >> BRIGHTNESS_FP_SHIFT);
     // Dark portion: remaining time OEn is deasserted (panel off).
     // lit + dark = base, so total period is constant regardless of brightness.
-    dark = base - lit;
-}
+    uint32_t dark_cycles = base_per_slice - lit_cycles;
+
+    return std::array<uint32_t, 2>{lit_cycles, dark_cycles};
+};
 
 template <Hub75Config Cfg>
 uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
@@ -262,22 +266,18 @@ void Hub75Driver<Cfg>::build_row_cmd_buffer(uint32_t brightness_fp)
             }
         }
 
-        uint32_t total_lit, total_dark;
-        compute_bcm_cycles(bp, brightness_fp, total_lit, total_dark);
-
-        uint32_t base_per_slice = (basis_factor_ << bp) / split_factor;
-        uint32_t lit_cycles = (base_per_slice * brightness_fp) >> BRIGHTNESS_FP_SHIFT;
-        uint32_t dark_cycles = base_per_slice - lit_cycles;
+        const auto [lit, dark] = compute_bcm_cycles(bp, split_factor, brightness_fp);
 
         for (uint32_t row = 0; row < SCAN_DEPTH; ++row)
         {
             uint32_t t_addr = timing_config_.addr_cycles + (bp >> 1); // address settle
             Hub75RowCmd *cmd = &row_cmd_buffer_[idx++];
-            // low 5 bits = row address (hub75_row PIO consumes exactly 5 bits via `out pins, 5`),
-            // upper 27 bits = t_addr, taken by the following `out x, 27`
-            cmd->addr_delay = (t_addr << 5) | (encode_row_address(row) & 0x1Fu);
-            cmd->lit_cycles = lit_cycles;
-            cmd->dark_cycles = dark_cycles;
+            // Low ROW_ADDR_BITS = row address, the remaining 32-ROW_ADDR_BITS = t_addr.
+            // t_addr format is panel dependent, can be binary or a shift-register
+            // command sequence (ABCShiftRegister).
+            cmd->addr_delay = (t_addr << ROW_ADDR_BITS) | (encode_row_address(row) & ROW_ADDR_MASK);
+            cmd->lit_cycles = lit;
+            cmd->dark_cycles = dark;
         }
     }
     swap_row_cmd_buffer_pending_ = true;
@@ -309,30 +309,30 @@ void Hub75Driver<Cfg>::timing_init(float clk_sys_hz, float clkdiv)
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::handle_ctrl_irq()
 {
-    if (dma_channel_get_irq0_status(row_ctrl_chan_))
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
-        dma_channel_acknowledge_irq0(row_ctrl_chan_);
-
-        if constexpr (Cfg.frame_rate_debug)
+        if (dma_channel_get_irq0_status(row_ctrl_chan_))
         {
-            if (frame_count_ == 0)
-            {
-                frame_time_start_ = get_absolute_time();
-            }
-            else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
-            {
-                frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
-                frame_count_ = -1; // reset so it measures again next interval
+            dma_channel_acknowledge_irq0(row_ctrl_chan_);
 
-                uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
-                printf("Frame frequency: %u Hz\n", freq);
-                frame_freq_us_ = 0; // clear until next measurement
-            }
-            frame_count_++;
-        }
+            if constexpr (Cfg.frame_rate_debug)
+            {
+                if (frame_count_ == 0)
+                {
+                    frame_time_start_ = get_absolute_time();
+                }
+                else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
+                {
+                    frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
+                    frame_count_ = -1; // reset so it measures again next interval
 
-        if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
-        {
+                    uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
+                    printf("Frame frequency: %u Hz\n", freq);
+                    frame_freq_us_ = 0; // clear until next measurement
+                }
+                frame_count_++;
+            }
+
             if (swap_row_cmd_buffer_pending_)
             {
                 // dma_row_cmd_buffer_ -> active front buffer (DMA reads from it).
@@ -374,8 +374,6 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
         if (dma_channel_get_irq0_status(pixel_chan_))
         {
             dma_channel_acknowledge_irq0(pixel_chan_);
-
-            icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
 
             if (swap_frame_buffer_pending_)
             {
@@ -700,12 +698,9 @@ void Hub75Driver<Cfg>::configure_pio()
 
             if (stream_ok)
             {
-                printf("successfully claimed icnd2153_pixel_stream_program low=%d  high=%d\n", stream_lo, stream_hi);
-
-                // icnd2153_row only ever touches rowsel_base_pin's 3 pins (RA/RB/RC) - GCLK moved
-                // entirely to icnd2153_gclk (oen_pin), so it's no longer part of this range.
-                static constexpr uint32_t row_lo = Cfg.pins.rowsel_base_pin;
-                static constexpr uint32_t row_hi = Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1;
+                // icnd2153_row only ever touches rowsel_base_pin's 3 pins (RA/RB/RC)
+                static constexpr uint32_t row_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.oen_pin);
+                static constexpr uint32_t row_hi = std::max(Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.oen_pin);
 
                 bool row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                  { return pio_claim_free_sm_and_add_program_for_gpio_range(
@@ -716,33 +711,30 @@ void Hub75Driver<Cfg>::configure_pio()
                                                        row_lo,
                                                        row_hi - row_lo + 1,
                                                        true); });
-
-                printf("claiming icnd2153_row_program resulted in %d   row_lo=%d  row_hi=%d\n", row_ok, row_lo, row_hi);
-
                 if (row_ok)
                 {
-                    printf("successfully claimed icnd2153_row_program\n");
                     placed = true;
                     break;
                 }
             }
 
-            printf("release_pio_block_for_row_stream\n");
             release_pio_block_for_row_stream(pio_index);
         }
 
         if (!placed)
         {
-            panic("Failed to find a PIO block with room for icnd2153_pixel_stream_program + icnd2153_row_program + icnd2153_gclk_program (checked all %d blocks)\n", (int)NUM_PIOS);
+            panic("Failed to find a PIO block with room for icnd2153_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
         }
 
         icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
 
-        // icnd2153_gclk_program_init(pio_config_.gclk_pio, pio_config_.sm_gclk, pio_config_.gclk_prog_offs, Cfg.pins.oen_pin, 138);
-
         icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, 138);
-        printf("icnd2153_row_program_init done with rowsel_base_pin=%d\n", Cfg.pins.rowsel_base_pin);
     }
+}
+
+static float icnd2153_clkdiv_(uint32_t sys_hz, float floor_mhz, float margin_mhz) // f = max(floor, sys/5 - margin)
+{
+    return sys_hz / (std::max(floor_mhz, sys_hz / 5e6f - margin_mhz) * 1e6f);
 }
 
 // Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output
@@ -872,21 +864,13 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
 
-        float value = sys_clk_hz / (5.0f * 1000000.0f) - 15.0f;
 
         // icnd2153 pixel stream can run between 15 MHz and value MHz
-        float max_clockdiv = sys_clk_hz / (15.0f * 1000000.0f);
-        float min_clockdiv = sys_clk_hz / (value * 1000000.0f);
-        float sm_clockdiv = std::min(min_clockdiv, max_clockdiv);
-
+        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 15.f, 15.f);
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
 
         // icnd2153 row can run between 20 MHz and value MHz
-        value = sys_clk_hz / (5.0f * 1000000.f) - 10.0f;
-        max_clockdiv = sys_clk_hz / (20.0f * 1000000.0f);
-        min_clockdiv = sys_clk_hz / (value * 1000000.0f);
-        sm_clockdiv = std::min(min_clockdiv, max_clockdiv);
-
+        sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 10.f);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
 }

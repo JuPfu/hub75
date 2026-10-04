@@ -19,6 +19,14 @@
 #include "pico_graphics.hpp"
 #endif
 
+enum class DriverState : uint8_t
+{
+    Invalid,
+    Constructed,
+    Created,
+    Started
+};
+
 // See README.md file chapter "How to Configure" for how to size a Hub75Config for your panel.
 
 enum class PanelClass
@@ -58,12 +66,12 @@ enum class RowAddressing
 // yourself; pick anything else and pass it through make_hub75_config() below.
 enum class Hub75PanelProfile
 {
-    CUSTOM,             // No preset applied - use explicit field values.
-    P64X32_1_16,        // 64x32 panel,  1:16 scan
-    P64X64_1_32,        // 64x64 panel,  1:32 scan
-    P80X40_1_20,        // 80x40 panel,  1:20 scan
-    P96X48_1_24,        // 96x48 panel,  1:24 scan
-    P96X48_1_24_SR,     // 96x48 panel,  1:24 scan, ABC shift-register row addressing, R/B swapped
+    CUSTOM,         // No preset applied - use explicit field values.
+    P64X32_1_16,    // 64x32 panel,  1:16 scan
+    P64X64_1_32,    // 64x64 panel,  1:32 scan
+    P80X40_1_20,    // 80x40 panel,  1:20 scan
+    P96X48_1_24,    // 96x48 panel,  1:24 scan
+    P96X48_1_24_SR, // 96x48 panel,  1:24 scan, ABC shift-register row addressing, R/B swapped
 };
 
 // Selects the panel-chip init sequence sent before streaming starts.
@@ -182,7 +190,7 @@ struct Hub75PinConfig
 //   shift=31 -> add  0%   (disabled / identity, use this to turn off a term)
 struct Hub75ColorConfig
 {
-    uint32_t bitplanes = 12; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 12 for some PWM boards
+    uint32_t bitplanes = 10; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 16 for some PWM boards
 
     // Use separate CIE channels for improved color representation - needs more memory.
     bool separate_cie_channels = false;
@@ -387,13 +395,16 @@ class Hub75Driver : public Hub75DriverBase
 private:
     static_assert(Cfg.panel.chain_rows >= 1, "chain_rows must be >= 1");
     static_assert(Cfg.panel.chain_cols >= 1, "chain_cols must be >= 1");
-    static_assert(Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10 || Cfg.color.bitplanes == 16, "bitplanes must be 8 or 10");
+    static_assert(Cfg.panel.panel_class == PanelClass::PWM ? Cfg.color.bitplanes == 16 : (Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10),
+                  "Invalid bit depth for selected panel class");
 
     // Unrotated panel geometry: internal only. Callers should use SCREEN_WIDTH/SCREEN_HEIGHT
     // below, which takes rotation into account.
     static constexpr uint32_t DISPLAY_WIDTH = Cfg.panel.matrix_panel_width * Cfg.panel.chain_cols;
     static constexpr uint32_t DISPLAY_HEIGHT = Cfg.panel.matrix_panel_height * Cfg.panel.chain_rows;
     static_assert(DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
+
+    DriverState driver_state_ = DriverState::Invalid;
 
 public:
     static constexpr size_t TOTAL_PIXELS = static_cast<size_t>(DISPLAY_WIDTH * DISPLAY_HEIGHT);
@@ -417,7 +428,7 @@ public:
                                         : Cfg.panel.chain_rows * Cfg.panel.matrix_panel_height),
                   "Width/height mismatch for rotated display");
 
-    Hub75Driver() = default;
+    Hub75Driver() { driver_state_ = DriverState::Constructed; };
     Hub75Driver(const Hub75Driver &) = delete;
     Hub75Driver &operator=(const Hub75Driver &) = delete;
     ~Hub75Driver() override;
@@ -456,6 +467,7 @@ private:
     // of direct pin-mapped binary addressing, like the SM5368 (see encode_row_address() and
     // the hub75_row_abc_shift_register PIO program).
     static constexpr uint32_t ROW_ADDR_BITS = Cfg.panel.address_type == RowAddressing::Binary ? 5u : 6u;
+    static constexpr uint32_t ROW_ADDR_MASK = (1u << ROW_ADDR_BITS) - 1u;
     static_assert(ROW_ADDR_BITS > 0u && ROW_ADDR_BITS <= 6u, "Row address field must leave room for t_addr in the 32-bit DMA word");
     static_assert(ADDR_PINS <= ROW_ADDR_BITS, "rowsel_n_pins must fit the row-address field - more address pins than ROW_ADDR_BITS pushes row bits into t_addr");
     static_assert(Cfg.panel.address_type != RowAddressing::ABCShiftRegister || Cfg.pins.rowsel_n_pins == 3, "For ABCShiftRegister row address type rowsel_n_pins must be set to 3!");
@@ -463,7 +475,7 @@ private:
     static constexpr uint32_t MAX_SCAN_DEPTH = (1u << ADDR_PINS);
 
     // is the height dimension of the matrix a power of two value ?
-    static constexpr bool PanelHeightisPowerOfTwo = !(Cfg.panel.matrix_panel_height == 0) && !(Cfg.panel.matrix_panel_height & (Cfg.panel.matrix_panel_height - 1));
+    static constexpr bool panel_height_is_power_of_two = !(Cfg.panel.matrix_panel_height == 0) && !(Cfg.panel.matrix_panel_height & (Cfg.panel.matrix_panel_height - 1));
 
     // 3. Determine SCAN_DEPTH and ROWS_IN_PARALLEL automatically
     //
@@ -473,7 +485,7 @@ private:
     static constexpr uint32_t SCAN_DEPTH =
         (Cfg.panel.scan_mode > 0u)
             ? Cfg.panel.scan_mode
-            : ((PanelHeightisPowerOfTwo && (Cfg.panel.address_type == RowAddressing::Binary))
+            : ((panel_height_is_power_of_two && (Cfg.panel.address_type == RowAddressing::Binary))
                    ? MAX_SCAN_DEPTH
                    : (Cfg.panel.matrix_panel_height / 2u));
 
@@ -592,7 +604,7 @@ private:
     void timing_init(float clk_sys_hz, float clkdiv);
 
     static float cie1931_inverse(float t);
-    void compute_bcm_cycles(uint32_t bitplane, uint32_t brightness_fp, uint32_t &lit, uint32_t &dark) const;
+    std::array<uint32_t, 2> compute_bcm_cycles(uint32_t bitplane, uint32_t split_factor, uint32_t brightness_fp);
     static uint32_t encode_row_address(uint32_t row);
     void build_row_cmd_buffer(uint32_t brightness_fp);
 
