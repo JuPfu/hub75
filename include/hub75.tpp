@@ -36,16 +36,15 @@ void Hub75Driver<Cfg>::create()
     dma_buffer_ = storage_.frame_buffer1_;
     frame_buffer_ = storage_.frame_buffer2_;
 
-    // row_cmd_buffer1_/row_cmd_buffer2_ only exist in the HUB75 specialization of
-    // Hub75Storage - PWM panels are driven by pixel_chan_/pixel_ctrl_chan_ alone,
-    // with no row-command DMA stream at all.
+    // row_cmd_buffer1_/row_cmd_buffer2_ only exist in the HUB75 specialization of Hub75Storage.
+    // PWM panels are driven by pixel_chan_ alone, with no row-command DMA stream at all.
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         dma_row_cmd_buffer_ = storage_.row_cmd_buffer1_;
         row_cmd_buffer_ = storage_.row_cmd_buffer2_;
-    }
 
-    timing_init(clock_get_hz(clk_sys), SM_CLOCKDIV);
+        timing_init(clock_get_hz(clk_sys), SM_CLOCKDIV);
+    }
 
     if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6126A)
         FM6126A_setup(Cfg.pins, Cfg.panel.matrix_panel_width);
@@ -87,19 +86,17 @@ void Hub75Driver<Cfg>::start()
     {
         dma_row_cmd_buffer_ = storage_.row_cmd_buffer2_;
         row_cmd_buffer_ = storage_.row_cmd_buffer1_;
-    }
 
-    swap_row_cmd_buffer_pending_ = false;
-    swap_frame_buffer_pending_ = false;
-
-    // row_chan_/row_ctrl_chan_ are only claimed and configured for HUB75 panels
-    // (see setup_dma_transfers()) - they stay at their default -1 for PWM, so touching
-    // them here would hand the DMA hardware an invalid channel number.
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
-    {
+        // row_chan_/row_ctrl_chan_ are only claimed and configured for HUB75 panels
+        // (see setup_dma_transfers()) - they stay at their default -1 for PWM, so touching
+        // them here would hand the DMA hardware an invalid channel number.
         dma_channel_set_read_addr(row_ctrl_chan_, &dma_row_cmd_buffer_, false);
         dma_channel_set_read_addr(pixel_ctrl_chan_, &dma_buffer_, false);
+
+        swap_row_cmd_buffer_pending_ = false;
     }
+
+    swap_frame_buffer_pending_ = false;
 
     dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true);
 
@@ -734,6 +731,19 @@ static float icnd2153_clkdiv_(uint32_t sys_hz, float floor_mhz, float margin_mhz
     return sys_hz / (std::max(floor_mhz, sys_hz / 5e6f - margin_mhz) * 1e6f);
 }
 
+static void dma_setup_(uint ch, dma_channel_transfer_size size, bool read_inc, uint dreq, uint chain_to,
+                       volatile void *dst, const volatile void *src, uint32_t count)
+{
+    dma_channel_config c = dma_channel_get_default_config(ch);
+    channel_config_set_transfer_data_size(&c, size);
+    channel_config_set_read_increment(&c, read_inc);
+    channel_config_set_write_increment(&c, false);
+    channel_config_set_dreq(&c, dreq);
+    channel_config_set_high_priority(&c, true);
+    channel_config_set_chain_to(&c, chain_to);
+    dma_channel_configure(ch, &c, dst, src, dma_encode_transfer_count(count), false);
+}
+
 // Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output
 // enable signal, to the PIO state machines controlling the HUB75 matrix. Also configures
 // the DMA channel which gets active when an output enable signal has finished.
@@ -746,87 +756,47 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         row_ctrl_chan_ = dma_claim_unused_channel(true);
 
         // row channel
-        dma_channel_config row_chan_config = dma_channel_get_default_config(row_chan_);
-
-        channel_config_set_transfer_data_size(&row_chan_config, DMA_SIZE_32);
-        channel_config_set_read_increment(&row_chan_config, true);
-        channel_config_set_write_increment(&row_chan_config, false);
-
-        channel_config_set_high_priority(&row_chan_config, true);
-
-        channel_config_set_dreq(&row_chan_config, pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true));
-
-        channel_config_set_chain_to(&row_chan_config, row_ctrl_chan_);
-
-        // One big transfer of the complete content of dma_row_cmd_buffer_.
-        // The dma_row_cmd_buffer_
-        //    - has (mostly) different lit cycles and dark cycles for each bitplane
-        //    - has the addresses of each row in each bitplane
-        dma_channel_configure(row_chan_,
-                              &row_chan_config,
-                              &pio_config_.row_pio->txf[pio_config_.sm_row],
-                              dma_row_cmd_buffer_,
-                              dma_encode_transfer_count(bcm_sequence_length * SCAN_DEPTH * row_cmd_struct_members),
-                              false);
+        dma_setup_(row_chan_,
+                   DMA_SIZE_32,
+                   true,
+                   pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true),
+                   row_ctrl_chan_,
+                   &pio_config_.row_pio->txf[pio_config_.sm_row],
+                   &dma_row_cmd_buffer_,
+                   bcm_sequence_length * SCAN_DEPTH * row_cmd_struct_members);
 
         // row ctrl channel
-        dma_channel_config row_ctrl_chan_config = dma_channel_get_default_config(row_ctrl_chan_);
-
-        channel_config_set_transfer_data_size(&row_ctrl_chan_config, DMA_SIZE_32);
-        channel_config_set_read_increment(&row_ctrl_chan_config, false);
-        channel_config_set_write_increment(&row_ctrl_chan_config, false);
-
-        channel_config_set_dreq(&row_ctrl_chan_config, DREQ_FORCE);
-
-        channel_config_set_high_priority(&row_ctrl_chan_config, true);
-
-        channel_config_set_chain_to(&row_ctrl_chan_config, row_chan_);
-
-        // When row_chan_ has finished a complete frame (each row in each bitplane) has been emitted.
-        // The row_ctrl_chan_ resets the start address of row_chan_ to dma_row_cmd_buffer_.
-        dma_channel_configure(row_ctrl_chan_, &row_ctrl_chan_config, &dma_hw->ch[row_chan_].read_addr, dma_row_cmd_buffer_, dma_encode_transfer_count(1), false);
+        dma_setup_(row_ctrl_chan_,
+                   DMA_SIZE_32,
+                   false,
+                   DREQ_FORCE,
+                   row_chan_,
+                   &dma_hw->ch[row_chan_].read_addr,
+                   &dma_row_cmd_buffer_,
+                   1);
 
         // pixel channel
         pixel_chan_ = dma_claim_unused_channel(true);
         pixel_ctrl_chan_ = dma_claim_unused_channel(true);
 
-        dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
-
-        channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_8);
-        channel_config_set_read_increment(&pixel_chan_config, true);
-        channel_config_set_write_increment(&pixel_chan_config, false);
-
-        channel_config_set_dreq(&pixel_chan_config, pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true));
-
-        channel_config_set_high_priority(&pixel_chan_config, true);
-
-        channel_config_set_chain_to(&pixel_chan_config, pixel_ctrl_chan_);
-
-        // Due to DMA channel row_chan_ the complete pre-build bit planes can be passed to DMA channel pixel_chan_.
-        // The pixel_chan_ iterates over all bitplanes in one big swoop.
-        dma_channel_configure(pixel_chan_,
-                              &pixel_chan_config,
-                              &pio_config_.data_pio->txf[pio_config_.sm_data],
-                              dma_buffer_,
-                              dma_encode_transfer_count((TOTAL_PIXELS >> 1) * bcm_sequence_length),
-                              false);
+        dma_setup_(pixel_chan_,
+                   DMA_SIZE_8,
+                   true,
+                   pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true),
+                   pixel_ctrl_chan_,
+                   &pio_config_.data_pio->txf[pio_config_.sm_data],
+                   &dma_buffer_,
+                   (TOTAL_PIXELS >> 1) * bcm_sequence_length);
 
         // pixel ctrl channel
-        dma_channel_config pixel_ctrl_chan_config = dma_channel_get_default_config(pixel_ctrl_chan_);
-
-        channel_config_set_transfer_data_size(&pixel_ctrl_chan_config, DMA_SIZE_32);
-        channel_config_set_read_increment(&pixel_ctrl_chan_config, false);
-        channel_config_set_write_increment(&pixel_ctrl_chan_config, false);
-
-        channel_config_set_dreq(&pixel_ctrl_chan_config, DREQ_FORCE);
-
-        channel_config_set_high_priority(&pixel_ctrl_chan_config, true);
-
-        channel_config_set_chain_to(&pixel_ctrl_chan_config, pixel_chan_);
-
-        // When pixel_chan_ has finished a complete frame (each row in each bitplane) has been emitted.
-        // The pixel_ctrl_chan_ resets the start address of pixel_chan_ to dma_buffer_.
-        dma_channel_configure(pixel_ctrl_chan_, &pixel_ctrl_chan_config, &dma_hw->ch[pixel_chan_].read_addr, dma_buffer_, dma_encode_transfer_count(1), false);
+        dma_setup_(pixel_ctrl_chan_,
+                   DMA_SIZE_32,
+                   false,
+                   DREQ_FORCE,
+                   pixel_chan_,
+                   &dma_hw->ch[pixel_chan_].read_addr,
+                   &dma_buffer_,
+                   1);
 
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, SM_CLOCKDIV);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, SM_CLOCKDIV);
@@ -836,36 +806,23 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         // icnd2153_pixel_stream receives pixel data fed by DMA
         pixel_chan_ = dma_claim_unused_channel(true);
 
-        dma_channel_config pixel_chan_config = dma_channel_get_default_config(pixel_chan_);
-
-        channel_config_set_transfer_data_size(&pixel_chan_config, DMA_SIZE_32);
-        channel_config_set_read_increment(&pixel_chan_config, true);
-        channel_config_set_write_increment(&pixel_chan_config, false);
-
-        channel_config_set_dreq(&pixel_chan_config, pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true));
-
-        channel_config_set_high_priority(&pixel_chan_config, true);
-
-        // Due to DMA channel row_chan the complete pre-build pixel stream can be passed to DMA channel pixel_chan.
-        // The pixel_chan iterates over all (row, channel) DATA_LATCH transactions in one big swoop.
-        // Format: SCAN_DEPTH rows x 16 channels = 512 transactions/frame, each exactly 128 bytes
-        // (16 bits x DISPLAY_WIDTH/16 chips) - see build_pixel_stream() in this file and
-        // icnd2153_pixel_stream in icnd2153.pio, which hardcodes the 127-low + 1-high pulse shape
-        // rather than reading a variable length per transaction.
-        dma_channel_configure(pixel_chan_,
-                              &pixel_chan_config,
-                              &pio_config_.data_pio->txf[pio_config_.sm_data],
-                              dma_buffer_,
-                              dma_encode_transfer_count(PWM_FRAME_BYTES / 4), // 16 bit transfer - 2 bytes simultaneously
-                              false);
+        // The pixel_chan iterates over all transactions in one big swoop.
+        dma_setup_(pixel_chan_,
+                   DMA_SIZE_32,
+                   true,
+                   pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true),
+                   pixel_chan_,
+                   &pio_config_.data_pio->txf[pio_config_.sm_data],
+                   &dma_buffer_,
+                   PWM_FRAME_BYTES / 4);
 
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
 
-        // icnd2153 pixel stream can run between 15 MHz and value MHz
+        // icnd2153 pixel stream can run between 15 MHz and 20 MHz
         float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 15.f, 15.f);
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
 
-        // icnd2153 row can run between 20 MHz and value MHz
+        // icnd2153 row can run between 20 MHz and 25 MHz
         sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 10.f);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
@@ -1034,39 +991,28 @@ constexpr void Hub75Driver<Cfg>::apply_ccm(uint32_t &rv, uint32_t &gv, uint32_t 
     }
 }
 
-// Apply LUT and pack into 30-bit RGB (10 bits per channel)
 template <Hub75Config Cfg>
-uint32_t Hub75Driver<Cfg>::pack_lut_rgb(uint32_t colour)
-{
-    uint32_t rv = cie_red_table()[(colour >> 16u) & 0xFFu];
-    uint32_t gv = cie_green_table()[(colour >> 8u) & 0xFFu];
-    uint32_t bv = cie_blue_table()[colour & 0xFFu];
-    apply_ccm(rv, gv, bv);
-    if constexpr (Cfg.color.swap_rb_pins)
-    {
-        return (rv << 20u) | (gv << 10u) | bv;
-    }
-    else
-    {
-        return (bv << 20u) | (gv << 10u) | rv;
-    }
-}
-
-// Apply LUT and pack into 30-bit RGB (10 bits per channel)
-template <Hub75Config Cfg>
-uint32_t Hub75Driver<Cfg>::pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b)
+inline void Hub75Driver<Cfg>::store_pixel_(size_t &fb, uint8_t r, uint8_t g, uint8_t b)
 {
     uint32_t rv = cie_red_table()[r];
     uint32_t gv = cie_green_table()[g];
     uint32_t bv = cie_blue_table()[b];
     apply_ccm(rv, gv, bv);
-    if constexpr (Cfg.color.swap_rb_pins)
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
-        return (rv << 20u) | (gv << 10u) | bv;
+        if constexpr (Cfg.color.swap_rb_pins)
+            storage_.rgb_buffer_[fb++] = (rv << 20) | (gv << 10) | bv;
+        else
+            storage_.rgb_buffer_[fb++] = (bv << 20) | (gv << 10) | rv;
     }
     else
     {
-        return (bv << 20u) | (gv << 10u) | rv;
+        // CIE-gamma + CCM correction for one PWM pixel, mirroring pack_lut_rgb_()'s HUB75 pipeline
+        // but writing 3 separate storage_.rgb_buffer_ entries (R,G,B) instead of one bit-packed uint32_t,
+        // since the PWM buffer holds one uint16_t per channel rather than one combined value per pixel.
+        storage_.rgb_buffer_[fb++] = static_cast<uint16_t>(rv);
+        storage_.rgb_buffer_[fb++] = static_cast<uint16_t>(gv);
+        storage_.rgb_buffer_[fb++] = static_cast<uint16_t>(bv);
     }
 }
 
@@ -1094,79 +1040,20 @@ constexpr int Hub75Driver<Cfg>::rotated_src_index(int dx, int dy, int dw, int dh
     }
 }
 
-// Shared rotation-lookup helper for the chained-panel branches: a flat panel-side index
-// `dx_base` is only guaranteed to be a multiple of W when chain_cols == 1; for chain_cols > 1
-// map_panel_row() returns a row_base that already carries a horizontal panel offset, which is
-// NOT, in general, a multiple of DISPLAY_WIDTH. Callers decompose the row_base into
-// (dx_base, dy) once per row-group and pass the column-local `i` here.
+// 0xRRGGBB source (PicoGraphics)
 template <Hub75Config Cfg>
-uint32_t Hub75Driver<Cfg>::rot_lut(const uint32_t *src, int dx_base, int dy, int i, int W, int H)
+inline void Hub75Driver<Cfg>::write_pixel(size_t &fb, const uint32_t *src, int dx_base, int dy, int i, int W, int H)
 {
-    return pack_lut_rgb(src[rotated_src_index(dx_base + i, dy, W, H)]);
+    const uint32_t px = src[rotated_src_index(dx_base + i, dy, W, H)];
+    store_pixel_(fb, uint8_t(px >> 16), uint8_t(px >> 8), uint8_t(px));
 }
 
-// BGR/uint8_t* byte-triple variant for update_bgr()
+// BGR888 byte triples
 template <Hub75Config Cfg>
-uint32_t Hub75Driver<Cfg>::rot_lut_rgb(const uint8_t *src, int dx_base, int dy, int i, int W, int H)
+inline void Hub75Driver<Cfg>::write_pixel(size_t &fb, const uint8_t *src, int dx_base, int dy, int i, int W, int H)
 {
-    const int32_t rot = rotated_src_index(dx_base + i, dy, W, H) * 3;
-    return pack_lut_rgb_(src[rot + 2], src[rot + 1], src[rot]);
-}
-
-// -----------------------------------------------------------------------------------------
-// PWM (ICND2153-family) pixel packing
-// -----------------------------------------------------------------------------------------
-// CIE-gamma + CCM correction for one PWM pixel, mirroring pack_lut_rgb_()'s HUB75 pipeline
-// but writing 3 separate storage_.rgb_buffer_ entries (R,G,B) instead of one bit-packed
-// uint32_t, since the PWM buffer holds one uint16_t per channel rather than one combined
-// value per pixel. fb_index is advanced by 3 (vs. 1 for the HUB75 path).
-template <Hub75Config Cfg>
-inline void Hub75Driver<Cfg>::pack_pwm_rgb_(size_t &fb_index, uint8_t r, uint8_t g, uint8_t b)
-{
-    uint32_t rv = cie_red_table()[r];
-    uint32_t gv = cie_green_table()[g];
-    uint32_t bv = cie_blue_table()[b];
-    apply_ccm(rv, gv, bv); // same cross-talk/colour-correction matrix as the HUB75 path
-    storage_.rgb_buffer_[fb_index++] = static_cast<uint16_t>(rv);
-    storage_.rgb_buffer_[fb_index++] = static_cast<uint16_t>(gv);
-    storage_.rgb_buffer_[fb_index++] = static_cast<uint16_t>(bv);
-}
-
-// Drop-in replacement for every `write_pixel(fb_index, ...)` call site
-// in update(): reuses rotated_src_index() for the rotation/geometry lookup exactly like
-// rot_lut() does, then dispatches the final packing step by panel_class. Callers no longer
-// need to know whether they're building for HUB75 or PWM - just call write_pixel() and let
-// it handle the fb_index advance itself (1 for HUB75, 3 for PWM).
-template <Hub75Config Cfg>
-inline void Hub75Driver<Cfg>::write_pixel(size_t &fb_index, const uint32_t *src, int dx_base, int dy, int i, int W, int H)
-{
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
-    {
-        storage_.rgb_buffer_[fb_index++] = rot_lut(src, dx_base, dy, i, W, H);
-    }
-    else
-    {
-        const uint32_t px = src[rotated_src_index(dx_base + i, dy, W, H)];
-        // Same 0xRRGGBB component order rot_lut()/pack_lut_rgb() assume.
-        pack_pwm_rgb_(fb_index, static_cast<uint8_t>(px >> 16), static_cast<uint8_t>(px >> 8), static_cast<uint8_t>(px));
-    }
-}
-
-// Drop-in replacement for every `write_pixel_rgb(fb_index, ...)` call
-// site in update_bgr(). See write_pixel() above.
-template <Hub75Config Cfg>
-inline void Hub75Driver<Cfg>::write_pixel_rgb(size_t &fb_index, const uint8_t *src, int dx_base, int dy, int i, int W, int H)
-{
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
-    {
-        storage_.rgb_buffer_[fb_index++] = rot_lut_rgb(src, dx_base, dy, i, W, H);
-    }
-    else
-    {
-        const int32_t rot = rotated_src_index(dx_base + i, dy, W, H) * 3;
-        // Same BGR byte order rot_lut_rgb() assumes (src[rot]=B, [rot+1]=G, [rot+2]=R).
-        pack_pwm_rgb_(fb_index, src[rot + 2], src[rot + 1], src[rot]);
-    }
+    const uint8_t *s = &src[rotated_src_index(dx_base + i, dy, W, H) * 3];
+    store_pixel_(fb, s[2], s[1], s[0]);
 }
 
 // v[0..5] = top R,G,B, bottom R,G,B (16-bit, already corrected). Writes 16 bytes, MSB first.
@@ -1310,7 +1197,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base - p * rows_per_bank;
-                                write_pixel_rgb(fb_index, src, dx_base, dy, i, W, H);
+                                write_pixel(fb_index, src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1321,7 +1208,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)
                             {
                                 const int dy = dy_base + p * rows_per_bank;
-                                write_pixel_rgb(fb_index, src, dx_base, dy, i, W, H);
+                                write_pixel(fb_index, src, dx_base, dy, i, W, H);
                             }
                         }
                     }
@@ -1398,8 +1285,8 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                             const int dx2 = phys_h * Cfg.panel.matrix_panel_width + local_col2;
                             const int dy2 = v * Cfg.panel.matrix_panel_height + local_row2;
 
-                            write_pixel_rgb(fb_index, src, dx, dy, 0, W, H);
-                            write_pixel_rgb(fb_index, src, dx2, dy2, 0, W, H);
+                            write_pixel(fb_index, src, dx, dy, 0, W, H);
+                            write_pixel(fb_index, src, dx2, dy2, 0, W, H);
                         }
                     }
                 }
@@ -1422,7 +1309,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                 {
                     const int32_t row_base = map_panel_row(row, v, h, reverse);
 
-                    // S31 quarter-row layout (pixel domain - rot_lut_rgb converts to bytes)
+                    // S31 quarter-row layout
                     const int32_t sign = reverse ? -1 : 1;
                     const int32_t base0 = row_base + sign * 0 * stride_to_paired_row;
                     const int32_t base1 = row_base + sign * 1 * stride_to_paired_row;
@@ -1440,27 +1327,27 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
                     {
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            write_pixel_rgb(fb_index, src, dx_base1, dy1, i, W, H);
-                            write_pixel_rgb(fb_index, src, dx_base3, dy3, i, W, H);
+                            write_pixel(fb_index, src, dx_base1, dy1, i, W, H);
+                            write_pixel(fb_index, src, dx_base3, dy3, i, W, H);
                         }
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
-                            write_pixel_rgb(fb_index, src, dx_base0, dy0, i, W, H);
-                            write_pixel_rgb(fb_index, src, dx_base2, dy2, i, W, H);
+                            write_pixel(fb_index, src, dx_base0, dy0, i, W, H);
+                            write_pixel(fb_index, src, dx_base2, dy2, i, W, H);
                         }
                     }
                     else
                     {
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            write_pixel_rgb(fb_index, src, dx_base1, dy1, i, W, H);
-                            write_pixel_rgb(fb_index, src, dx_base3, dy3, i, W, H);
+                            write_pixel(fb_index, src, dx_base1, dy1, i, W, H);
+                            write_pixel(fb_index, src, dx_base3, dy3, i, W, H);
                         }
 
                         for (int i = 0; i < static_cast<int>(Cfg.panel.matrix_panel_width); ++i)
                         {
-                            write_pixel_rgb(fb_index, src, dx_base0, dy0, i, W, H);
-                            write_pixel_rgb(fb_index, src, dx_base2, dy2, i, W, H);
+                            write_pixel(fb_index, src, dx_base0, dy0, i, W, H);
+                            write_pixel(fb_index, src, dx_base2, dy2, i, W, H);
                         }
                     }
                 }
@@ -1559,7 +1446,6 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
                         //   - scan row reversed  -> map_panel_row
                         //   - i traversal        -> reversed below
                         //   - multiplex ordering -> reversed below
-                        // Display rotation is composited independently via rot_lut().
                         for (int i = static_cast<int>(Cfg.panel.matrix_panel_width) - 1; i >= 0; --i)
                         {
                             for (int p = 0; p < static_cast<int>(ROWS_IN_PARALLEL); ++p)

@@ -570,26 +570,14 @@ private:
     static constexpr const uint16_t *cie_blue_table();
 
     static constexpr void apply_ccm(uint32_t &rv, uint32_t &gv, uint32_t &bv);
-    static inline uint32_t pack_lut_rgb(uint32_t colour);
-    static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b);
 
     static inline constexpr int rotated_src_index(int dx, int dy, int dw, int dh);
-    static inline uint32_t rot_lut(const uint32_t *src, int dx_base, int dy, int i, int W, int H);
-    static inline uint32_t rot_lut_rgb(const uint8_t *src, int dx_base, int dy, int i, int W, int H);
     static inline int32_t map_panel_row(int row, int v, int h, bool reverse);
 
-    // --- PWM (ICND2153-family) pixel packing ---------------------------------------------------
-    // CIE-gamma + CCM correction for one PWM pixel, written as 3 consecutive
-    // storage_.rgb_buffer_ entries (R,G,B) starting at fb_index, which is advanced by 3.
-    // NOT static, unlike rot_lut()/pack_lut_rgb_() above - those only return a value and leave
-    // the storage_ write to their (non-static) caller; these write into storage_ themselves.
-    inline void pack_pwm_rgb_(size_t &fb_index, uint8_t r, uint8_t g, uint8_t b);
-    // Drop-in replacements for rot_lut()/rot_lut_rgb() at every update()/update_bgr() call site:
-    // dispatch to the existing HUB75 packing for PanelClass::HUB75, or to pack_pwm_rgb_() for PWM.
-    // Each advances fb_index itself (by 1 for HUB75, by 3 for PWM), so callers no longer need to
-    // know which panel_class they're building for.
-    inline void write_pixel(size_t &fb_index, const uint32_t *src, int dx_base, int dy, int i, int W, int H);
-    inline void write_pixel_rgb(size_t &fb_index, const uint8_t *src, int dx_base, int dy, int i, int W, int H);
+    inline void store_pixel_(size_t &fb, uint8_t r, uint8_t g, uint8_t b);
+
+    inline void write_pixel(size_t &fb, const uint32_t *src, int dx_base, int dy, int i, int W, int H);
+    inline void write_pixel(size_t &fb, const uint8_t *src, int dx_base, int dy, int i, int W, int H);
 
     // --- Timing -------------------------------------------------------------------------------
     // Cached PIO-cycle counts derived from Cfg.panel.base_{latch,addr}_ns and the actual
