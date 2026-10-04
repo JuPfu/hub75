@@ -128,8 +128,15 @@ void Hub75Driver<Cfg>::apply_brightness_()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setBasisBrightness(uint8_t factor)
 {
-    basis_factor_ = (factor > 0u) ? factor : 1u;
-    build_row_cmd_buffer(brightness_fp_);
+    if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
+    {
+        (void)factor;
+    }
+    else
+    {
+        basis_factor_ = (factor > 0u) ? factor : 1u;
+        apply_brightness_();
+    }
 }
 
 template <Hub75Config Cfg>
@@ -1239,11 +1246,15 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
                     // panels, serpentine reversal and the paired rows into this order
                     const uint32_t pos = chip * 16 + channel;
                     const uint16_t *p = &storage_.rgb_buffer_[((row * CHAIN_WIDTH + pos) * ROWS_IN_PARALLEL) * 3];
-                    uint16_t v[6];
-                    for (uint32_t k = 0; k < 6; ++k)
-                        v[k] = static_cast<uint16_t>((static_cast<uint32_t>(p[k]) * scale + 32768u) >> 16);
-                    pwm_expand_channels_(v, &out[fb_index]);
-
+                    if (scale >= 65536u)
+                        pwm_expand_channels_(p, &out[fb_index]);
+                    else
+                    {
+                        uint16_t v[6];
+                        for (uint32_t k = 0; k < 6; ++k)
+                            v[k] = static_cast<uint16_t>((static_cast<uint32_t>(p[k]) * scale + 32768u) >> 16);
+                        pwm_expand_channels_(v, &out[fb_index]);
+                    }
                     fb_index += 16;
                 }
             }
