@@ -347,10 +347,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
                 swap_row_cmd_buffer_pending_ = false;
             }
         }
-    }
 
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
-    {
         if (dma_channel_get_irq0_status(pixel_ctrl_chan_))
         {
             dma_channel_acknowledge_irq0(pixel_ctrl_chan_);
@@ -863,7 +860,6 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
                               false);
 
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
-
 
         // icnd2153 pixel stream can run between 15 MHz and value MHz
         float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 15.f, 15.f);
