@@ -54,23 +54,18 @@ void Hub75Driver<Cfg>::create()
         icnd2153_initialize(Cfg);
 
     configure_pio();
-
     setup_dma_transfers();
 
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         setup_bitplane_creation();
-    }
-    setup_display_irq();
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
-    {
         setup_bitplane_stream_irq();
-        apply_brightness_();
     }
+
+    setup_display_irq();
+    apply_brightness_();
 
     register_instance();
-
-    build_pixel_stream();
 }
 
 template <Hub75Config Cfg>
@@ -427,6 +422,19 @@ void Hub75Driver<Cfg>::handle_bitplane_irq()
 // PIO / DMA setup
 // -----------------------------------------------------------------------------------------
 
+static void dma_setup_(uint ch, dma_channel_transfer_size size, bool read_inc, bool write_inc, uint dreq, uint chain_to,
+                       volatile void *dst, const volatile void *src, uint32_t count)
+{
+    dma_channel_config c = dma_channel_get_default_config(ch);
+    channel_config_set_transfer_data_size(&c, size);
+    channel_config_set_read_increment(&c, read_inc);
+    channel_config_set_write_increment(&c, write_inc);
+    channel_config_set_dreq(&c, dreq);
+    channel_config_set_high_priority(&c, true);
+    channel_config_set_chain_to(&c, chain_to);
+    dma_channel_configure(ch, &c, dst, src, dma_encode_transfer_count(count), false);
+}
+
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setup_bitplane_creation()
 {
@@ -434,42 +442,26 @@ void Hub75Driver<Cfg>::setup_bitplane_creation()
     write_chan_ = dma_claim_unused_channel(true);
 
     // --- READ CHANNEL (Memory -> PIO) ---
-    dma_channel_config read_chan_config = dma_channel_get_default_config(read_chan_);
-    channel_config_set_transfer_data_size(&read_chan_config, DMA_SIZE_32);
-    channel_config_set_read_increment(&read_chan_config, true);
-    channel_config_set_write_increment(&read_chan_config, false);
-    // DREQ: Wait for PIO TX FIFO space
-    channel_config_set_dreq(&read_chan_config, pio_get_dreq(pio_config_.pio_read, pio_config_.sm_read, true));
-    channel_config_set_high_priority(&read_chan_config, true);
-
-    dma_channel_configure(
-        read_chan_,
-        &read_chan_config,
-        &pio_config_.pio_read->txf[pio_config_.sm_read], // Write to PIO TX FIFO
-        nullptr,                                         // Read address set later
-        dma_encode_transfer_count(TOTAL_PIXELS),         // Total pixel (pairs) to process
-        false                                            // Don't start yet
-    );
+    dma_setup_(read_chan_,
+               DMA_SIZE_32,
+               true,
+               false,
+               pio_get_dreq(pio_config_.pio_read, pio_config_.sm_read, true),
+               read_chan_,
+               &pio_config_.pio_read->txf[pio_config_.sm_read],
+               nullptr,
+               TOTAL_PIXELS);
 
     // --- WRITE CHANNEL (PIO -> Memory) ---
-    dma_channel_config write_chan_config = dma_channel_get_default_config(write_chan_);
-    channel_config_set_transfer_data_size(&write_chan_config, DMA_SIZE_32); // PIO pushes 4 bytes
-    channel_config_set_read_increment(&write_chan_config, false);
-    channel_config_set_write_increment(&write_chan_config, true);
-    // DREQ: Wait for PIO RX FIFO data
-    channel_config_set_dreq(&write_chan_config, pio_get_dreq(pio_config_.pio_read, pio_config_.sm_read, false));
-
-    channel_config_set_high_priority(&write_chan_config, true);
-
-    dma_channel_configure(
-        write_chan_,
-        &write_chan_config,
-        nullptr,                                             // Write address set later
-        &pio_config_.pio_read->rxf[pio_config_.sm_read],     // Read from PIO RX FIFO
-        dma_encode_transfer_count((TOTAL_PIXELS >> 1) >> 2), // Two colour informations per byte (xxr0g0b0r1b1g1) => (TOTAL_PIXELS >> 1)
-                                                             // 4 bytes put in a transfered word => ((TOTAL_PIXELS >> 1) >> 2)
-        false                                                // Don't start yet
-    );
+    dma_setup_(write_chan_,
+               DMA_SIZE_32,
+               false,
+               true,
+               pio_get_dreq(pio_config_.pio_read, pio_config_.sm_read, false),
+               write_chan_,
+               nullptr,
+               &pio_config_.pio_read->rxf[pio_config_.sm_read],
+               (TOTAL_PIXELS >> 1) >> 2);
 }
 
 template <Hub75Config Cfg>
@@ -731,19 +723,6 @@ static float icnd2153_clkdiv_(uint32_t sys_hz, float floor_mhz, float margin_mhz
     return sys_hz / (std::max(floor_mhz, sys_hz / 5e6f - margin_mhz) * 1e6f);
 }
 
-static void dma_setup_(uint ch, dma_channel_transfer_size size, bool read_inc, uint dreq, uint chain_to,
-                       volatile void *dst, const volatile void *src, uint32_t count)
-{
-    dma_channel_config c = dma_channel_get_default_config(ch);
-    channel_config_set_transfer_data_size(&c, size);
-    channel_config_set_read_increment(&c, read_inc);
-    channel_config_set_write_increment(&c, false);
-    channel_config_set_dreq(&c, dreq);
-    channel_config_set_high_priority(&c, true);
-    channel_config_set_chain_to(&c, chain_to);
-    dma_channel_configure(ch, &c, dst, src, dma_encode_transfer_count(count), false);
-}
-
 // Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output
 // enable signal, to the PIO state machines controlling the HUB75 matrix. Also configures
 // the DMA channel which gets active when an output enable signal has finished.
@@ -759,6 +738,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         dma_setup_(row_chan_,
                    DMA_SIZE_32,
                    true,
+                   false,
                    pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true),
                    row_ctrl_chan_,
                    &pio_config_.row_pio->txf[pio_config_.sm_row],
@@ -768,6 +748,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         // row ctrl channel
         dma_setup_(row_ctrl_chan_,
                    DMA_SIZE_32,
+                   false,
                    false,
                    DREQ_FORCE,
                    row_chan_,
@@ -782,6 +763,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         dma_setup_(pixel_chan_,
                    DMA_SIZE_8,
                    true,
+                   false,
                    pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true),
                    pixel_ctrl_chan_,
                    &pio_config_.data_pio->txf[pio_config_.sm_data],
@@ -791,6 +773,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         // pixel ctrl channel
         dma_setup_(pixel_ctrl_chan_,
                    DMA_SIZE_32,
+                   false,
                    false,
                    DREQ_FORCE,
                    pixel_chan_,
@@ -810,6 +793,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         dma_setup_(pixel_chan_,
                    DMA_SIZE_32,
                    true,
+                   false,
                    pio_get_dreq(pio_config_.data_pio, pio_config_.sm_data, true),
                    pixel_chan_,
                    &pio_config_.data_pio->txf[pio_config_.sm_data],
@@ -1077,11 +1061,6 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         static_assert(ROWS_IN_PARALLEL == 2, "PWM stream assumes 2 parallel rows");
         static_assert(Cfg.color.bitplanes == 16, "PWM stream carries 16 bit per channel");
 
-        // const absolute_time_t t_end = make_timeout_time_ms(250);
-        // while (swap_frame_buffer_pending_ && !time_reached(t_end))
-        //     tight_loop_contents();
-        // __dmb();
-
         const uint32_t scale = pwm_scale_q16_(); // 0..65536
 
         uint8_t *const out = frame_buffer_;
@@ -1103,8 +1082,8 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
             {
                 for (uint32_t m = 0; m < CHIPS_PER_LANE; ++m) // m = position in the transaction, first-sent first
                 {
-                    // Chip whose pixels travel at this position. Panel order can be flipped
-                    // without touching the chip order inside a panel.
+                    // Chip whose pixels travel at this position.
+                    // Panel order can be flipped without touching the chip order inside a panel.
                     const uint32_t chip = Cfg.panel.pwm_reverse_chain_order
                                               ? (PANELS - 1 - m / CHIPS_PER_PANEL) * CHIPS_PER_PANEL + m % CHIPS_PER_PANEL
                                               : m;
