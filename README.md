@@ -73,7 +73,6 @@
     - [Overview](#overview-1)
     - [Two-Stage Colour Pipeline](#two-stage-colour-pipeline)
     - [Mathematical Model](#mathematical-model)
-    - [Implementation](#implementation)
     - [Configuration in Code](#configuration-in-code-1)
     - [The `cie.py` LUT Generator](#the-ciepy-lut-generator)
     - [Tuning Procedure](#tuning-procedure)
@@ -95,7 +94,6 @@
       - [Chain Modes](#chain-modes)
     - [Code Example](#code-example)
     - [Source Buffer Layout](#source-buffer-layout)
-    - [How Serpentine Reversal Works Internally](#how-serpentine-reversal-works-internally)
     - [Single-Panel Optimisation](#single-panel-optimisation)
     - [Supported Panel Types and Chaining](#supported-panel-types-and-chaining)
     - [Memory Considerations](#memory-considerations)
@@ -160,6 +158,12 @@
     - [Hardware](#hardware-1)
     - [Pixel Mapping](#pixel-mapping-2)
     - [Configuration](#configuration-2)
+    - [`ROW_MAP_STANDARD` — pixel mapping topology](#row_map_standard--pixel-mapping-topology)
+      - [1. Which rows share an address](#1-which-rows-share-an-address)
+      - [2. How one address's row gets written](#2-how-one-addresss-row-gets-written)
+      - [3. Formula reference](#3-formula-reference)
+      - [4. Chained panels (`CHAIN_COLS`/`CHAIN_ROWS` \> 1)](#4-chained-panels-chain_colschain_rows--1)
+      - [5. Comparison with `ROW_MAP_SPLIT`](#5-comparison-with-row_map_split)
   - [3. QP3 Outdoor / P3-1415 (`RowMapping::S31`)](#3-qp3-outdoor--p3-1415-rowmappings31)
     - [Hardware](#hardware-2)
     - [Pixel Mapping](#pixel-mapping-3)
@@ -1228,88 +1232,6 @@ Setting a shift to `31` disables that cross-term completely — a shift of 31 on
 
 ---
 
-### Implementation
-
-The CCM is implemented as two macros in `hub75.hpp`, inserted directly after the `SEPARATE_CIE_CHANNELS` preprocessor block:
-
-```cpp
-// ---------------------------------------------------------------------------
-// Colour Correction Matrix (CCM) — cross-channel mixing
-//
-// Applied after the CIE LUT lookup, on already CAP-scaled 10-bit values.
-// All six cross-terms default to 31 (= disabled, adds zero contribution).
-//
-// Shift reference:  5 → ~3.1%   6 → ~1.6%   7 → ~0.8%   31 → 0% (off)
-// ---------------------------------------------------------------------------
-
-#ifndef CCM_RG_SHIFT
-#define CCM_RG_SHIFT 31   // fraction of Green added into Red
-#endif
-#ifndef CCM_RB_SHIFT
-#define CCM_RB_SHIFT 31   // fraction of Blue  added into Red
-#endif
-#ifndef CCM_GR_SHIFT
-#define CCM_GR_SHIFT 31   // fraction of Red   added into Green
-#endif
-#ifndef CCM_GB_SHIFT
-#define CCM_GB_SHIFT 31   // fraction of Blue  added into Green
-#endif
-#ifndef CCM_BR_SHIFT
-#define CCM_BR_SHIFT 31   // fraction of Red   added into Blue
-#endif
-#ifndef CCM_BG_SHIFT
-#define CCM_BG_SHIFT 31   // fraction of Green added into Blue
-#endif
-
-#if BITPLANES == 10
-#define CCM_MAX_VAL 1023u
-#elif BITPLANES == 8
-#define CCM_MAX_VAL 255u
-#endif
-
-// Branchless saturation — the compiler generates a single USAT or CMP+MOV
-// on Cortex-M0+ and M33; no branching, no pipeline stall.
-#define CCM_CLAMP(val) ((val) > CCM_MAX_VAL ? CCM_MAX_VAL : (val))
-
-// CCM_APPLY operates in-place on three uint32_t locals rv, gv, bv.
-// All cross-terms for a channel are accumulated first, then clamped once.
-#define CCM_APPLY(rv, gv, bv)                                           \
-    do {                                                                \
-        uint32_t _r = (rv) + ((gv) >> CCM_RG_SHIFT)                     \
-                           + ((bv) >> CCM_RB_SHIFT);                    \
-        uint32_t _g = (gv) + ((rv) >> CCM_GR_SHIFT)                     \
-                           + ((bv) >> CCM_GB_SHIFT);                    \
-        uint32_t _b = (bv) + ((rv) >> CCM_BR_SHIFT)                     \
-                           + ((gv) >> CCM_BG_SHIFT);                    \
-        (rv) = CCM_CLAMP(_r);                                           \
-        (gv) = CCM_CLAMP(_g);                                           \
-        (bv) = CCM_CLAMP(_b);                                           \
-    } while (0)
-```
-
-`CCM_APPLY` is inserted as a single additional line in both `pack_lut_rgb` and `pack_lut_rgb_` in `hub75.cpp`, immediately before the packed 32-bit word is assembled:
-
-```cpp
-// Before (without CCM):
-static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
-    uint32_t rv = CIE_RED[r];
-    uint32_t gv = CIE_GREEN[g];
-    uint32_t bv = CIE_BLUE[b];
-    return (bv << 20u) | (gv << 10u) | rv;
-}
-
-// After (with CCM — one line added):
-static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
-    uint32_t rv = CIE_RED[r];
-    uint32_t gv = CIE_GREEN[g];
-    uint32_t bv = CIE_BLUE[b];
-    CCM_APPLY(rv, gv, bv);
-    return (bv << 20u) | (gv << 10u) | rv;
-}
-```
-
----
-
 ### Configuration in Code
 
 CCM is configured exclusively through the `color` fields of `Hub75Config` — no source file
@@ -1580,71 +1502,6 @@ pixel(x, y) = src[(y * DISPLAY_WIDTH + x) * 3]    // update_bgr() — BGR888 byt
 
 The driver internally translates this linear layout into the correct per-panel, per-row addressing
 required by the HUB75 protocol, including the 180° rotation for reversed panels in serpentine mode.
-
----
-
-### How Serpentine Reversal Works Internally
-
-During the pixel mapping stage, each panel is identified by its position `(v, h)` where `v` is the
-chain row index and `h` is the column index within that row.
-
-For every scan row the driver iterates over all panels:
-
-```cpp
-   int32_t fb_index = 0;
-
-    for (int row = 0; row < SCAN_DEPTH; row++) // row: current row
-    {
-        for (int v = 0; v < Cfg.panel.chain_rows; v++) // v: panel in row (vertical chain)
-        {
-            const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) ? (v & 1) : false;
-
-            for (int h = 0; h < Cfg.panel.chain_cols; h++) // h: panel in column (horizontal chain)
-            {
-                // Input parameters
-                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
-                // Output parameters
-                // row_base: row offset
-                int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                // map row and its paired row(s) in current panel located at position (v, h)
-                if (reverse)
-                {
-                    // 180° rotation:
-                    // reverse:
-                    //   - local scan row      (done in map_panel_row)
-                    //   - i traversal         (done here)
-                    //   - multiplex ordering  (done here)
-                    for (int i = Cfg.panel.matrix_panel_width - 1; i >= 0; --i)
-                    {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-                        {
-                           // set rotated content for odd chain rows
-                           ...
-                           rgb_buffer[fb_index++] = ...
-                        }
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < Cfg.panel.matrix_panel_width; ++i)
-                    {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-                        {
-                            // set content for even chain rows
-                            ...
-                            rgb_buffer[fb_index++] = ...
-                        }
-                    }
-                }
-            }
-        }
-    }
-```
-
-When `reverse` is `true`, pixel coordinates within the panel are mirrored both horizontally and
-vertically, which is equivalent to a 180° software rotation. This compensates for the physical
-cable U-turn without requiring any change to the panel wiring.
 
 ---
 
