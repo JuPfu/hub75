@@ -26,6 +26,7 @@
   - [Configuration Examples  ](#configuration-examples--)
     - [Settings for Pico 2](#settings-for-pico-2)
     - [Settings for RP2350B](#settings-for-rp2350b)
+    - [Settings for a Hub75 Panel with shift register for row addressing (e.g. Waveshares panel Hub75 96x48 SM5368 Version 2)](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing-eg-waveshares-panel-hub75-96x48-sm5368-version-2)
   - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
 - [Configuration in Code](#configuration-in-code)
   - [Overview](#overview)
@@ -210,7 +211,7 @@ Supports:
 
 ### Colour Data Pins
 
-⚠️ The coloured pins must be arranged in a continuous block in ascending order!
+⚠️ It is a requirement of the `Hub75 driver` that the **colour pins** must be arranged in a continuous block in ascending order!
 
 - `pins.data_base_pin` = **GPIO 0** (first in a consecutive block)
 - `pins.data_n_pins` = **6** (for R0, G0, B0, R1, G1, B1)
@@ -226,12 +227,10 @@ Supports:
 
 ### Address (Row Select) Pins
 
-⚠️ The address pins must be arranged in a continuous block in ascending order!
+⚠️ It is a requirement of the `Hub75 driver` that the **address pins** must be arranged in a continuous block in ascending order!
 
 - `pins.rowsel_base_pin` = **GPIO 6**
 - `pins.rowsel_n_pins` = **5** (A0–A4)
-
-**Consecutiveness is required** by the PIO program.
 
 | Address bit |  connected to      | Pico GPIO |
 | ----------- |--------------------|:---------:|
@@ -243,7 +242,7 @@ Supports:
 
 ### Control Pins
 
-⚠️ The control pins must be arranged in a continuous block in ascending order!
+⚠️ It is a requirement of the `Hub75 driver` that the **control pins** must be arranged in a continuous block in ascending order!
 
 - **`pins.clk_pin`** (clock): GPIO 11
 - **`pins.strobe_pin`** (latch): GPIO 12
@@ -258,7 +257,7 @@ The diagram shows the default mapping as defined in the hub75.cpp file.
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
 Almost all Hub75 driver configuration is done in your application program. See [`hub75_demo.cpp`](hub75_demo.cpp) how to set the values in the `Hub75Config` structure to your needs.
-Configuration details are explained in [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
+Configuration details are explained in chapter [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
 
 ### Settings for Pico 2
 
@@ -345,7 +344,7 @@ constexpr Hub75Config panel_cfg{
 
 ### Settings for RP2350B
 
-To use a `RP2350A` microcontroller adapt `CMakeLists.txt` as show below.
+To use a `RP2350B` microcontroller adapt `CMakeLists.txt` as show below.
 
 ```cmake
 # ⚠️ look at or near line 26
@@ -382,6 +381,43 @@ constexpr Hub75Config panel_cfg{
     },
 };
 ```
+
+### Settings for a Hub75 Panel with shift register for row addressing (e.g. Waveshares panel Hub75 96x48 SM5368 Version 2)
+
+In standard HUB75 panels, the address pins (A, B, C, D, E) are usually used as binary address lines.
+**Waveshares** matrix panel `Hub75 96x48 SM5368 Version 2`, for example, does not operate according to this scheme, but uses a shift register to advance to the next row.
+This means that it does not output the address of the current row directly, but rather advances the row selection to the next row via a shift sequence.
+This requires a dedicated row control logic. To advise the `Hub75 driver` to use this dedicated control logic set `.address_type = RowAddressing::ABCShiftRegister`.
+
+We do not have any **Waveshare** panels at hand. User [Jason](https://github.com/jason-a69) was kind enough to carry out some basic testing of the `Hub75 96x48 SM5368 Version 2` panel. As [Jason](https://github.com/jason-a69) pointed out, he had to reduce the state machine (sm) clock `.sm_clockdiv_factor = 4.0f` to achieve a stable output. Currently testing and optimising of this panel is at rest due to missing hardware.
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 96,
+        .matrix_panel_height = 48,
+        .chain_rows = 1,
+        .chain_cols = 1,
+        .chain_mode = Hub75ChainMode::SERPENTINE,
+        .panel_kind = RowMapping::Standard,
+        .address_type = RowAddressing::ABCShiftRegister,
+        .scan_mode = 24, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
+        .panel_chip = Hub75PanelChip::GENERIC,
+        .inverted_stb = false,
+        .sm_clockdiv_factor = 4.0f,
+        .base_latch_ns = 180,
+        .base_addr_ns = 260,
+    },
+    .color = {
+        .bitplanes = 10,
+        .swap_rb_pins = true,
+        .ccm_rg_shift = 6,
+        .ccm_gb_shift = 7,
+    },
+    .frame_rate_debug = true,
+}
+```
+
 ---
 
 ## How to Use This Project in VSCode
