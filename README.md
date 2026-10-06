@@ -257,14 +257,14 @@ The diagram shows the default mapping as defined in the hub75.cpp file.
 
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
-Almost all Hub75 driver configuration is done in your application program. See `hub75_demo.cpp` how to set the values in the `Hub75Config` structure to your needs.
-Configuration details are explained in [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in `CMakeLists.txt`.
+Almost all Hub75 driver configuration is done in your application program. See [`hub75_demo.cpp`](hub75_demo.cpp) how to set the values in the `Hub75Config` structure to your needs.
+Configuration details are explained in [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
 
 ### Settings for Pico 2
 
-The following excerpt from file `CMakeLists.txt` shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
+The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
 
-Here is the default configuration in the `CMakeList.txt` file that comes with this library.
+Here is the default configuration in the [`CMakeLists.txt`](CMakeLists.txt) file that comes with this library.
 
 ```cmake
 
