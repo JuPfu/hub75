@@ -23,9 +23,9 @@
     - [Address (Row Select) Pins](#address-row-select-pins)
     - [Control Pins](#control-pins)
     - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
-  - [Allowed Deviations  ](#allowed-deviations--)
-    - [Example: Pin Mapping and Environment Settings for Pico 2](#example-pin-mapping-and-environment-settings-for-pico-2)
-    - [Example: Pin Mapping and Environment Settings for RP2350B](#example-pin-mapping-and-environment-settings-for-rp2350b)
+  - [Configuration Examples  ](#configuration-examples--)
+    - [Settings for Pico 2](#settings-for-pico-2)
+    - [Settings for RP2350B](#settings-for-rp2350b)
   - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
 - [Configuration in Code](#configuration-in-code)
   - [Overview](#overview)
@@ -195,6 +195,7 @@ Supports:
 - RP2350A/B
 - chained HUB75 panels
 - serpentine/U-turn topologies
+- display rotation
 - multiple panel scan architectures
 
 # Quick Start
@@ -209,6 +210,8 @@ Supports:
 
 ### Colour Data Pins
 
+⚠️ The coloured pins must be arranged in a continuous block in ascending order!
+
 - `pins.data_base_pin` = **GPIO 0** (first in a consecutive block)
 - `pins.data_n_pins` = **6** (for R0, G0, B0, R1, G1, B1)
 
@@ -222,6 +225,8 @@ Supports:
 | B1                 |                   | 5    |
 
 ### Address (Row Select) Pins
+
+⚠️ The address pins must be arranged in a continuous block in ascending order!
 
 - `pins.rowsel_base_pin` = **GPIO 6**
 - `pins.rowsel_n_pins` = **5** (A0–A4)
@@ -238,37 +243,39 @@ Supports:
 
 ### Control Pins
 
+⚠️ The control pins must be arranged in a continuous block in ascending order!
+
 - **`pins.clk_pin`** (clock): GPIO 11
 - **`pins.strobe_pin`** (latch): GPIO 12
 - **`pins.oen_pin`** (output enable): GPIO 13
-
-⚠️ **`pins.strobe_pin`** pin must be immediately followed by **`pins.oen_pin`** (must be consecutive)
 
 ### One Glance Mapping HUB75 Connector → Pico GPIOs
 
 The diagram shows the default mapping as defined in the hub75.cpp file.
   
-<img src="assets/pico_wiring.png">
+<img src="assets/pico_wiring.svg">
 
-## Allowed Deviations  <a id='allowed_deviations_anchor'></a>
+## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
-The **strict requirement** to be aware of is that **data pins** and **row-select pins** must be in **consecutive GPIO blocks**.
-Be aware of a **second requirement** that **`pins.strobe_pin`** must be immediately followed by **`pins.oen_pin`**.
-Clock pin may be freely chosen.
+Almost als Hub75 driver configuration is done in your application program. See `hub75_demo.cpp` how to set the values in the `Hub75Config` structure to your needs.
+Configuration details are explained in [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in `CMakeLists.txt`.
 
-### Example: Pin Mapping and Environment Settings for Pico 2
+### Settings for Pico 2
 
-Almost all driver configuration now lives in code as a `constexpr Hub75Config`, passed as a
-template argument to `Hub75Driver<Cfg>` — see [Configuration in Code](#configuration-in-code)
-below. Only a handful of build-system-level flags remain in `CMakeLists.txt`.
+The following excerpt from file `CMakeLists.txt` shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
+
+Here is the default configuration in the `CMakeList.txt` file that comes with this library.
 
 ```cmake
+
+# ⚠️ look at or near line 26
 set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # The following two lines must be uncommented to compile for bare RP2350 without a board
 # set(PICO_PLATFORM rp2350)
 # set(PICO_BOARD none CACHE STRING "Board type")
 
+# ⚠️ look at or near line 78
 target_compile_definitions(hub75_demo PRIVATE
     # PICO_RP2350A=0             # uncomment for RP2350B microcontrollers only
     USE_PICO_GRAPHICS=true       # set to false if you use hub75 as a library
@@ -276,43 +283,87 @@ target_compile_definitions(hub75_demo PRIVATE
 )
 ```
 
+As mentioned earlier, the rest of your panel’s configuration is done in your application program. This is easier than it seems at first glance! The `Hub75 driver` has default values for all attributes. You only need to change an attribute if it does not match this default value. If you have a “standard” Hub75 matrix panel with 64 rows and 64 columns and have chosen to wire the pins as described earlier, you do not need to specify a single attribute, since the fallbacks in the `Hub75 driver` have already preset them accordingly.
+
+If you have a "standard" 64x32 panel it is sufficient to set the configuration to
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 64,      // your matrix panel width - could be dropped as 64 columns is the hub75 drivers default
+        .matrix_panel_height = 32,     // your matrix panel height
+    },
+};
+```
+
+as panel dimensions 64x64 (64 rows and 64 columns) is the default.
+
+To give you a glance of the available options let's show them all in brief (details in [Configuration in Code](#configuration-in-code)). Look at the start of `hub75_demo.cpp` to see how it is used. 
+ 
 ```cpp
 // hub75_demo.cpp / your own .cpp file
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,      // your matrix panel width
-        .matrix_panel_height = 32,     // your matrix panel height
-        .panel_kind = RowMapping::S31, // default — other values: Split, Standard
+        .matrix_panel_width = 64,                  // your matrix panel width
+        .matrix_panel_height = 64,                 // your matrix panel height
+        .chain_rows = 1,                           // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                           // number of panels chained left-to-right in a single chain row (columns)
+        .panel_class = PanelClass::HUB75,          // standard HUB75 panel - another value is PWM
+        .chain_mode = Hub75ChainMode::SERPENTINE,  // default is serpentine (U-Turn with compensation for 180° rotation)
+        .panel_kind = RowMapping::Standard,        // how to map the rgb888 buffer onto the panel 
+        .address_type = RowAddressing::Binary,     // row addressing via address pins
+        .scan_mode = 0,                            // 0 tries to automatically deduce scan_mode else specify a value
+        .panel_chip = Hub75PanelChip::GENERIC,     // mainly used for initialisation sequence but also for panel specific characteristics
+        .inverted_stb = false,                     // inverted pin signal for OE pin
+        .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+        .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
+        .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
+    },
+    .screen = {
+        .rotation = Hub75Rotation::DEG_0,          // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
     },
     .pins = {
-        .data_base_pin = 0,     // base GPIO of R0, G0, B0, R1, G1, B1
-        .data_n_pins = 6,       // count of colour pins (usually 6)
-        .rowsel_base_pin = 6,   // base GPIO of A, B (, C, D, E)
-        .rowsel_n_pins = 5,     // count of address pins on your panel connector
-        .clk_pin = 11,
-        .strobe_pin = 12,
-        .oen_pin = 13,
+        .data_base_pin = 0,                        // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+        .data_n_pins = 6,                          // number (count) of colour pins (usually 6: R0, G0, B0, R1, G1, B1)
+        .rowsel_base_pin = 6,                      // base GPIO row select pin (aka start index) of A, B (, C, D. E) GPIO pins
+        .rowsel_n_pins = 5,                        // row select pin count 
+        .clk_pin = 11,                             // GPIO pin for CLK 
+        .strobe_pin = 12,                          // GPIO pin for STROBE (LATCH)
+        .oen_pin = 13,                             // GPIO for OE pin (GCKL for PWM panel class)
     },
+    .color = {
+        .bitplanes = 10,               // number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values are 8, 10 for HUB75 panels and 16 for PWM panels
+        .separate_cie_channels = true, // use separate CIE channels for improved colour representation - needs more memory
+        .balanced_light_output = true, // improves image quality but needs some more memory
+        .swap_rb_pins = false,         // swap red and blue pins in software
+        .ccm_rg_shift = 6,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
+        .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
+    },
+    .frame_rate_debug = true,          // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
 };
-
-using Panel = Hub75Driver<panel_cfg>;
 ```
 
-### Example: Pin Mapping and Environment Settings for RP2350B
+### Settings for RP2350B
+
+To use a `RP2350A` microcontroller adapt `CMakeLists.txt` as show below.
 
 ```cmake
+# ⚠️ look at or near line 26
 # set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # The following two lines must be uncommented to compile for bare RP2350 without a board
 set(PICO_PLATFORM rp2350)
 set(PICO_BOARD none CACHE STRING "Board type")
 
+# ⚠️ look at or near line 78
 target_compile_definitions(hub75_demo PRIVATE
-    PICO_RP2350A=0                # not a RP2350A but a RP2350B microcontroller
-    USE_PICO_GRAPHICS=true
-    HUB75_MULTICORE=true
+    PICO_RP2350A=0               # uncomment for RP2350B microcontrollers only
+    USE_PICO_GRAPHICS=true       # set to false if you use hub75 as a library
+    HUB75_MULTICORE=true         # use core1 for the hub75 driver
 )
 ```
+
+Since the `RP2350A` microcontroller has more pins available as the `pico2` we use pins 30 up to pin 43 in this example to connect to the matrix panel.
 
 ```cpp
 constexpr Hub75Config panel_cfg{
@@ -321,17 +372,15 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_height = 64,  // your matrix panel height
     },
     .pins = {
-        .data_base_pin = 30,    // use 30 for RP2350B
-        .data_n_pins = 6,
-        .rowsel_base_pin = 36,  // use 36 for RP2350B
-        .rowsel_n_pins = 5,
-        .clk_pin = 41,          // use 41 for RP2350B
-        .strobe_pin = 42,       // use 42 for RP2350B
-        .oen_pin = 43,          // use 43 for RP2350B
+        .data_base_pin = 30,        // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+        .data_n_pins = 6,           // number (count) of colour pins (usually 6: R0, G0, B0, R1, G1, B1)
+        .rowsel_base_pin = 36,      // base GPIO row select pin (aka start index) of A, B (, C, D. E) GPIO pins
+        .rowsel_n_pins = 5,         // row select pin count 
+        .clk_pin = 41,              // GPIO pin for CLK 
+        .strobe_pin = 42,           // GPIO pin for STROBE (LATCH)
+        .oen_pin = 43,              // GPIO for OE pin (GCKL for PWM panel class)
     },
 };
-
-using Panel = Hub75Driver<panel_cfg>;
 ```
 ---
 
