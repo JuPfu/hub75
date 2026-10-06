@@ -28,7 +28,6 @@
     - [Settings for RP2350B](#settings-for-rp2350b)
     - [Settings for a Hub75 Panel with Shift Register for Row Addressing (e.g. Waveshares Hub75 96x48 SM5368 Version 2 Panel)](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing-eg-waveshares-hub75-96x48-sm5368-version-2-panel)
     - [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
-  - [](#)
   - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
 - [Configuration in Code](#configuration-in-code)
   - [Overview](#overview)
@@ -447,8 +446,6 @@ constexpr Hub75Config panel_cfg{
     .frame_rate_debug = false,                     // ignored for PWM panels
 };
 ```
-
-[![ICND2153 PWM panel clip](https://github.com/JuPfu/hub75/main/assets/icnd2153_pwm_thumbnail.png)](https://github.com/JuPfu/hub75/main/assets/icnd2153_pwm_mov)
 ---
  
 ## How to Use This Project in VSCode
