@@ -22,7 +22,7 @@
     - [Colour Data Pins](#colour-data-pins)
     - [Address (Row Select) Pins](#address-row-select-pins)
     - [Control Pins](#control-pins)
-    - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
+    - [Default Mapping for HUB75 Connector → Raspberry Pico GPIOs](#default-mapping-for-hub75-connector--raspberry-pico-gpios)
   - [Configuration Examples  ](#configuration-examples--)
     - [Settings for Pico 2](#settings-for-pico-2)
     - [Settings for RP2350B](#settings-for-rp2350b)
@@ -249,7 +249,7 @@ Supports:
 - **`pins.strobe_pin`** (latch): GPIO 12
 - **`pins.oen_pin`** (output enable): GPIO 13
 
-### One Glance Mapping HUB75 Connector → Pico GPIOs
+### Default Mapping for HUB75 Connector → Raspberry Pico GPIOs
 
 The diagram shows the default mapping as defined in the hub75.cpp file.
   
@@ -257,7 +257,7 @@ The diagram shows the default mapping as defined in the hub75.cpp file.
 
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
-Almost als Hub75 driver configuration is done in your application program. See `hub75_demo.cpp` how to set the values in the `Hub75Config` structure to your needs.
+Almost all Hub75 driver configuration is done in your application program. See `hub75_demo.cpp` how to set the values in the `Hub75Config` structure to your needs.
 Configuration details are explained in [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in `CMakeLists.txt`.
 
 ### Settings for Pico 2
@@ -291,14 +291,14 @@ If you have a "standard" 64x32 panel it is sufficient to set the configuration t
 constexpr Hub75Config panel_cfg{
     .panel = {
         .matrix_panel_width = 64,      // your matrix panel width - could be dropped as 64 columns is the hub75 drivers default
-        .matrix_panel_height = 32,     // your matrix panel height
+        .matrix_panel_height = 32,     // your matrix panel height - differs from the default value of 64
     },
 };
 ```
 
 as panel dimensions 64x64 (64 rows and 64 columns) is the default.
 
-To give you a glance of the available options let's show them all in brief (details in [Configuration in Code](#configuration-in-code)). Look at the start of `hub75_demo.cpp` to see how it is used. 
+To give you an overview of the available options let's show them all in brief (details in [Configuration in Code](#configuration-in-code)). Look at the start of `hub75_demo.cpp` to see how it is used. 
  
 ```cpp
 // hub75_demo.cpp / your own .cpp file
@@ -363,7 +363,7 @@ target_compile_definitions(hub75_demo PRIVATE
 )
 ```
 
-Since the `RP2350A` microcontroller has more pins available as the `pico2` we use pins 30 up to pin 43 in this example to connect to the matrix panel.
+Since the `RP2350A` microcontroller has more pins available as the `pico2` in this example we use pins 30 up to pin 43 to connect to the matrix panel.
 
 ```cpp
 constexpr Hub75Config panel_cfg{
