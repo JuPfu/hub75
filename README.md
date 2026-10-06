@@ -26,7 +26,7 @@
   - [Configuration Examples  ](#configuration-examples--)
     - [Settings for Pico 2](#settings-for-pico-2)
     - [Settings for RP2350B](#settings-for-rp2350b)
-    - [Settings for a Hub75 Panel with shift register for row addressing (e.g. Waveshares panel Hub75 96x48 SM5368 Version 2)](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing-eg-waveshares-panel-hub75-96x48-sm5368-version-2)
+    - [Settings for a Hub75 Panel with Shift Register for Row Addressing (e.g. Waveshares Hub75 96x48 SM5368 Version 2 Panel)](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing-eg-waveshares-hub75-96x48-sm5368-version-2-panel)
   - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
 - [Configuration in Code](#configuration-in-code)
   - [Overview](#overview)
@@ -382,7 +382,7 @@ constexpr Hub75Config panel_cfg{
 };
 ```
 
-### Settings for a Hub75 Panel with shift register for row addressing (e.g. Waveshares panel Hub75 96x48 SM5368 Version 2)
+### Settings for a Hub75 Panel with Shift Register for Row Addressing (e.g. Waveshares Hub75 96x48 SM5368 Version 2 Panel)
 
 In standard HUB75 panels, the address pins (A, B, C, D, E) are usually used as binary address lines.
 **Waveshares** matrix panel `Hub75 96x48 SM5368 Version 2`, for example, does not operate according to this scheme, but uses a shift register to advance to the next row.
@@ -394,27 +394,23 @@ We do not have any **Waveshare** panels at hand. User [Jason](https://github.com
 ```cpp
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 96,
-        .matrix_panel_height = 48,
-        .chain_rows = 1,
-        .chain_cols = 1,
-        .chain_mode = Hub75ChainMode::SERPENTINE,
-        .panel_kind = RowMapping::Standard,
-        .address_type = RowAddressing::ABCShiftRegister,
-        .scan_mode = 24, // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
-        .panel_chip = Hub75PanelChip::GENERIC,
-        .inverted_stb = false,
-        .sm_clockdiv_factor = 4.0f,
-        .base_latch_ns = 180,
-        .base_addr_ns = 260,
+        .matrix_panel_width = 96,                  // your matrix panel width
+        .matrix_panel_height = 48,                 // your matrix panel height
+        .chain_rows = 1,                           // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                           // number of panels chained left-to-right in a single chain row (columns)
+        .chain_mode = Hub75ChainMode::SERPENTINE,  // default is serpentine (U-Turn with compensation for 180° rotation)
+        .panel_kind = RowMapping::Standard,        // how to map the rgb888 buffer onto the panel 
+        .address_type = RowAddressing::ABCShiftRegister, // row addressing via shift register
+        .scan_mode = 24,                           // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
+        .panel_chip = Hub75PanelChip::GENERIC,     // mainly used for initialisation sequence but also for panel specific characteristics
+        .sm_clockdiv_factor = 4.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+        .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
+        .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
     },
     .color = {
-        .bitplanes = 10,
-        .swap_rb_pins = true,
-        .ccm_rg_shift = 6,
-        .ccm_gb_shift = 7,
+        .bitplanes = 10,                           // number (count) of bit-planes used for BCM (Binary Code Modulation)
+        .swap_rb_pins = true,                      // swap red and blue pins in software
     },
-    .frame_rate_debug = true,
 }
 ```
 
