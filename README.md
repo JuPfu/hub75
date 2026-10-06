@@ -448,7 +448,7 @@ constexpr Hub75Config panel_cfg{
 };
 ```
 
-[![ICND2153 PWM panel clip](https://raw.githubusercontent.com/JuPfu/hub75/main/assets/icnd2153_pwm_thumbnail.png)](https://raw.githubusercontent.com/JuPfu/hub75/main/assets/icnd2153_pwm_mov)
+[![ICND2153 PWM panel clip](https://github.com/JuPfu/hub75/main/assets/icnd2153_pwm_thumbnail.png)](https://github.com/JuPfu/hub75/main/assets/icnd2153_pwm_mov)
 ---
  
 ## How to Use This Project in VSCode
