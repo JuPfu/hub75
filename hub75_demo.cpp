@@ -13,7 +13,7 @@
 // Matches a single generic 64x64 panel wired to GPIO 0-13.
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 128,                // your matrix panel width
+        .matrix_panel_width = 64,                // your matrix panel width
         .matrix_panel_height = 64,                // your matrix panel height
         .chain_rows = 1,                          // number of chain rows stacked vertically (rows)
         .chain_cols = 1,                          // number of panels chained left-to-right in a single chain row (columns)
