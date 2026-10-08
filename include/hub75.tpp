@@ -998,14 +998,6 @@ inline void Hub75Driver<Cfg>::store_pixel_(size_t &fb, uint8_t r, uint8_t g, uin
         storage_.rgb_buffer_[fb++] = static_cast<uint16_t>(gv);
         storage_.rgb_buffer_[fb++] = static_cast<uint16_t>(bv);
     }
-    if constexpr (Cfg.color.swap_rb_pins)
-    {
-        return (rv << 20u) | (gv << 10u) | bv;
-    }
-    else
-    {
-        return (bv << 20u) | (gv << 10u) | rv;
-    }
 }
 
 // Returns the flat src-buffer index for display coordinate (dx, dy)
