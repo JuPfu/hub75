@@ -7,8 +7,6 @@
 #include "pico/cyw43_arch.h"
 #endif
 
-#include "hardware/clocks.h"
-
 #include "hub75.hpp"
 
 // Panel/pin/color/rotation configuration - see include/hub75.hpp for field docs.
