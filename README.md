@@ -1,197 +1,81 @@
-> **⚠️ Breaking change:** As of [issue #22](https://github.com/JuPfu/hub75/issues/22), almost
-> all driver configuration has moved from `CMakeLists.txt` preprocessor defines into a
-> `constexpr Hub75Config` value passed as a template argument to `Hub75Driver<Cfg>` — see
-> [Configuration in Code](#configuration-in-code). Only `PICO_RP2350A`, `USE_PICO_GRAPHICS`,
-> and `HUB75_MULTICORE` remain as `target_compile_definitions`.
->
-> The pixel-mapping panel defines from the previous breaking change (issue #21) are now the
-> `RowMapping` enum's values (`panel.panel_kind` field):
->
-> | Old macro name | Current `RowMapping` value |
-> |---|---|
-> | `HUB75_MULTIPLEX_2_ROWS` (formerly `HUB75_DEFAULT` / `HUB75`), later `ROW_MAP_STANDARD` | `RowMapping::Standard` |
-> | `HUB75_P10_3535_16X32_4S`, later `ROW_MAP_SPLIT` | `RowMapping::Split` |
-> | `HUB75_P3_1415_16S_64X64_S31`, later `ROW_MAP_S31` | `RowMapping::S31` |
->
-> Update your panel setup to build a `Hub75Config` accordingly.
+# HUB75 DMA/PIO Driver for Raspberry Pi Pico & Pico 2
 
-- [HUB75 DMA/PIO Driver for Raspberry Pi Pico / RP2350](#hub75-dmapio-driver-for-raspberry-pi-pico--rp2350)
-- [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [Wiring Details](#wiring-details)
-    - [Colour Data Pins](#colour-data-pins)
-    - [Address (Row Select) Pins](#address-row-select-pins)
-    - [Control Pins](#control-pins)
-    - [One Glance Mapping HUB75 Connector → Pico GPIOs](#one-glance-mapping-hub75-connector--pico-gpios)
-  - [Allowed Deviations  ](#allowed-deviations--)
-    - [Example: Pin Mapping and Environment Settings for Pico 2](#example-pin-mapping-and-environment-settings-for-pico-2)
-    - [Example: Pin Mapping and Environment Settings for RP2350B](#example-pin-mapping-and-environment-settings-for-rp2350b)
-  - [How to Use This Project in VSCode](#how-to-use-this-project-in-vscode)
-- [Configuration in Code](#configuration-in-code)
-  - [Overview](#overview)
-  - [All Available Fields and Their Default Values](#all-available-fields-and-their-default-values)
-    - [`Hub75PanelConfig panel`](#hub75panelconfig-panel)
-    - [`Hub75ScreenConfig screen`](#hub75screenconfig-screen)
-    - [`Hub75PinConfig pins`](#hub75pinconfig-pins)
-    - [`Hub75ColorConfig color`](#hub75colorconfig-color)
-    - [`Hub75Config` top level](#hub75config-top-level)
-  - [Full `Hub75Config` Example](#full-hub75config-example)
-  - [Notes on Default Values](#notes-on-default-values)
-  - [Pixel Mapping — Choosing the Right `RowMapping` for Your Panel](#pixel-mapping--choosing-the-right-rowmapping-for-your-panel)
-    - [Why This Mapping Step Exists](#why-this-mapping-step-exists)
-    - [The Three `RowMapping` Values at a Glance](#the-three-rowmapping-values-at-a-glance)
-    - [`RowMapping::Standard` — Standard Two-Row Multiplexing](#rowmappingstandard--standard-two-row-multiplexing)
-    - [`RowMapping::Split` — Outdoor P10 Panel, Four-Row Multiplexing](#rowmappingsplit--outdoor-p10-panel-four-row-multiplexing)
-    - [`RowMapping::S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing](#rowmappings31--outdoor-p3-6464-panel-four-row-multiplexing)
-    - [How to Select the Correct Value — Decision Guide](#how-to-select-the-correct-value--decision-guide)
-    - [What Happens When You Set `panel_kind`](#what-happens-when-you-set-panel_kind)
-    - [Important Notes](#important-notes)
-- [HUB75 DMA-Based Driver](#hub75-dma-based-driver)
-  - [Hub75 Matrix Panel Driver Version 3.0](#hub75-matrix-panel-driver-version-30)
-  - [Achievements at a Glance](#achievements-at-a-glance)
-    - [Version 2.0 — DMA/PIO Pipeline](#version-20--dmapio-pipeline)
-    - [Version 3.0 — Colour Fidelity \& Signal Integrity](#version-30--colour-fidelity--signal-integrity)
-  - [The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data](#the-definitive-hub75-driver-solution--a-bitplane-stream-with-parallel-reading-and-display-of-pixel-data)
-    - [Overview of the Redesigned Alternative Approach](#overview-of-the-redesigned-alternative-approach)
-    - [High-Level Architectural View of HUB75 Pipeline](#high-level-architectural-view-of-hub75-pipeline)
-    - [1. Canonical Mapping Stage (`update()` / `update_bgr()`)](#1-canonical-mapping-stage-update--update_bgr)
-    - [2. The New Hardware Pipeline](#2-the-new-hardware-pipeline)
-    - [3. Simplified DMA Structure](#3-simplified-dma-structure)
-    - [4. Advanced Signal Integrity \& Anti-Ghosting](#4-advanced-signal-integrity--anti-ghosting)
-    - [5. Efficient BCM with Split-Bitplanes](#5-efficient-bcm-with-split-bitplanes)
-    - [Step-by-Step Breakdown of DMA and PIO Cooperation](#step-by-step-breakdown-of-dma-and-pio-cooperation)
-      - [RGB Pixel Data Transformation into Bitplane Slices](#rgb-pixel-data-transformation-into-bitplane-slices)
-      - [Row-Addressing, Loading and Display of Pixel Data](#row-addressing-loading-and-display-of-pixel-data)
-    - [Refresh Rate Performance](#refresh-rate-performance)
-    - [Key Benefits of this Approach](#key-benefits-of-this-approach)
-  - [Conclusion for DMA and PIO based Approach](#conclusion-for-dma-and-pio-based-approach)
-  - [Improved Colour Perception](#improved-colour-perception)
-    - [Balanced Light Output](#balanced-light-output)
-      - [Example: 10-bit color depth (`bitplanes = 10`)](#example-10-bit-color-depth-bitplanes--10)
-      - [Visual comparison](#visual-comparison)
-  - [Colour Correction Matrix](#colour-correction-matrix)
-    - [Overview](#overview-1)
-    - [Two-Stage Colour Pipeline](#two-stage-colour-pipeline)
-    - [Mathematical Model](#mathematical-model)
-    - [Implementation](#implementation)
-    - [Configuration in Code](#configuration-in-code-1)
-    - [The `cie.py` LUT Generator](#the-ciepy-lut-generator)
-    - [Tuning Procedure](#tuning-procedure)
-      - [Step 1 — Establish a baseline](#step-1--establish-a-baseline)
-      - [Step 2 — Use a grey-ramp test image](#step-2--use-a-grey-ramp-test-image)
-      - [Step 3 — Tune one term at a time](#step-3--tune-one-term-at-a-time)
-      - [Step 4 — Verify with saturated primaries](#step-4--verify-with-saturated-primaries)
-      - [Step 5 — Check with a real image](#step-5--check-with-a-real-image)
-      - [Step 6 — Final white-balance trim](#step-6--final-white-balance-trim)
-    - [Runtime Cost](#runtime-cost)
-  - [Brightness Control](#brightness-control)
-    - [API Functions](#api-functions)
-    - [How it Works](#how-it-works)
-    - [Default Settings](#default-settings)
-    - [Practical Notes](#practical-notes)
-  - [Chained Panels](#chained-panels)
-    - [Topology Overview](#topology-overview)
-    - [Configuration Parameters](#configuration-parameters)
-      - [Chain Modes](#chain-modes)
-    - [Code Example](#code-example)
-    - [Source Buffer Layout](#source-buffer-layout)
-    - [How Serpentine Reversal Works Internally](#how-serpentine-reversal-works-internally)
-    - [Single-Panel Optimisation](#single-panel-optimisation)
-    - [Supported Panel Types and Chaining](#supported-panel-types-and-chaining)
-    - [Memory Considerations](#memory-considerations)
-    - [Quick-Reference: Common Configurations](#quick-reference-common-configurations)
-  - [Display Rotation](#display-rotation)
-    - [Configuration](#configuration)
-    - [Physical Panel vs. Logical Source Buffer](#physical-panel-vs-logical-source-buffer)
-    - [Screen Dimensions per Rotation Value](#screen-dimensions-per-rotation-value)
-    - [Setting Up the Source Buffer](#setting-up-the-source-buffer)
-    - [Combining Rotation with Chained Panels](#combining-rotation-with-chained-panels)
-  - [Demo Effects](#demo-effects)
-  - [Next Steps](#next-steps)
-- [Configuration in Code — Quick Reference](#configuration-in-code--quick-reference)
-  - [Overview](#overview-2)
-  - [All Available Fields and Their Default Values](#all-available-fields-and-their-default-values-1)
-  - [Remaining `CMakeLists.txt` Build Flags](#remaining-cmakeliststxt-build-flags)
-  - [Dual-Instance Configuration](#dual-instance-configuration)
-    - [Resource Limits](#resource-limits)
-    - [`hub75_demo_dual.cpp` Example](#hub75_demo_dualcpp-example)
-- [Configuring Your HUB75 LED Matrix Panel](#configuring-your-hub75-led-matrix-panel)
-  - [Step 1 — Panel Dimensions](#step-1--panel-dimensions)
-    - [Wiring](#wiring)
-  - [Step 2 — Scan Rate and Rows Lit Simultaneously](#step-2--scan-rate-and-rows-lit-simultaneously)
-    - [Rule](#rule)
-    - [Examples](#examples)
-      - [Panel with 64×64 height and width, 1/32 scan (-32S-), 5 Address lines (A, B, C, D, E) -\> (2 rows lit)](#panel-with-6464-height-and-width-132-scan--32s--5-address-lines-a-b-c-d-e---2-rows-lit)
-      - [Panel with 32×64 height and width, 1/16 scan (-16S-), 4 Address lines (A, B, C, D) -\> (2 rows lit)](#panel-with-3264-height-and-width-116-scan--16s--4-address-lines-a-b-c-d---2-rows-lit)
-  - [Step 3 — Panel Pixel Mapping Type](#step-3--panel-pixel-mapping-type)
-    - [Configuration Examples](#configuration-examples)
-  - [Step 4 — Panel Driver Chip Type](#step-4--panel-driver-chip-type)
-    - [How to choose](#how-to-choose)
-  - [Step 5 — Strobe Polarity (`inverted_stb`)](#step-5--strobe-polarity-inverted_stb)
-  - [Step 6 — State Machine Clock Divider (`sm_clockdiv_factor`)](#step-6--state-machine-clock-divider-sm_clockdiv_factor)
-    - [Pixel Mapping](#pixel-mapping)
-      - [How Pixel Mapping Works (General Idea)](#how-pixel-mapping-works-general-idea)
-    - [Practical Notes](#practical-notes-1)
-- [Troubleshooting](#troubleshooting)
-  - [1. Panel Stays Completely Dark](#1-panel-stays-completely-dark)
-    - [Check the obvious first](#check-the-obvious-first)
-    - [Configuration checks](#configuration-checks)
-  - [2. Panel Lights Up, But Only Shows Noise or Garbage](#2-panel-lights-up-but-only-shows-noise-or-garbage)
-    - [What to check](#what-to-check)
-    - [Typical symptoms](#typical-symptoms)
-  - [3. Image Looks Correct, But Rows Are Missing or Repeated](#3-image-looks-correct-but-rows-are-missing-or-repeated)
-    - [Check](#check)
-    - [Rule reminder](#rule-reminder)
-  - [4. Image Is Correct but Flickers or Shows Ghosting](#4-image-is-correct-but-flickers-or-shows-ghosting)
-    - [Things to try](#things-to-try)
-    - [Also check](#also-check)
-  - [5. Panel Updates Sporadically or Only Every Few Frames](#5-panel-updates-sporadically-or-only-every-few-frames)
-  - [6. Colors Look Wrong or Are Too Dim / Too Bright](#6-colors-look-wrong-or-are-too-dim--too-bright)
-    - [Check](#check-1)
-    - [How to verify](#how-to-verify)
-  - [7. When Nothing Makes Sense Anymore 😄](#7-when-nothing-makes-sense-anymore-)
-- [Boards](#boards)
-  - [Overview](#overview-3)
-  - [1. P3QD-64x64-21 / P3-64x64-2012-21A-1.0 (`ROW_MAP_STANDARD`)](#1-p3qd-64x64-21--p3-64x64-2012-21a-10-row_map_standard)
-    - [Hardware](#hardware)
-    - [Pixel Mapping](#pixel-mapping-1)
-    - [Configuration](#configuration-1)
-  - [2. P3-64x64-32S-V2.0 / 2310P3](#2-p3-64x64-32s-v20--2310p3)
-    - [Hardware](#hardware-1)
-    - [Pixel Mapping](#pixel-mapping-2)
-    - [Configuration](#configuration-2)
-  - [3. QP3 Outdoor / P3-1415 (`RowMapping::S31`)](#3-qp3-outdoor--p3-1415-rowmappings31)
-    - [Hardware](#hardware-2)
-    - [Pixel Mapping](#pixel-mapping-3)
-    - [Configuration](#configuration-3)
-  - [4. P10-SMD-16x32-b (`RowMapping::Split`)](#4-p10-smd-16x32-b-rowmappingsplit)
-    - [Hardware](#hardware-3)
-    - [Pixel Mapping](#pixel-mapping-4)
-    - [Configuration](#configuration-4)
-  - [Template for a New Board](#template-for-a-new-board)
-
-
-# HUB75 DMA/PIO Driver for Raspberry Pi Pico / RP2350
+**Let DMA and PIO drive your LED matrix – and keep your CPU for the application.**
+Once started, the driver streams the panel autonomously; only hardware-triggered IRQ handlers run.
 
 <https://github.com/user-attachments/assets/7c41193c-c724-4fae-8823-af36d70fcedd>
 
-*Demo video: Colours are much brighter and more brilliant in reality*
+*Demo video: colours are much brighter and more brilliant in reality.*
 
-High-performance HUB75 RGB matrix driver using:
-- DMA chaining
-- PIO co-processors
-- autonomous BCM streaming
-- on-demand bitplane generation
-- double buffering
-- balanced light output
-- CIE1931 colour correction
+<!-- TODO: drag assets/icnd2153_pwm.mov into the GitHub README editor (or convert it to .mp4/.gif).
+     A relative link to a .mov is only a download link; a user-attachments URL plays inline. -->
 
-Supports:
-- RP2040
-- RP2350A/B
-- chained HUB75 panels
-- serpentine/U-turn topologies
-- multiple panel scan architectures
+## Why this driver?
+
+- **Runs by itself.** DMA chains feed PIO state machines; no bit-banging, no timing loops on your core.
+- **Colours that look right.** 10-bit binary code modulation with *balanced light output* (heavy bit-planes are split into slices, which cuts flicker), CIE1931 lightness correction, optional per-channel LUTs and a colour correction matrix.
+- **Big and flexible.** Chain panels in serpentine (U-turn) layouts, rotate the display by 0/90/180/270°, or run two independent panels from one RP2350.
+- **Configured in one place.** A single `constexpr Hub75Config` is a template argument of `Hub75Driver<Cfg>`: typos are compile errors, unused code is not built.
+- **Many panel types.** From plain 64×64 panels to driver-IC specials, outdoor panels, shift-register panels and PWM panels (see below).
+
+<!-- TODO: add measured numbers here, e.g. refresh rate for 64x64 / 10 bit-planes (frame_rate_debug = true prints it). -->
+
+## What's new
+
+### Shift-register row addressing (e.g. Waveshare Hub75 96×48 SM5368 v2)
+
+Most panels take the row number as a binary address on pins A–E. Some panels instead advance the active row through a **shift register** (SM5368, 74HC595-type row switchers). The three row pins then mean *A = row clock, B = BK (discharge enable), C = row data*. Select this with `.address_type = RowAddressing::ABCShiftRegister` and `rowsel_n_pins = 3`.
+
+The quickest way is the ready-made profile:
+
+```cpp
+constexpr Hub75Config panel_cfg = make_hub75_config(
+    Hub75PanelProfile::P96X48_1_24_SR,   // 96x48, 3 row pins, shift-register addressing, R/B swapped
+    Hub75Config{
+        .panel = { .sm_clockdiv_factor = 4.0f },   // slower state machine = stable output on this panel
+    });
+```
+
+> **Status:** reported working by community tester [Jason](https://github.com/jason-a69) (thank you!). The maintainer has no such panel at hand, so further testing and feedback are very welcome. Profiles are modelled after Waveshare's fork of this project.
+
+### ICND2153-based (S)PWM panels
+
+PWM panels contain driver ICs (ICND2153) that **generate the grey levels themselves** from 16-bit values. The driver therefore does not produce bit-planes for these panels; it builds a 16-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 128,            // must be a multiple of 16 (one chip = 16 columns)
+        .matrix_panel_height = 64,
+        .panel_class = PanelClass::PWM,
+        .panel_chip = Hub75PanelChip::ICND2153,
+        .base_latch_ns = 180,                 // values used with the tested panel
+        .base_addr_ns = 260,
+    },
+    .color = {
+        .bitplanes = 16,                      // required for PWM panels
+        .separate_cie_channels = true,
+        .ccm_rg_shift = 6,
+        .ccm_gb_shift = 7,
+    },
+};
+```
+
+> **Tested panel:** XR1.875-128x64-1515-32S-4L-V3.0 (128×64, 1/32 scan).
+> **Memory:** this configuration needs about 176 KiB for driver buffers – plan for an RP2350. Behaviour on RP2040 is not verified.
+> If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_order = true`.
+
+## Supported panels at a glance
+
+| Panel family | Example | Key settings |
+|---|---|---|
+| Standard HUB75, binary row address | 64×64 (1/32), 64×32 (1/16) | defaults, plus `rowsel_n_pins` for 64×32 |
+| HUB75 with special driver IC | P3-64×64-32S (RUL6024), FM6126A panels | `.panel_chip = Hub75PanelChip::RUL6024` / `FM6126A` |
+| Outdoor, four rows lit at once | P10, P3 outdoor | `.panel_kind = RowMapping::Split` / `S31` |
+| **New:** shift-register row advance | Waveshare 96×48 SM5368 v2 | `.address_type = RowAddressing::ABCShiftRegister` |
+| **New:** ICND2153 (S)PWM | 128×64 | `.panel_class = PanelClass::PWM`, `.bitplanes = 16` |
+
+Boards: Raspberry Pi Pico / Pico W (RP2040), Pico 2 (RP2350A) and RP2350B boards.
 
 # Quick Start
 
@@ -203,7 +87,15 @@ Supports:
 
 ## Wiring Details
 
+### Default Mapping for HUB75 Connector → Raspberry Pico GPIOs
+
+The diagram shows the default mapping as defined in the hub75.cpp file.
+  
+<img src="assets/pico_wiring.svg">
+
 ### Colour Data Pins
+
+⚠️ It is a requirement of the `Hub75 driver` that the **colour pins** must be arranged in a continuous block in ascending order!
 
 - `pins.data_base_pin` = **GPIO 0** (first in a consecutive block)
 - `pins.data_n_pins` = **6** (for R0, G0, B0, R1, G1, B1)
@@ -219,10 +111,10 @@ Supports:
 
 ### Address (Row Select) Pins
 
+⚠️ It is a requirement of the `Hub75 driver` that the **address pins** must be arranged in a continuous block in ascending order!
+
 - `pins.rowsel_base_pin` = **GPIO 6**
 - `pins.rowsel_n_pins` = **5** (A0–A4)
-
-**Consecutiveness is required** by the PIO program.
 
 | Address bit |  connected to      | Pico GPIO |
 | ----------- |--------------------|:---------:|
@@ -234,37 +126,34 @@ Supports:
 
 ### Control Pins
 
+⚠️ It is a requirement of the `Hub75 driver` that the **control pins** must be arranged in a continuous block in ascending order!
+
 - **`pins.clk_pin`** (clock): GPIO 11
 - **`pins.strobe_pin`** (latch): GPIO 12
 - **`pins.oen_pin`** (output enable): GPIO 13
 
-⚠️ **`pins.strobe_pin`** pin must be immediately followed by **`pins.oen_pin`** (must be consecutive)
 
-### One Glance Mapping HUB75 Connector → Pico GPIOs
+## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
-The diagram shows the default mapping as defined in the hub75.cpp file.
-  
-<img src="assets/pico_wiring.png">
+Almost all Hub75 driver configuration is done in your application program. See [`hub75_demo.cpp`](hub75_demo.cpp) how to set the values in the `Hub75Config` structure to your needs.
+Configuration details are explained in chapter [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
 
-## Allowed Deviations  <a id='allowed_deviations_anchor'></a>
+### Settings for Pico 2
 
-The **strict requirement** to be aware of is that **data pins** and **row-select pins** must be in **consecutive GPIO blocks**.
-Be aware of a **second requirement** that **`pins.strobe_pin`** must be immediately followed by **`pins.oen_pin`**.
-Clock pin may be freely chosen.
+The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
 
-### Example: Pin Mapping and Environment Settings for Pico 2
-
-Almost all driver configuration now lives in code as a `constexpr Hub75Config`, passed as a
-template argument to `Hub75Driver<Cfg>` — see [Configuration in Code](#configuration-in-code)
-below. Only a handful of build-system-level flags remain in `CMakeLists.txt`.
+Here is the default configuration in the [`CMakeLists.txt`](CMakeLists.txt) file that comes with this library.
 
 ```cmake
+
+# ⚠️ look at or near line 26
 set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # The following two lines must be uncommented to compile for bare RP2350 without a board
 # set(PICO_PLATFORM rp2350)
 # set(PICO_BOARD none CACHE STRING "Board type")
 
+# ⚠️ look at or near line 78
 target_compile_definitions(hub75_demo PRIVATE
     # PICO_RP2350A=0             # uncomment for RP2350B microcontrollers only
     USE_PICO_GRAPHICS=true       # set to false if you use hub75 as a library
@@ -272,43 +161,87 @@ target_compile_definitions(hub75_demo PRIVATE
 )
 ```
 
+As mentioned earlier, the rest of your panel’s configuration is done in your application program. This is easier than it seems at first glance! The `Hub75 driver` has default values for all attributes. You only need to change an attribute if it does not match this default value. If you have a “standard” Hub75 matrix panel with 64 rows and 64 columns and have chosen to wire the pins as described earlier, you do not need to specify a single attribute, since the fallbacks in the `Hub75 driver` have already preset them accordingly.
+
+If you have a "standard" 64x32 panel it is sufficient to set the configuration to
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 64,      // your matrix panel width - could be dropped as 64 columns is the hub75 drivers default
+        .matrix_panel_height = 32,     // your matrix panel height - differs from the default value of 64
+    },
+};
+```
+
+as panel dimensions 64x64 (64 rows and 64 columns) is the default.
+
+To give you an overview of the available options let's show them all in brief (details in [Configuration in Code](#configuration-in-code)). Look at the start of `hub75_demo.cpp` to see how it is used. 
+ 
 ```cpp
 // hub75_demo.cpp / your own .cpp file
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,      // your matrix panel width
-        .matrix_panel_height = 32,     // your matrix panel height
-        .panel_kind = RowMapping::S31, // default — other values: Split, Standard
+        .matrix_panel_width = 64,                  // your matrix panel width
+        .matrix_panel_height = 64,                 // your matrix panel height
+        .chain_rows = 1,                           // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                           // number of panels chained left-to-right in a single chain row (columns)
+        .panel_class = PanelClass::HUB75,          // standard HUB75 panel - another value is PWM
+        .chain_mode = Hub75ChainMode::SERPENTINE,  // default is serpentine (U-Turn with compensation for 180° rotation)
+        .panel_kind = RowMapping::Standard,        // how to map the rgb888 buffer onto the panel 
+        .address_type = RowAddressing::Binary,     // row addressing via address pins
+        .scan_mode = 0,                            // 0 tries to automatically deduce scan_mode else specify a value
+        .panel_chip = Hub75PanelChip::GENERIC,     // mainly used for initialisation sequence but also for panel specific characteristics
+        .inverted_stb = false,                     // inverted pin signal for OE pin
+        .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+        .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
+        .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
+    },
+    .screen = {
+        .rotation = Hub75Rotation::DEG_0,          // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
     },
     .pins = {
-        .data_base_pin = 0,     // base GPIO of R0, G0, B0, R1, G1, B1
-        .data_n_pins = 6,       // count of colour pins (usually 6)
-        .rowsel_base_pin = 6,   // base GPIO of A, B (, C, D, E)
-        .rowsel_n_pins = 5,     // count of address pins on your panel connector
-        .clk_pin = 11,
-        .strobe_pin = 12,
-        .oen_pin = 13,
+        .data_base_pin = 0,                        // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+        .data_n_pins = 6,                          // number (count) of colour pins (usually 6: R0, G0, B0, R1, G1, B1)
+        .rowsel_base_pin = 6,                      // base GPIO row select pin (aka start index) of A, B (, C, D. E) GPIO pins
+        .rowsel_n_pins = 5,                        // row select pin count 
+        .clk_pin = 11,                             // GPIO pin for CLK 
+        .strobe_pin = 12,                          // GPIO pin for STROBE (LATCH)
+        .oen_pin = 13,                             // GPIO for OE pin (GCKL for PWM panel class)
     },
+    .color = {
+        .bitplanes = 10,               // number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values are 8, 10 for HUB75 panels and 16 for PWM panels
+        .separate_cie_channels = true, // use separate CIE channels for improved colour representation - needs more memory
+        .balanced_light_output = true, // improves image quality but needs some more memory
+        .swap_rb_pins = false,         // swap red and blue pins in software
+        .ccm_rg_shift = 6,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
+        .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
+    },
+    .frame_rate_debug = true,          // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
 };
-
-using Panel = Hub75Driver<panel_cfg>;
 ```
 
-### Example: Pin Mapping and Environment Settings for RP2350B
+### Settings for RP2350B
+
+To use a `RP2350B` microcontroller adapt `CMakeLists.txt` as show below.
 
 ```cmake
+# ⚠️ look at or near line 26
 # set(PICO_BOARD pico2 CACHE STRING "Board type")
 
 # The following two lines must be uncommented to compile for bare RP2350 without a board
 set(PICO_PLATFORM rp2350)
 set(PICO_BOARD none CACHE STRING "Board type")
 
+# ⚠️ look at or near line 78
 target_compile_definitions(hub75_demo PRIVATE
-    PICO_RP2350A=0                # not a RP2350A but a RP2350B microcontroller
-    USE_PICO_GRAPHICS=true
-    HUB75_MULTICORE=true
+    PICO_RP2350A=0               # uncomment for RP2350B microcontrollers only
+    USE_PICO_GRAPHICS=true       # set to false if you use hub75 as a library
+    HUB75_MULTICORE=true         # use core1 for the hub75 driver
 )
 ```
+
+Since the `RP2350A` microcontroller has more pins available as the `pico2` in this example we use pins 30 up to pin 43 to connect to the matrix panel.
 
 ```cpp
 constexpr Hub75Config panel_cfg{
@@ -317,20 +250,82 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_height = 64,  // your matrix panel height
     },
     .pins = {
-        .data_base_pin = 30,    // use 30 for RP2350B
-        .data_n_pins = 6,
-        .rowsel_base_pin = 36,  // use 36 for RP2350B
-        .rowsel_n_pins = 5,
-        .clk_pin = 41,          // use 41 for RP2350B
-        .strobe_pin = 42,       // use 42 for RP2350B
-        .oen_pin = 43,          // use 43 for RP2350B
+        .data_base_pin = 30,        // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+        .data_n_pins = 6,           // number (count) of colour pins (usually 6: R0, G0, B0, R1, G1, B1)
+        .rowsel_base_pin = 36,      // base GPIO row select pin (aka start index) of A, B (, C, D. E) GPIO pins
+        .rowsel_n_pins = 5,         // row select pin count 
+        .clk_pin = 41,              // GPIO pin for CLK 
+        .strobe_pin = 42,           // GPIO pin for STROBE (LATCH)
+        .oen_pin = 43,              // GPIO for OE pin (GCKL for PWM panel class)
     },
 };
+```
 
-using Panel = Hub75Driver<panel_cfg>;
+### Settings for a Hub75 Panel with Shift Register for Row Addressing (e.g. Waveshares Hub75 96x48 SM5368 Version 2 Panel)
+
+In standard HUB75 panels, the address pins (A, B, C, D, E) are usually used as binary address lines.
+**Waveshares** matrix panel `Hub75 96x48 SM5368 Version 2`, for example, does not operate according to this scheme, but uses a shift register to advance to the next row.
+This means that it does not output the address of the current row directly, but rather advances the row selection to the next row via a shift sequence.
+This requires a dedicated row control logic. To advise the `Hub75 driver` to use this dedicated control logic set `.address_type = RowAddressing::ABCShiftRegister`.
+
+We do not have any **Waveshare** panels at hand. User [Jason](https://github.com/jason-a69) was kind enough to carry out some basic testing of the `Hub75 96x48 SM5368 Version 2` panel. As [Jason](https://github.com/jason-a69) pointed out, he had to reduce the state machine (sm) clock `.sm_clockdiv_factor = 4.0f` to achieve a stable output. Currently testing and optimising of this panel is at rest due to missing hardware.
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 96,                  // your matrix panel width
+        .matrix_panel_height = 48,                 // your matrix panel height
+        .chain_rows = 1,                           // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                           // number of panels chained left-to-right in a single chain row (columns)
+        .chain_mode = Hub75ChainMode::SERPENTINE,  // default is serpentine (U-Turn with compensation for 180° rotation)
+        .panel_kind = RowMapping::Standard,        // how to map the rgb888 buffer onto the panel 
+        .address_type = RowAddressing::ABCShiftRegister, // row addressing via shift register
+        .scan_mode = 24,                           // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
+        .panel_chip = Hub75PanelChip::GENERIC,     // mainly used for initialisation sequence but also for panel specific characteristics
+        .sm_clockdiv_factor = 4.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+        .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
+        .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
+    },
+    .color = {
+        .bitplanes = 10,                           // number (count) of bit-planes used for BCM (Binary Code Modulation)
+        .swap_rb_pins = true,                      // swap red and blue pins in software
+    },
+}
+```
+### Settings for a ICND2153 Based PWM Hub75 Panel
+
+PWM modules generate the pulse width modulation themselves – in contrast, the BCM (Binary Coded Modulation), including the balanced light output, is generated by the `Hub75 driver` for Hub75 panels (`.panel_class = PanelClass::HUB75`). The `Hub75 driver` implementation for the ICND2153 PWM panel therefore is different. This is reflected in three configuration attributes `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::ICND2153`. and `.bitplanes = 16`.
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 128,                 // your matrix panel width
+        .matrix_panel_height = 64,                 // your matrix panel height
+        .chain_rows = 1,                           // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                           // number of panels chained left-to-right in a single chain row (columns)
+        .panel_class = PanelClass::PWM,            // it's a PWM panel
+        .chain_mode = Hub75ChainMode::SERPENTINE,  // default is serpentine (U-Turn with compensation for 180° rotation)
+        .panel_kind = RowMapping::Standard,        // how to map the rgb888 buffer onto the panel         
+        .address_type = RowAddressing::Binary,     // row addressing via address pins
+        .scan_mode = 0,                            // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
+        .panel_chip = Hub75PanelChip::ICND2153,    // mainly used for initialisation sequence but also for panel specific characteristics
+        .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+        .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
+        .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
+    },
+    .color = {
+        .bitplanes = 16,                           // number (count) of bit-planes for a ICND2153 PWM panel
+        .separate_cie_channels = true,             // use separate CIE channels for improved colour representation - needs more memory
+        .balanced_light_output = false,            // setting is ignored for PWM panels  
+        .swap_rb_pins = false,                     // swap red and blue pins in software
+        .ccm_rg_shift = 6,                         // CCM Cross-channel mixing - mix ~1.6% green into the red channel
+        .ccm_gb_shift = 7,                         // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
+    },
+    .frame_rate_debug = false,                     // ignored for PWM panels
+};
 ```
 ---
-
+ 
 ## How to Use This Project in VSCode
 
 You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. Follow these steps:
@@ -1228,88 +1223,6 @@ Setting a shift to `31` disables that cross-term completely — a shift of 31 on
 
 ---
 
-### Implementation
-
-The CCM is implemented as two macros in `hub75.hpp`, inserted directly after the `SEPARATE_CIE_CHANNELS` preprocessor block:
-
-```cpp
-// ---------------------------------------------------------------------------
-// Colour Correction Matrix (CCM) — cross-channel mixing
-//
-// Applied after the CIE LUT lookup, on already CAP-scaled 10-bit values.
-// All six cross-terms default to 31 (= disabled, adds zero contribution).
-//
-// Shift reference:  5 → ~3.1%   6 → ~1.6%   7 → ~0.8%   31 → 0% (off)
-// ---------------------------------------------------------------------------
-
-#ifndef CCM_RG_SHIFT
-#define CCM_RG_SHIFT 31   // fraction of Green added into Red
-#endif
-#ifndef CCM_RB_SHIFT
-#define CCM_RB_SHIFT 31   // fraction of Blue  added into Red
-#endif
-#ifndef CCM_GR_SHIFT
-#define CCM_GR_SHIFT 31   // fraction of Red   added into Green
-#endif
-#ifndef CCM_GB_SHIFT
-#define CCM_GB_SHIFT 31   // fraction of Blue  added into Green
-#endif
-#ifndef CCM_BR_SHIFT
-#define CCM_BR_SHIFT 31   // fraction of Red   added into Blue
-#endif
-#ifndef CCM_BG_SHIFT
-#define CCM_BG_SHIFT 31   // fraction of Green added into Blue
-#endif
-
-#if BITPLANES == 10
-#define CCM_MAX_VAL 1023u
-#elif BITPLANES == 8
-#define CCM_MAX_VAL 255u
-#endif
-
-// Branchless saturation — the compiler generates a single USAT or CMP+MOV
-// on Cortex-M0+ and M33; no branching, no pipeline stall.
-#define CCM_CLAMP(val) ((val) > CCM_MAX_VAL ? CCM_MAX_VAL : (val))
-
-// CCM_APPLY operates in-place on three uint32_t locals rv, gv, bv.
-// All cross-terms for a channel are accumulated first, then clamped once.
-#define CCM_APPLY(rv, gv, bv)                                           \
-    do {                                                                \
-        uint32_t _r = (rv) + ((gv) >> CCM_RG_SHIFT)                     \
-                           + ((bv) >> CCM_RB_SHIFT);                    \
-        uint32_t _g = (gv) + ((rv) >> CCM_GR_SHIFT)                     \
-                           + ((bv) >> CCM_GB_SHIFT);                    \
-        uint32_t _b = (bv) + ((rv) >> CCM_BR_SHIFT)                     \
-                           + ((gv) >> CCM_BG_SHIFT);                    \
-        (rv) = CCM_CLAMP(_r);                                           \
-        (gv) = CCM_CLAMP(_g);                                           \
-        (bv) = CCM_CLAMP(_b);                                           \
-    } while (0)
-```
-
-`CCM_APPLY` is inserted as a single additional line in both `pack_lut_rgb` and `pack_lut_rgb_` in `hub75.cpp`, immediately before the packed 32-bit word is assembled:
-
-```cpp
-// Before (without CCM):
-static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
-    uint32_t rv = CIE_RED[r];
-    uint32_t gv = CIE_GREEN[g];
-    uint32_t bv = CIE_BLUE[b];
-    return (bv << 20u) | (gv << 10u) | rv;
-}
-
-// After (with CCM — one line added):
-static inline uint32_t pack_lut_rgb_(uint8_t r, uint8_t g, uint8_t b) {
-    uint32_t rv = CIE_RED[r];
-    uint32_t gv = CIE_GREEN[g];
-    uint32_t bv = CIE_BLUE[b];
-    CCM_APPLY(rv, gv, bv);
-    return (bv << 20u) | (gv << 10u) | rv;
-}
-```
-
----
-
 ### Configuration in Code
 
 CCM is configured exclusively through the `color` fields of `Hub75Config` — no source file
@@ -1580,71 +1493,6 @@ pixel(x, y) = src[(y * DISPLAY_WIDTH + x) * 3]    // update_bgr() — BGR888 byt
 
 The driver internally translates this linear layout into the correct per-panel, per-row addressing
 required by the HUB75 protocol, including the 180° rotation for reversed panels in serpentine mode.
-
----
-
-### How Serpentine Reversal Works Internally
-
-During the pixel mapping stage, each panel is identified by its position `(v, h)` where `v` is the
-chain row index and `h` is the column index within that row.
-
-For every scan row the driver iterates over all panels:
-
-```cpp
-   int32_t fb_index = 0;
-
-    for (int row = 0; row < SCAN_DEPTH; row++) // row: current row
-    {
-        for (int v = 0; v < Cfg.panel.chain_rows; v++) // v: panel in row (vertical chain)
-        {
-            const bool reverse = (Cfg.panel.chain_mode == Hub75ChainMode::SERPENTINE) ? (v & 1) : false;
-
-            for (int h = 0; h < Cfg.panel.chain_cols; h++) // h: panel in column (horizontal chain)
-            {
-                // Input parameters
-                // row: current row, (v, h): panel coordinates, reverse: U-turn descriptor
-                // Output parameters
-                // row_base: row offset
-                int32_t row_base = map_panel_row(row, v, h, reverse);
-
-                // map row and its paired row(s) in current panel located at position (v, h)
-                if (reverse)
-                {
-                    // 180° rotation:
-                    // reverse:
-                    //   - local scan row      (done in map_panel_row)
-                    //   - i traversal         (done here)
-                    //   - multiplex ordering  (done here)
-                    for (int i = Cfg.panel.matrix_panel_width - 1; i >= 0; --i)
-                    {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-                        {
-                           // set rotated content for odd chain rows
-                           ...
-                           rgb_buffer[fb_index++] = ...
-                        }
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < Cfg.panel.matrix_panel_width; ++i)
-                    {
-                        for (int p = 0; p < PanelConfig::ROWS_IN_PARALLEL; ++p)
-                        {
-                            // set content for even chain rows
-                            ...
-                            rgb_buffer[fb_index++] = ...
-                        }
-                    }
-                }
-            }
-        }
-    }
-```
-
-When `reverse` is `true`, pixel coordinates within the panel are mirrored both horizontally and
-vertically, which is equivalent to a 180° software rotation. This compensates for the physical
-cable U-turn without requiring any change to the panel wiring.
 
 ---
 

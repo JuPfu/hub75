@@ -7,18 +7,17 @@
 #include "pico/cyw43_arch.h"
 #endif
 
-#include "hardware/clocks.h"
-
 #include "hub75.hpp"
 
 // Panel/pin/color/rotation configuration - see include/hub75.hpp for field docs.
 // Matches a single generic 64x64 panel wired to GPIO 0-13.
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,
+        .matrix_panel_width = 128,
         .matrix_panel_height = 64,
         .chain_rows = 1,
         .chain_cols = 1,
+        .panel_class = PanelClass::PWM,
         .chain_mode = Hub75ChainMode::SERPENTINE,
         .panel_kind = RowMapping::Standard,
         .address_type = RowAddressing::Binary,
@@ -42,7 +41,7 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 13,
     },
     .color = {
-        .bitplanes = 10,
+        .bitplanes = 16,
         .separate_cie_channels = true,
         .balanced_light_output = true,
         .swap_rb_pins = false,
@@ -146,7 +145,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 8)
+    if (++demo_index > 6)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -175,7 +174,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 266MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(266000, true);
+    set_sys_clock_khz(260000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
@@ -235,7 +234,7 @@ int main()
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
-    const float fps = 100.0f;
+    const float fps = 75.0f;
     const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel

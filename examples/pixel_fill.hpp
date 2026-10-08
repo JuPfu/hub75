@@ -48,4 +48,12 @@ public:
                 index = 0;
         }
     }
+
+    void draw_line() {
+        set_pen(0xFF0000);
+        int x = 5;
+        for(int i=0; i<128; i++) {
+            set_pixel(Point(i, x));
+        }
+    }
 };
