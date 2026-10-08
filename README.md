@@ -192,7 +192,7 @@ constexpr Hub75Config panel_cfg{
         .address_type = RowAddressing::Binary,     // row addressing via address pins
         .scan_mode = 0,                            // 0 tries to automatically deduce scan_mode else specify a value
         .panel_chip = Hub75PanelChip::GENERIC,     // mainly used for initialisation sequence but also for panel specific characteristics
-        .inverted_stb = false,                     // inverted pin signal for OE pin
+        .inverted_stb = false,                     // inverted pin signal for strobe (latch) pin
         .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
         .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
