@@ -1,40 +1,108 @@
 .pio_version 0
 
+.pio_version 0
+
 ; ==============================================================================
 ; PROGRAM 1: ROW & GCLK (PWM CLOCK) CONTROLLER
+;
+; Responsibilities:
+;   - Generate GCLK pulses for the ICND2153 panel.
+;   - Advance the row-selection signals between GCLK bursts.
+;   - Refresh continuously while no frame-start token is pending.
+;   - Synchronise with the pixel-stream state machine at frame boundaries.
+;
+; Register usage:
+;   ISR = GCLK pulse count per burst, minus one.
+;   OSR = Number of scan rows per refresh, minus one.
+;   X   = Working row counter, copied from OSR.
+;   Y   = Temporary status result or GCLK pulse counter.
+;
+; Protocol:
+;   TX FIFO empty    -> continue refreshing.
+;   TX FIFO nonempty -> consume frame-start token and synchronise with the pixel-stream state machine.
 ; ==============================================================================
+
 .program icnd2153_row
-.side_set 1
+.side_set 1 ; Side-set pin drives GCLK.
 
 .wrap_target
-scan_pass:
-    mov y, status        side 0b0   ; all ones while TX FIFO is empty (no token)
-    jmp y--, seed_row    side 0b0   ; no token: keep refreshing
+    ; STATUS is configured as TX FIFO level < 1:
+    ;   FIFO empty    -> Y = 0xFFFFFFFF
+    ;   FIFO nonempty -> Y = 0x00000000
+    mov y, status        side 0b0
 
-    ; ---- token pending: GCLK is idle, send VSYNC and release the pixel state machine ----
-    pull block           side 0b0   ; consume token, OSR = rows - 1
-    irq nowait 2         side 0b0   ; pixel state machine: VSYNC + start of frame
-    wait 1 irq 3         side 0b0   ; VSYNC done
+    ; If the FIFO is empty, Y is nonzero and the jump is taken.
+    ; Continue refreshing without waiting for a new frame token.
+    ; JMP Y-- decrements Y even when the jump is not taken.
+    jmp y--, seed_row   side 0b0
 
-    ; ------------------------------------------------------------------
-    ; 2. SEED ROW 0 (Reset address decoder)
-    ; ------------------------------------------------------------------
+    ; --------------------------------------------------------------------------
+    ; FRAME-START HANDSHAKE
+    ; Reached only when the TX FIFO contains a frame-start token.
+    ; --------------------------------------------------------------------------
+
+    ; Consume the token. Its intended value is scan_rows - 1.
+    ; The blocking pull waits if the FIFO becomes empty.
+    pull block           side 0b0
+
+    ; Signal IRQ 2 to the pixel-stream state machine.
+    ; That state machine is responsible for its VSYNC/frame-start action.
+    irq nowait 2         side 0b0
+
+    ; Wait until the pixel-stream state machine signals IRQ 3.
+    ; This handshake must be completed by the other state machine.
+    wait 1 irq 3         side 0b0
+
+    ; --------------------------------------------------------------------------
+    ; SEED ROW 0
+    ; Reload the row counter and apply the panel-specific row-0 sequence.
+    ; --------------------------------------------------------------------------
 seed_row:
-    mov x, osr           side 0b0  
-    set pins, 0b101 [15] side 0b0   ; Step decoder (RA=1, RC=1)
-    set pins, 0b000 [15] side 0b0   ; Step decoder (RA=0, RC=0) -> Row 0 selected
+    ; OSR contains scan_rows - 1.
+    ; Copy it to X; X will count the rows in this refresh sequence.
+    mov x, osr           side 0b0
 
-row_loop:
-    mov y, isr           side 0b0
-gclk_loop:
-    nop                  side 0b1   ; GCLK high, 1 PIO cycle
-    jmp y--, gclk_loop   side 0b0   ; GCLK low, 1 PIO cycle -> 2 cycles per pulse
-
-    set pins, 0b001 [15] side 0b0   ; row advance (unchanged pulses)
+    ; Apply the panel-specific decoder reset/row-0 sequence.
+    ; SET pin bit 0 = RA, bit 1 = RB, bit 2 = RC.
+    ; First drive RA=1, RB=0, RC=1; then drive all three low.
+    set pins, 0b101 [15] side 0b0
     set pins, 0b000 [15] side 0b0
-    nop             [15] side 0b0
-    nop             [15] side 0b0   ; gap = 66 cycles
+
+    ; --------------------------------------------------------------------------
+    ; ROW REFRESH LOOP
+    ; --------------------------------------------------------------------------
+row_loop:
+    ; ISR contains gclk_pulses_per_burst - 1.
+    ; Reload Y for every row so each row receives the same GCLK pulse count.
+    mov y, isr           side 0b0
+
+    ; Generate the GCLK burst.
+    ; Each iteration produces one high cycle followed by one low cycle.
+    ; JMP Y-- repeats while the value before decrement is nonzero.
+    ; Therefore, an initial value of pulse_count - 1 produces pulse_count
+    ; GCLK pulses.
+gclk_loop:
+    nop                  side 0b1 ; GCLK high for one PIO cycle.
+    jmp y--, gclk_loop   side 0b0 ; GCLK low for one PIO cycle.
+
+    ; --------------------------------------------------------------------------
+    ; ROW ADVANCE AND INTER-BURST GAP
+    ; --------------------------------------------------------------------------
+
+    ; Apply the panel-specific row-advance sequence.
+    ; SET pin bit 0 = RA, bit 1 = RB, bit 2 = RC.
+    set pins, 0b001 [15] side 0b0 ; RA=1, RB=0, RC=0.
+    set pins, 0b000 [15] side 0b0 ; Return all row-select signals low.
+
+    ; Timing padding between GCLK bursts.
+    ; Each instruction with [15] occupies 16 PIO cycles.
+    nop                  [15] side 0b0
+    nop                  [15] side 0b0
+
+    ; Decrement the row counter.
+    ; Repeat for the remaining rows; exit after the final row.
     jmp x--, row_loop    side 0b0
+
 .wrap
 
 % c-sdk {
@@ -45,7 +113,7 @@ static inline void icnd2153_row_program_init(
     uint sm,
     uint offset,
     uint rowsel_base_pin,          // 3 consecutive pins: RA, RB, RC
-    uint gclk_pin,                 // HUB75 OE pin (ICND2153 GCLK Pin 21)
+    uint gclk_pin,                 // HUB75 OE pin (ICND2153 GCLK)
     uint32_t num_scan_rows,        // e.g. 32 for 1/32 scan
     uint32_t gclk_pulses_per_burst // e.g. 138
 )
@@ -53,10 +121,12 @@ static inline void icnd2153_row_program_init(
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
 
-    // Set pin directions
+    // Configure the three consecutive row-select GPIOs and the GCLK GPIO
+    // as outputs controlled by this PIO state machine.
     pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 3, true);
     pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
 
+    // Connect the GPIOs to the PIO peripheral.
     for (uint i = 0; i < 3; i++)
     {
         pio_gpio_init(pio, rowsel_base_pin + i);
@@ -64,17 +134,50 @@ static inline void icnd2153_row_program_init(
     pio_gpio_init(pio, gclk_pin);
 
     pio_sm_config c = icnd2153_row_program_get_default_config(offset);
+
+    // Map SET instructions to the three row-select GPIOs.
     sm_config_set_set_pins(&c, rowsel_base_pin, 3);
+
+    // Map side-set bit 0 to the GCLK output GPIO.
     sm_config_set_sideset_pins(&c, gclk_pin);
+
+    // Shift OUT data right; disable autopull.
+    // This program explicitly controls when words are pulled from the TX FIFO.
     sm_config_set_out_shift(&c, true, false, 32);
-    sm_config_set_mov_status(&c, STATUS_TX_LESSTHAN, 1);   // new
+
+    // MOV Y, STATUS returns all ones when TX FIFO level < 1,
+    // and zero otherwise. With a threshold of 1, this detects an empty FIFO.
+    sm_config_set_mov_status(&c, STATUS_TX_LESSTHAN, 1);
+
     pio_sm_init(pio, sm, offset, &c);
 
+    // --------------------------------------------------------------------------
+    // PRELOAD THE GCLK PULSE COUNT
+    // --------------------------------------------------------------------------
+
+    // Queue the GCLK pulse count minus one in the TX FIFO.
+    // pio_sm_put_blocking() waits for FIFO space if necessary.
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
+
+    // Execute a nonblocking PULL directly on the state machine.
+    // The FIFO contains a word, so the word is transferred into OSR.
+    // (If the FIFO were empty, this instruction would copy X into OSR instead.)
     pio_sm_exec(pio, sm, pio_encode_pull(false, false));
-    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));     // ISR = burst - 1
+
+    // Transfer the 32-bit GCLK pulse count from OSR into ISR.
+    // The ISR retains this value for subsequent row-refresh bursts.
+    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
+
+    // --------------------------------------------------------------------------
+    // PRELOAD THE SCAN-ROW COUNT
+    // --------------------------------------------------------------------------
+
+    // Queue the number of scan rows minus one in the TX FIFO.
     pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
-    pio_sm_exec(pio, sm, pio_encode_pull(false, false));   // OSR = rows - 1
+
+    // Transfer the scan-row count from TX FIFO into OSR.
+    // OSR now holds the value used to initialise the row counter X.
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false));
 }
 
 static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
@@ -160,7 +263,6 @@ static inline void icnd2153_pixel_stream_program_init(
 
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
-   
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
