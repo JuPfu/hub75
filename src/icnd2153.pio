@@ -102,7 +102,6 @@ gclk_loop:
     ; Decrement the row counter.
     ; Repeat for the remaining rows; exit after the final row.
     jmp x--, row_loop    side 0b0
-
 .wrap
 
 % c-sdk {
@@ -167,17 +166,6 @@ static inline void icnd2153_row_program_init(
     // Transfer the 32-bit GCLK pulse count from OSR into ISR.
     // The ISR retains this value for subsequent row-refresh bursts.
     pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
-
-    // --------------------------------------------------------------------------
-    // PRELOAD THE SCAN-ROW COUNT
-    // --------------------------------------------------------------------------
-
-    // Queue the number of scan rows minus one in the TX FIFO.
-    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
-
-    // Transfer the scan-row count from TX FIFO into OSR.
-    // OSR now holds the value used to initialise the row counter X.
-    pio_sm_exec(pio, sm, pio_encode_pull(false, false));
 }
 
 static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
