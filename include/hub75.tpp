@@ -800,12 +800,12 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
 
-        // icnd2153 pixel stream can run between 15 MHz and 20 MHz
-        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 15.f, 15.f);
+        // icnd2153 pixel stream can run between 20 MHz and 35 MHz
+        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 15.f);
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
 
-        // icnd2153 row can run between 20 MHz and 25 MHz
-        sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 10.f);
+        // icnd2153 row can run between 20 MHz and 35 MHz
+        sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 15.f);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
 }
