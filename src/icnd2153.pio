@@ -86,18 +86,13 @@ gclk_loop:
     jmp y--, gclk_loop   side 0b0 ; GCLK low for one PIO cycle.
 
     ; --------------------------------------------------------------------------
-    ; ROW ADVANCE AND INTER-BURST GAP
+    ; ROW ADVANCE
     ; --------------------------------------------------------------------------
 
     ; Apply the panel-specific row-advance sequence.
     ; SET pin bit 0 = RA, bit 1 = RB, bit 2 = RC.
-    set pins, 0b001 [15] side 0b0 ; RA=1, RB=0, RC=0.
-    set pins, 0b000 [15] side 0b0 ; Return all row-select signals low.
-
-    ; Timing padding between GCLK bursts.
-    ; Each instruction with [15] occupies 16 PIO cycles.
-    nop                  [15] side 0b0
-    nop                  [15] side 0b0
+    set pins, 0b001 [3] side 0b0 ; RA=1, RB=0, RC=0.
+    set pins, 0b000 [3] side 0b0 ; Return all row-select signals low.
 
     ; Decrement the row counter.
     ; Repeat for the remaining rows; exit after the final row.
