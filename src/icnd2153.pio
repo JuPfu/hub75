@@ -183,41 +183,70 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
 
 ; ==============================================================================
 ; PROGRAM 2: PIXEL DATA & COMMAND STREAMER
-; ==============================================================================
+;
+; Drives the panel's six parallel RGB data lines and generates DCLK and LE/LAT.
+;
+; OUT pins:
+;   Six consecutive pins: R0, G0, B0, R1, G1, B1
+;
+; Side-set pins:
+;   Bit 0: DCLK (data clock)
+;   Bit 1: LE / LAT (latch enable)
+;
+; Synchronization with icnd2153_row:
+;   IRQ 2: Row SM signals that the pixel stream may start.
+;   IRQ 3: Pixel SM acknowledges completion of the VSYNC sequence.
+;
+; DMA stream header (two 16-bit fields in the first 32-bit word):
+;   Bits  0..15: Number of transactions per frame minus one (X)
+;   Bits 16..31: Number of pixel-loop iterations per transaction minus one (ISR)
+;
+; The OUT shift register is configured for right shifting with 32-bit autopull.
+; Each OUT instruction consumes bits from the DMA stream; autopull fetches the
+; next 32-bit word when the output shift register becomes empty.
+
 .program icnd2153_pixel_stream
 
-; Out pins: Parallel RGB Data Lines (6 consecutive pins: R0, G0, B0, R1, G1, B1)
-; Side-set bit 0: DCLK (Data Clock)
-; Side-set bit 1: LE / LAT (Latch Enable)
 .side_set 2
 
 .wrap_target
-    wait 1 irq 2                side 0b00  ; Wait for Frame Start from row SM
+    ; Wait until the row SM signals that the pixel stream can begin.
+    wait 1 irq 2                side 0b00
 
+    ; Generate three VSYNC pulses on LE/LAT.
+    ; X starts at 2; JMP X-- repeats while the pre-decrement value is nonzero,
+    ; so the loop executes three times (X = 2, 1, 0).
     set x, 2                    side 0b00
-vsync_loop:                                ; Send VSYNC command sequence (3 LE-high pulses)
+vsync_loop:
     nop             [3]         side 0b10  ; LE=1, DCLK=0
     jmp x--, vsync_loop         side 0b11  ; LE=1, DCLK=1
 
-    irq nowait 3                side 0b00  ; Handshake ACK back to row SM (VSYNC done)
+    ; Tell the row SM that the VSYNC sequence has completed.
+    irq nowait 3                side 0b00
 
-    ; --------------------------------------------------------------------------
-    ; HEADER PARSING (Autopull pulls 32-bit words automatically on 'out')
-    ; --------------------------------------------------------------------------
-    out x, 16                  side 0b00  ; X = Total transactions per frame (scan_depth - 1)
-    out isr, 16                side 0b00  ; ISR = Pixel pulses per transaction (display_width - 2)
+    ; Read the two 16-bit counters from the first DMA word.
+    ; OUT shifts the lower 16 bits into X, then the upper 16 bits into ISR.
+    ; These values are pre-decremented loop counts, not literal counts.
+    out x, 16                   side 0b00  ; X   = transactions per frame - 1
+    out isr, 16                 side 0b00  ; ISR = pixel-loop iterations - 1
 
 transactions:
+    ; Reload the pixel-loop counter for each transaction.
     mov y, isr                  side 0b00
+
 normal_pulse:
-    out pins, 6     [2]         side 0b00  ; 6 bits RGB data (LE=0, DCLK=0)
-    out null, 2     [3]         side 0b01  ; Clock data on DCLK rising edge (LE=0, DCLK=1)
-    jmp y--, normal_pulse       side 0b00
+    ; Output six RGB data bits, then generate a DCLK rising edge.
+    out pins, 6     [2]         side 0b00  ; RGB data valid; DCLK low
+    out null, 2     [3]         side 0b01  ; Consume clock bits; DCLK high
+    jmp y--, normal_pulse       side 0b00  ; Repeat while Y was nonzero
 
-    out pins, 6     [3]         side 0b10  ; Last pixel word in transaction
-    out null, 2     [3]         side 0b11  ; Issue DATA_LATCH command (LE=1, DCLK=0)
+    ; Output the final six RGB data bits for this transaction.
+    ; Raise LE/LAT while generating the final clock pulse to latch the data.
+    out pins, 6     [3]         side 0b10  ; Final RGB data; LE high, DCLK low
+    out null, 2     [3]         side 0b11  ; LE high, DCLK high
 
-    jmp x--, transactions       side 0b00  ; Loop across frame transactions
+    ; Repeat for the remaining transactions in the frame.
+    jmp x--, transactions       side 0b00
 .wrap
 
 % c-sdk {
@@ -226,15 +255,20 @@ static inline void icnd2153_pixel_stream_program_init(
     uint sm,
     uint offset,
     uint rgb_base_pin,
-    uint dclk_pin // Side-set bit 0: DCLK, Side-set bit 1: LE / LAT
+    uint dclk_pin // Two consecutive side-set pins: DCLK, then LE/LAT
 )
 {
+    // Configure the state machine from a known disabled state.
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
 
+    // Configure the six consecutive RGB data pins as outputs.
     pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+
+    // Configure the two consecutive side-set pins as outputs.
     pio_sm_set_consecutive_pindirs(pio, sm, dclk_pin, 2, true);
 
+    // Connect the GPIOs to the PIO block.
     for (uint i = 0; i < 6; i++)
     {
         pio_gpio_init(pio, rgb_base_pin + i);
@@ -242,15 +276,20 @@ static inline void icnd2153_pixel_stream_program_init(
     pio_gpio_init(pio, dclk_pin);     // DCLK
     pio_gpio_init(pio, dclk_pin + 1); // LE / LAT
 
+    // Configure the RGB output bus and the two side-set pins.
     pio_sm_config c = icnd2153_pixel_stream_program_get_default_config(offset);
     sm_config_set_out_pins(&c, rgb_base_pin, 6);
     sm_config_set_sideset_pins(&c, dclk_pin);
 
-    // Enable 32-bit autopull for continuous DMA stream shifting
+    // Shift output data right and automatically pull another 32-bit word
+    // from the TX FIFO whenever the output shift register is exhausted.
+    // This allows the pixel stream to be supplied continuously by DMA.
     sm_config_set_out_shift(&c, true, true, 32);
 
+    // Use the entire FIFO for TX buffering; RX FIFO capacity is not needed.
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
+    // Apply the configuration and start execution at the program entry point.
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_enabled(pio, sm, true);
 }
