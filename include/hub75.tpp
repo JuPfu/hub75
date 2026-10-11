@@ -367,8 +367,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
             if (swap_frame_buffer_pending_)
             {
                 uint8_t *new_front = frame_buffer_;
-                frame_buffer_ = dma_buffer_;
-                // frame_buffer_ = (new_front == storage_.frame_buffer1_) ? storage_.frame_buffer2_ : storage_.frame_buffer1_;
+                frame_buffer_ = (new_front == storage_.frame_buffer1_) ? storage_.frame_buffer2_ : storage_.frame_buffer1_;
                 dma_buffer_ = new_front;
                 swap_frame_buffer_pending_ = false;
             }
