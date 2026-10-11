@@ -99,8 +99,7 @@ void Hub75Driver<Cfg>::start()
     {
         icnd2153_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
     }
-
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    else if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
