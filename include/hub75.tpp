@@ -373,6 +373,24 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
             __dmb();
             dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true); // restart: count is reloaded
             icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
+
+            if constexpr (Cfg.frame_rate_debug)
+            {
+                if (frame_count_ == 0)
+                {
+                    frame_time_start_ = get_absolute_time();
+                }
+                else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
+                {
+                    frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
+                    frame_count_ = -1; // reset so it measures again next interval
+
+                    uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
+                    printf("Frame frequency: %u Hz\n", freq);
+                    frame_freq_us_ = 0; // clear until next measurement
+                }
+                frame_count_++;
+            }
         }
     }
 }
@@ -716,9 +734,13 @@ void Hub75Driver<Cfg>::configure_pio()
     }
 }
 
-static float icnd2153_clkdiv_(uint32_t sys_hz, float floor_mhz, float margin_mhz) // f = max(floor, sys/5 - margin)
+static float icnd2153_clkdiv_(uint32_t sys_hz) // f = max(floor, sys/5 - margin)
 {
-    return sys_hz / (std::max(floor_mhz, sys_hz / 5e6f - margin_mhz) * 1e6f);
+    constexpr float m = -1.5f / 100.0f;
+    constexpr float n = 10.25f;
+    const float clkdiv = (sys_hz / 1e6f) * m + n;
+
+    return clkdiv;
 }
 
 // Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output
@@ -801,11 +823,11 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
 
         // icnd2153 pixel stream can run between 20 MHz and 35 MHz
-        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 15.f);
+        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
 
         // icnd2153 row can run between 20 MHz and 35 MHz
-        sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz, 20.f, 15.f);
+        sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
 }
