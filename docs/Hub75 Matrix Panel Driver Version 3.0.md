@@ -6,7 +6,7 @@ Version 3.0 is a near-complete rework of the DMA/PIO pipeline. Once started, the
 
 ## Achievements at a Glance
 
-A detailed description of the development history, the motivation and some external documentation links nad reference can be found in [HUB75 Driver — Development History](../docs/HISTORY.md).
+A detailed description of the development history, the motivation, some external documentation links and reference can be found in [HUB75 Driver — Development History](../docs/HISTORY.md).
 
 ### Version 2.0 — DMA/PIO Pipeline
 
