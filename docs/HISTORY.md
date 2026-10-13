@@ -1,6 +1,7 @@
 # HUB75 Driver — Development History
 
-This file documents the motivation, evolution, and iterative design decisions that led to the current Version 3.0 architecture. For the current driver architecture and quick-start instructions, see [README.md](../README.md).
+This file documents the motivation, evolution, and iterative design decisions that led to the current Version 3.0 architecture. For the current driver architecture look at [Hub75 Matrix Panel Driver Version 3.0](../docs/Hub75%20Matrix%20Panel%20Driver%20Version%203.0.md).
+Quick-start instructions can be found in [README.md](../README.md).
 
 ---
 

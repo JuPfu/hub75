@@ -51,7 +51,7 @@ Together these enhancements deliver a display pipeline that is faster, more visu
 
 ## The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data
 
-A detailed desciption of the evolution of the Hub75 driver can be found here: [Evolution of the Hub75 driver](../docs/history.md)
+A detailed desciption of the evolution of the Hub75 driver can be found here: [Evolution of the Hub75 driver](../docs/History.md)
 
 ### Overview of the Redesigned Alternative Approach
 
