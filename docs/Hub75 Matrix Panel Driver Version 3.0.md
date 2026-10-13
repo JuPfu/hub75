@@ -38,11 +38,10 @@ Building on the DMA/PIO foundation, Version 3.0 adds:
 - **Double-buffering for both frame and command buffers** — Tear-free updates; the
   `row_cmd_buffer` is only swapped when brightness actually changes.
 - **`cie.py` generates the full `cie.hpp`** — The LUT generator now emits the complete
-  header file including all `#if SEPARATE_CIE_CHANNELS` / `#if BITPLANES` preprocessor
-  guards. Run once, redirect to file, done:
-```bash
+  header file. Run once, redirect to file, copy the generated cie.pp into the ìnclude` directory, done:
+  ```bash
   python3 utils/cie.py > cie.hpp
-```
+  ```
 
 Together these enhancements deliver a display pipeline that is faster, more visually accurate, and almost entirely autonomous — leaving the CPU free for application logic.
 
@@ -152,6 +151,8 @@ Here some more relevant settings if you want to repeat the measurements and veri
 ```cpp
 constexpr Hub75Config panel_cfg{
     .panel = {
+        .matrix_panel_width = 64,       // panel width 64
+        .matrix_panel_height = 64,      // panel height 64
         .sm_clockdiv_factor = 1.0f,     // to prevent flicker or ghosting it might be worth a try to reduce state machine speed
     },
     .color = {
@@ -192,7 +193,19 @@ Overall, performance has improved compared to the predecessor versions. In summa
 
 The performance improvements mainly affect the lower and middle brightness ranges. Starting at a “Base Brightness” of 64 and higher, the BCM component becomes dominant. At that point, even the parallel loading of the pixel data and its provision in a bit-plane structure no longer provides any (significant) speedup.
 
-The revised driver requires slightly more memory resources to achieve the improved quality. I am using “defines” to disable certain (new) functionalities and thus make more memory available for applications.
+The revised driver requires slightly more memory resources to achieve the improved quality.
+
+You can use the following settings to reduce the memory footprint of the `Hub75 driver` and thus make more memory available for your application. You have to check for yourself if this is accompanied by a quality reduction visible on the matrix display.
+
+ ```cpp
+constexpr Hub75Config panel_cfg{
+    .color = {
+        .bitplanes = 8,                 // number of bit-planes used for Binary Code Modulation - valid values are 8 or 10
+        .balanced_light_output = false, // uses some more memory but it improves effective refresh rate and really cuts down flicker
+        .separate_cie_channels = false, // use separate CIE channels for improved colour representation - needs more memory
+    },
+};
+```
 
 ### Key Benefits of this Approach
 
