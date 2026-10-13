@@ -130,7 +130,7 @@ struct Hub75PanelConfig
     // Scan rate 1:4  for a 32x16 matrix panel means 16 pixel height divided by 4  pixel results in 4 rows lit simultaneously.
     RowMapping panel_kind = RowMapping::Standard;
 
-    RowAddressing address_type = RowAddressing::Binary; 
+    RowAddressing address_type = RowAddressing::Binary; // row addressing via address pins
 
     // Scan mode: the number of distinct row addresses, i.e. the "N" in the panel's stated 1:N
     // scan rate. 0 derives it from the height and rowsel_n_pins; set it when the panel's scan rate
