@@ -138,11 +138,11 @@ Improvements over the Pimoroni driver:
 
 ## Version 3.0 — The Definitive Solution
 
-Version 3.0 is a near-complete rework of the DMA/PIO pipeline. See [README.md](../README.md) for the full architectural description. The key motivation for the rework was:
+Version 3.0 is a near-complete rework of the DMA/PIO pipeline. The key motivation for the rework was:
 
 - **On-demand bitplane construction** — in Version 2, bitplanes were reconstructed on the fly for every frame. Version 3.0 builds them once per `update()` / `update_bgr()` call using a dedicated DMA/PIO stage, then streams them continuously in the background.
 - **Balanced Light Output** — high-weight bitplanes are split into multiple shorter segments, eliminating visible flicker at low brightness levels.
 - **Per-channel CIE 1931 correction and CCM** — added as new colour accuracy features.
-- **[board707's](https://github.com/board707) suggestion** of parallel loading of pixel data while BCM is running was implemented, significantly improving throughput at low-to-medium brightness settings.
+- **[board707's](https://github.com/board707) suggestion** of parallel loading of pixel data while BCM is running was implemented, this significantly improving throughput at low-to-medium brightness settings.
 
-For the complete Version 3.0 architecture, refresh-rate performance tables, and configuration reference, refer to [README.md](../README.md).
+For the complete Version 3.0 architecture, refresh-rate performance tables, and configuration reference, refer to [Hub75 Matrix Panel Driver Version 3.0](../docs/Hub75%20Matrix%20Panel%20Driver%20Version%203.0.md).
