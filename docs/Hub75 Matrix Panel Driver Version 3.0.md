@@ -6,7 +6,7 @@ Version 3.0 is a near-complete rework of the DMA/PIO pipeline. Once started, the
 
 ## Achievements at a Glance
 
-A detailed description of the development history, the motivation and some external documentation links nad reference can be found in [HUB75 Driver — Development History](docs/HISTORY.md).
+A detailed description of the development history, the motivation and some external documentation links nad reference can be found in [HUB75 Driver — Development History](../docs/HISTORY.md).
 
 ### Version 2.0 — DMA/PIO Pipeline
 
@@ -51,7 +51,7 @@ Together these enhancements deliver a display pipeline that is faster, more visu
 
 ## The Definitive Hub75 Driver Solution – A Bitplane Stream with Parallel Reading and Display of Pixel Data
 
-A detailed desciption of the evolution of the Hub75 driver can be found here: ![Evolution of the Hub75 driver](../docs/evolution_of_hub75_driver.md)
+A detailed desciption of the evolution of the Hub75 driver can be found here: [Evolution of the Hub75 driver](../docs/history.md)
 
 ### Overview of the Redesigned Alternative Approach
 
@@ -133,13 +133,13 @@ The second DMA/PIO pipeline streams the bitplanes to the matrix panel.  Each row
 
 #### RGB Pixel Data Transformation into Bitplane Slices
 
-<img src="assets/definitive_hub75_dma_pio_1.svg">
+<img src="../assets/definitive_hub75_dma_pio_1.svg">
 
 *Picture 4: Bitplane Creation Pipeline*
 
 #### Row-Addressing, Loading and Display of Pixel Data
 
-<img src="assets/definitive_hub75_dma_pio_2.svg">
+<img src="../assets/definitive_hub75_dma_pio_2.svg">
 
 *Picture 5: Row-Addressing, Pixel Loading and BCM*
 
