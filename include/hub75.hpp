@@ -120,8 +120,8 @@ struct Hub75PanelConfig
     uint32_t chain_cols = 1;
 
     /* The software-based control of Hub75 matrix panels differs significantly from that of PWM matrix panels */
-    PanelClass panel_class = PanelClass::HUB75;
-    Hub75ChainMode chain_mode = Hub75ChainMode::SERPENTINE;
+    PanelClass panel_class = PanelClass::HUB75;             // standard HUB75 panel
+    Hub75ChainMode chain_mode = Hub75ChainMode::SERPENTINE; // U-Turn with compensation for 180° rotation
 
     // Scan rate 1:32 for a 64x64 matrix panel means 64 pixel height divided by 32 pixel results in 2 rows lit simultaneously.
     // Scan rate 1:16 for a 64x64 matrix panel means 64 pixel height divided by 16 pixel results in 4 rows lit simultaneously.
@@ -130,7 +130,7 @@ struct Hub75PanelConfig
     // Scan rate 1:4  for a 32x16 matrix panel means 16 pixel height divided by 4  pixel results in 4 rows lit simultaneously.
     RowMapping panel_kind = RowMapping::Standard;
 
-    RowAddressing address_type = RowAddressing::Binary;
+    RowAddressing address_type = RowAddressing::Binary; 
 
     // Scan mode: the number of distinct row addresses, i.e. the "N" in the panel's stated 1:N
     // scan rate. 0 derives it from the height and rowsel_n_pins; set it when the panel's scan rate
@@ -144,7 +144,7 @@ struct Hub75PanelConfig
     // panel is not affected). Flip this if panels of a chain appear in the wrong positions.
     bool pwm_reverse_chain_order = false;
 
-    bool inverted_stb = false;
+    bool inverted_stb = false; // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
 
     // To prevent flicker or ghosting it might be worth a try to reduce state machine speed.
     // For panels with height less or equal to 16 rows try a factor of 8.0f
@@ -152,8 +152,8 @@ struct Hub75PanelConfig
     // Even for panels with height less or equal to 62 rows a factor of about 2.0f might solve such an issue
     float sm_clockdiv_factor = 1.0f;
 
-    uint32_t base_latch_ns = 80;
-    uint32_t base_addr_ns = 160;
+    uint32_t base_latch_ns = 80; // wait time in nano-seconds to stabilise latch
+    uint32_t base_addr_ns = 160; // wait time in nano-seconds to stabilise row addressing
 };
 
 // Logical display orientation.
@@ -171,9 +171,9 @@ struct Hub75PinConfig
     uint32_t data_n_pins = 6;     // count of consecutive color pins usually 6
     uint32_t rowsel_base_pin = 6; // start gpio pin of address pins
     uint32_t rowsel_n_pins = 5;   // count of consecutive address pins - adapt to the number of address pins of your panel
-    uint32_t clk_pin = 11;
-    uint32_t strobe_pin = 12;
-    uint32_t oen_pin = 13;
+    uint32_t clk_pin = 11;        // GPIO pin for CLK
+    uint32_t strobe_pin = 12;     // GPIO pin for STROBE (LATCH)
+    uint32_t oen_pin = 13;        // GPIO for OE pin (GCKL for PWM panel class)
 };
 
 // Bit depth and color correction.
@@ -620,6 +620,8 @@ private:
     void setup_bitplane_creation();
     void setup_display_irq();
     void setup_bitplane_stream_irq();
+
+    void emit_frame_rate(); // activate for debug purpose only via ".frame_rate_debug = true"
 
     void handle_ctrl_irq() override;
     void handle_bitplane_irq() override;

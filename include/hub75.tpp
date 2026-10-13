@@ -8,6 +8,8 @@
 #include "hardware/clocks.h"
 #include "pico/sync.h"
 
+#include "hub75.hpp"
+
 #include "hub75.pio.h"
 #include "icnd2153.pio.h"
 
@@ -292,13 +294,32 @@ void Hub75Driver<Cfg>::timing_init(float clk_sys_hz, float clkdiv)
     timing_config_.addr_cycles = ns_to_pio_cycles(Cfg.panel.base_addr_ns, clk_sys_hz, clkdiv);
 }
 
+template <Hub75Config Cfg>
+void Hub75Driver<Cfg>::emit_frame_rate()
+{
+    if (frame_count_ == 0)
+    {
+        frame_time_start_ = get_absolute_time();
+    }
+    else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
+    {
+        frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
+        frame_count_ = -1; // reset so it measures again next interval
+
+        uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
+        printf("Frame frequency: %u Hz\n", freq);
+        frame_freq_us_ = 0; // clear until next measurement
+    }
+    frame_count_++;
+}
+
 // -----------------------------------------------------------------------------------------
 // IRQ handlers - dispatched through Hub75DriverBase's registry, see hub75.cpp
 // -----------------------------------------------------------------------------------------
 
 // DMA IRQ0: frame synchronisation and double-buffer swapping, at safe (frame-boundary) points.
 template <Hub75Config Cfg>
-void Hub75Driver<Cfg>::handle_ctrl_irq()
+void inline Hub75Driver<Cfg>::handle_ctrl_irq()
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
@@ -308,20 +329,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
 
             if constexpr (Cfg.frame_rate_debug)
             {
-                if (frame_count_ == 0)
-                {
-                    frame_time_start_ = get_absolute_time();
-                }
-                else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
-                {
-                    frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
-                    frame_count_ = -1; // reset so it measures again next interval
-
-                    uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
-                    printf("Frame frequency: %u Hz\n", freq);
-                    frame_freq_us_ = 0; // clear until next measurement
-                }
-                frame_count_++;
+                emit_frame_rate();
             }
 
             if (swap_row_cmd_buffer_pending_)
@@ -376,20 +384,7 @@ void Hub75Driver<Cfg>::handle_ctrl_irq()
 
             if constexpr (Cfg.frame_rate_debug)
             {
-                if (frame_count_ == 0)
-                {
-                    frame_time_start_ = get_absolute_time();
-                }
-                else if (frame_count_ >= FRAME_MEASURE_INTERVAL)
-                {
-                    frame_freq_us_ = (uint32_t)absolute_time_diff_us(frame_time_start_, get_absolute_time());
-                    frame_count_ = -1; // reset so it measures again next interval
-
-                    uint32_t freq = 1000000u * FRAME_MEASURE_INTERVAL / frame_freq_us_;
-                    printf("Frame frequency: %u Hz\n", freq);
-                    frame_freq_us_ = 0; // clear until next measurement
-                }
-                frame_count_++;
+                emit_frame_rate();
             }
         }
     }
