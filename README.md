@@ -24,46 +24,15 @@ Once started, the driver streams the panel autonomously; only hardware-triggered
 
 ### Shift-register row addressing (e.g. Waveshare Hub75 96×48 SM5368 v2)
 
-Most panels take the row number as a binary address on pins A–E. Some panels instead advance the active row through a **shift register** (SM5368, 74HC595-type row switchers). The three row pins then mean *A = row clock, B = BK (discharge enable), C = row data*. Select this with `.address_type = RowAddressing::ABCShiftRegister` and `rowsel_n_pins = 3`.
+Most panels take the row number as a binary address on pins A–E. Some panels instead advance the active row through a **shift register** (SM5368, 74HC595-type row switchers).
 
-The quickest way is the ready-made profile:
-
-```cpp
-constexpr Hub75Config panel_cfg = make_hub75_config(
-    Hub75PanelProfile::P96X48_1_24_SR,   // 96x48, 3 row pins, shift-register addressing, R/B swapped
-    Hub75Config{
-        .panel = { .sm_clockdiv_factor = 4.0f },   // slower state machine = stable output on this panel
-    });
-```
-
-> **Status:** reported working by community tester [Jason](https://github.com/jason-a69) (thank you!). The maintainer has no such panel at hand, so further testing and feedback are very welcome. Profiles are modelled after Waveshare's fork of this project.
+See [Settings for a Hub75 Panel with Shift Register for Row Addressing](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing)
 
 ### ICND2153-based (S)PWM panels
 
 PWM panels contain driver ICs (ICND2153) that **generate the grey levels themselves** from 16-bit values. The driver therefore does not produce bit-planes for these panels; it builds a 16-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
 
-```cpp
-constexpr Hub75Config panel_cfg{
-    .panel = {
-        .matrix_panel_width = 128,            // must be a multiple of 16 (one chip = 16 columns)
-        .matrix_panel_height = 64,
-        .panel_class = PanelClass::PWM,
-        .panel_chip = Hub75PanelChip::ICND2153,
-        .base_latch_ns = 180,                 // values used with the tested panel
-        .base_addr_ns = 260,
-    },
-    .color = {
-        .bitplanes = 16,                      // required for PWM panels
-        .separate_cie_channels = true,
-        .ccm_rg_shift = 6,
-        .ccm_gb_shift = 7,
-    },
-};
-```
-
-> **Tested panel:** XR1.875-128x64-1515-32S-4L-V3.0 (128×64, 1/32 scan).
-> **Memory:** this configuration needs about 176 KiB for driver buffers – plan for an RP2350. Behaviour on RP2040 is not verified.
-> If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_order = true`.
+See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
 
 ## Supported panels at a glance
 
@@ -269,7 +238,7 @@ constexpr Hub75Config panel_cfg{
 };
 ```
 
-### Settings for a Hub75 Panel with Shift Register for Row Addressing (e.g. Waveshares Hub75 96x48 SM5368 Version 2 Panel)
+### Settings for a Hub75 Panel with Shift Register for Row Addressing
 
 In standard HUB75 panels, the address pins (A, B, C, D, E) are usually used as binary address lines.
 **Waveshares** matrix panel `Hub75 96x48 SM5368 Version 2`, for example, does not operate according to this scheme, but uses a shift register to advance to the next row.
@@ -306,16 +275,23 @@ constexpr Hub75Config panel_cfg{
         .panel_class = PanelClass::PWM,            // it's a PWM panel
         .address_type = RowAddressing::Binary,     // row addressing via address pins
         .panel_chip = Hub75PanelChip::ICND2153,    // mainly used for initialisation sequence but also for panel specific characteristics
+        .pwm_reverse_chain_order = false           // PWM panels only - reverse the order of the panels inside a chain
      },
     .color = {
         .bitplanes = 16,                           // number (count) of bit-planes for a ICND2153 PWM panel
         .separate_cie_channels = true,             // use separate CIE channels for improved colour representation - needs more memory
         .balanced_light_output = true,             // ⚠️ setting is ignored for PWM panels  
      },
-    .frame_rate_debug = false,                     // ignored for PWM panels
+    .frame_rate_debug = false,                     // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
 };
 ```
----
+
+**Tested panel:** XR1.875-128x64-1515-32S-4L-V3.0 (128×64, 1/32 scan).
+
+**Memory:** this configuration needs ample memory – a Pico (RP2040) might do but plan for an Pico 2 (RP2350). Chaining of two such panels should work for Pico 2 but is not verified.
+
+If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_order = true`.
+
  
 ## How to Use This Project in VSCode
 
