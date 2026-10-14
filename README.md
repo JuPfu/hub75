@@ -398,7 +398,7 @@ If you're interested in specific details — such as how to improve print qualit
 - [Pixel mapping](docs/pixel-mapping.md) – `RowMapping::Standard`, `Split`, `S31`
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
 - [Chained panels and rotation](docs/chaining-and-rotation.md) - topology of chained panels and software rotation of the displayed image
-- [Dual Panel Instances](docs/dual-instances.md) - Two independently attached Hub75 panels driven by this `Hub75 driver`
+- [Dual Panel Instances](docs/dual-instances.md) - 2 independently attached Hub75 panels driven by this `Hub75 driver`
 - [Tested boards](docs/boards.md)
 - [Troubleshooting](docs/troubleshooting.md)
 
@@ -417,7 +417,7 @@ The demo effects in `hub75_demo.cpp` are included to exercise the driver and sho
 | 4 | Analog clock | Geometric transformation test - application of multiple rotating antialiased lines|
 | 5 | Colour gradient / plasma | Full-spectrum colour coverage |
 | 6 | Straight lines | Helps to detect mapping errors |
-| 7 | Grey-scale ramp | **Calibration tool** — equal R, G, B at every luminance step. Use this with the [CCM Tuning Procedure](#tuning-procedure) to eliminate colour tints |
+| 7 | Grey-scale ramp | **Calibration tool** — equal R, G, B at every luminance step. Use this with the [CCM Tuning Procedure](docs/colour.md#tuning-procedure) to eliminate colour tints |
 
 > ⚠️ The demo has been tested on a **Raspberry Pi Pico 2 RP2350A** and **Raspberry Pi Pico 2 RP2350B**. On a RP2040 you may need to comment out some effects due to tighter memory constraints. Open an issue if you need help.
 
