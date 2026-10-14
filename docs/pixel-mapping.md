@@ -16,19 +16,7 @@ Key properties:
 
 Each mapping describes how pixels from the linear source buffer (`src`) are reordered into the panel's shift buffer (`frame_buffer_`).
 
-## Pixel Mapping — Choosing the Right `RowMapping` for Your Panel
-
-`panel.panel_kind` (a `RowMapping` enum value) tells the `update()` / `update_bgr()` method how
-to reorder pixels from your application's linear source buffer into the shift-register order
-that your physical panel expects.
-
-> ⚠️ Setting the wrong `panel_kind` is one of the most common configuration mistakes.
-> The panel will light up, but the image will look scrambled, interleaved, or repeated
-> in blocks — depending on how far off the mapping is.
-
----
-
-### Why This Mapping Step Exists
+## Why This Mapping Step Exists
 
 HUB75 panels do not accept pixels in simple top-to-bottom, left-to-right row-major order.
 Their internal shift registers are loaded column by column, and multiple physical rows are
@@ -43,278 +31,234 @@ The mapping also applies the CIE 1931 look-up table (LUT) to each pixel as it is
 so there is no separate colour-correction pass — it is folded into the same loop at no
 extra cost.
 
----
+## Pixel Mapping — Choosing the Right `RowMapping` for Your Panel
 
-### The Three `RowMapping` Values at a Glance
+`panel.panel_kind` (a `RowMapping` value) tells `update()` / `update_bgr()` how to reorder the pixels of your linear source buffer into the order your physical panel expects.
 
-| `panel_kind` | Rows lit simultaneously | Typical scan notation | Typical panel dimensions | Address lines needed |
+> ⚠️ A wrong `panel_kind` is one of the most common configuration mistakes. The panel lights up, but the image looks **scrambled, interleaved or repeated in strips**.
+
+## At a Glance
+
+| `panel_kind` | Rows lit at once | Scan rate | Typical panel | Address pins |
 |---|:---:|---|---|:---:|
-| `RowMapping::Standard` | 2 | 1/8 S, 1/16 S, 1/32 S | 32×16 / 64×32 / 64×64 | 3 / 4 / 5 |
-| `RowMapping::Split` | 4 | 1/4 S | 32×16 outdoor | 2 |
-| `RowMapping::S31` | 4 | 1/16 S | 64×64 outdoor | 4 |
+| [`RowMapping::Standard`](#rowmappingstandard) *(default)* | 2 | 1/8, 1/16, 1/32 | Indoor 32×16, 64×32, 64×64 | 3 / 4 / 5 |
+| [`RowMapping::Split`](#rowmappingsplit) | 4 | 1/4 | Outdoor P10, 32×16 | 2 |
+| [`RowMapping::S31`](#rowmappings31) | 4 | 1/16 | Outdoor P3, 64×64 | 4 |
 
-> 💡 The number of address lines (`pins.rowsel_n_pins`) must match the selected mapping.
-> See [Step 2 — Scan Rate and Rows Lit Simultaneously](#step-2--scan-rate-and-rows-lit-simultaneously)
-> for the formula that connects panel height, simultaneous rows, and pin count.
+If you are unsure, **start with `Standard`** - it covers the vast majority of panels.
 
----
+## Which One Do I Need?
 
-### `RowMapping::Standard` — Standard Two-Row Multiplexing
+Count the **address pins** on the panel connector (A, B, C, …) and note the **panel height**. Then
 
-**Use this for the vast majority of HUB75 panels.** It is the correct choice whenever exactly
-**two rows** of the panel are driven at the same time — one from the upper half and one from
-the corresponding row in the lower half.
-
-**How to recognise it:**
-
-- The scan notation on the panel label contains `-16S-`, `-32S-`, or similar odd-sounding
-  fractions (1/8, 1/16, 1/32 scan). A 64×64 panel labelled `-32S-` drives 64/32 = 2 rows
-  simultaneously → use this value.
-- The panel connector exposes **5 address pins** (A, B, C, D, E) for a 64×64 panel,
-  or **4 pins** (A, B, C, D) for a 32×64 panel, matching the formula
-  `rowsel_n_pins = log₂(height / 2)`.
-- The driver chip is **ICND2012**, **FM6124**, **FM6126A**, **RUL6024**, or similar standard
-  HUB75 LED driver.
-
-**What the mapping does:**
-
-Pixels are copied into the shift buffer in alternating pairs: one pixel from row `r` in the
-upper half, followed immediately by the corresponding pixel from row `r` in the lower half.
-The offset between the two halves is `matrix_panel_width × matrix_panel_height / 2`.
-
-```c
-// Simplified view of the mapping kernel
-constexpr size_t offset = (matrix_panel_width * matrix_panel_height) / 2;
-for (size_t fb = 0, j = 0; fb < total_pixels; fb += 2, ++j) {
-    frame_buffer[fb]     = pack_lut_rgb(j,          src[j]);           // upper half
-    frame_buffer[fb + 1] = pack_lut_rgb(j + offset, src[j + offset]);  // lower half
-}
+```
+rows lit at once = panel height / 2^(address pins)
 ```
 
-**Configuration:**
+| Height | Address pins | Scan rate | Rows lit | Try first |
+|:---:|:---:|---|:---:|---|
+| 16 | 3 (A–C) | 1/8 | 2 | `Standard` |
+| 32 | 4 (A–D) | 1/16 | 2 | `Standard` |
+| 64 | 5 (A–E) | 1/32 | 2 | `Standard` |
+| 16 | 2 (A, B) | 1/4 | 4 | `Split` |
+| 64 | 4 (A–D) | 1/16 | 4 | `S31` |
+
+Panel labels can help: `-4S-` on a 32×16 outdoor panel points to `Split`; `-16S-` on a **64-row** panel with 4 address pins points to `S31`; everything else is `Standard`.
+
+> 💡 Panel names are not standardised - two panels with the same label can be wired differently. If the first choice gives a stable but scrambled image, try the next candidate. Use a simple solid-colour or stripe test pattern and change **one parameter at a time**.
+
+> ⚠️ A 64×64 panel labelled `-16S-` may also be a normal two-row 1/32 panel that was labelled inconsistently. If `S31` looks scrambled, try `Standard` with `rowsel_n_pins = 5`.
+
+## What the Mapping Does
+
+HUB75 panels do not take pixels in plain row-major order. Their shift registers are loaded **column by column**, and **several physical rows are driven at the same time**, so each shifted word contains pixels from different vertical regions of the image. Which regions depends on how many rows are multiplexed and how the row drivers are wired inside the panel.
+
+The mapping step in `update()` / `update_bgr()` reads the pixels of your source buffer (`src`) and writes each one to its correct slot in the internal `frame_buffer_`, which DMA/PIO then streams to the panel. The CIE 1931 look-up table and colour correction are applied in the same copy loop, so the choice of mapping does not change colour fidelity.
+
+---
+
+## `RowMapping::Standard`
+
+**The default and the right choice for most panels:** exactly **two rows** are lit at a time - one from the upper half and the matching one from the lower half.
+
+**How to recognise it**
+
+- Scan notation on the label such as `-16S-` or `-32S-` (1/8, 1/16, 1/32 scan). A 64×64 panel labelled `-32S-` lights 64/32 = 2 rows.
+- 5 address pins (A–E) on a 64×64 panel, 4 pins (A–D) on a 64×32 panel, 3 pins (A–C) on a 32×16 panel.
+- Driver chips such as ICND2012, FM6124, FM6126A or RUL6024. The chip determines `panel_chip` (initialisation) - it has **no influence** on `panel_kind`.
+
+**Configuration**
 
 ```cpp
-// 64×64 standard panel, 1/32 scan (2 rows lit, 5 address pins)
-constexpr Hub75Config panel_cfg{
+// 64×64, 1/32 scan: 2 rows lit, 5 address pins
+constexpr Hub75Config cfg_64x64{
     .panel = {
-        .matrix_panel_width = 64,
+        .matrix_panel_width  = 64,
         .matrix_panel_height = 64,
-        // .panel_kind = RowMapping::Standard is the default — no need to set it explicitly
+        .panel_kind = RowMapping::Standard,  // default, may be omitted
     },
     .pins = { .rowsel_n_pins = 5 },
 };
 
-// 64×32 standard panel, 1/16 scan (2 rows lit, 4 address pins)
-constexpr Hub75Config panel_cfg_b{
-    .panel = { .matrix_panel_width = 64, .matrix_panel_height = 32 },
+// 64×32, 1/16 scan: 2 rows lit, 4 address pins, RUL6024 driver chips
+constexpr Hub75Config cfg_64x32{
+    .panel = {
+        .matrix_panel_width  = 64,
+        .matrix_panel_height = 32,
+        .panel_chip = Hub75PanelChip::RUL6024,
+    },
     .pins = { .rowsel_n_pins = 4 },
 };
 
-// 32×16 standard panel, 1/8 scan (2 rows lit, 3 address pins)
-constexpr Hub75Config panel_cfg_c{
-    .panel = { .matrix_panel_width = 32, .matrix_panel_height = 16 },
+// 32×16, 1/8 scan: 2 rows lit, 3 address pins, FM6126A driver chips
+constexpr Hub75Config cfg_32x16{
+    .panel = {
+        .matrix_panel_width  = 32,
+        .matrix_panel_height = 16,
+        .panel_chip = Hub75PanelChip::FM6126A,
+    },
     .pins = { .rowsel_n_pins = 3 },
 };
 ```
 
-> 💡 `RowMapping::Standard` is the **default**. You do not need to set `panel_kind`
-> explicitly unless you are switching back from one of the other values.
+### How It Works
+
+The following example uses a **64×32 panel at 1/16 scan** (4 address pins, 16 addresses, 2 rows per address). Replace the numbers with your own panel width, height and `rowsel_n_pins`.
+
+#### 1. Which rows share an address
+
+Each address lights **two rows, `SCAN_DEPTH` apart**: row *R* in the upper half and row *R + SCAN_DEPTH* in the lower half.
+
+<img src="../assets/standard-addressing-row-groups.svg" alt="The 32 rows of a panel as a vertical stack. For addresses 0, 1 and 15 the two lit rows are highlighted, 16 rows apart" width="680">
+
+| Address | Rows lit simultaneously |
+|:---:|:---:|
+| 0 | 0 and 16 |
+| 1 | 1 and 17 |
+| ⋮ | ⋮ |
+| 15 | 15 and 31 |
+
+In general:
+
+```
+SCAN_DEPTH       = number of addresses (1/16 scan → 16)
+ROWS_IN_PARALLEL = matrix_panel_height / SCAN_DEPTH
+address          = row % SCAN_DEPTH
+rows of address A: A, A + SCAN_DEPTH, A + 2·SCAN_DEPTH, …   (ROWS_IN_PARALLEL rows)
+```
+
+#### 2. How the data of one address is written
+
+The full panel width is written in **one continuous left-to-right sweep**, without splitting it into column bands. For every column, **two RGB triplets are combined into one six-value word**: `R0 G0 B0` of the upper row and `R1 G1 B1` of its partner row `SCAN_DEPTH` rows below. This word is shifted out with a single `CLK` pulse on the six consecutive GPIOs starting at `pins.data_base_pin`.
+
+<img src="../assets/standard-addressing-sweep.svg" alt="One address written in a single left-to-right sweep, with one column zoomed in to show the R0 G0 B0 R1 G1 B1 word per CLK pulse" width="680">
+
+For address 0 of the example the stream looks like this:
+
+```
+col 0:  R0 G0 B0 R1 G1 B1     (pixel of row 0, then pixel of row 16)
+col 1:  R0 G0 B0 R1 G1 B1
+ ...
+col 63: R0 G0 B0 R1 G1 B1
+```
+
+After these 64 words `STROBE` (latch) fires and the row address advances.
 
 ---
 
-### `RowMapping::Split` — Outdoor P10 Panel, Four-Row Multiplexing
+## `RowMapping::Split`
 
-Use this for the **P10-SMD 16×32** outdoor panel (3535 LED pitch, 1/4 scan) and any
-electrically equivalent panel where **four rows** are driven simultaneously and only
-**2 address lines** (A, B) are present.
+For **outdoor P10 panels (32×16, 1/4 scan)** and electrically equivalent panels: **four rows** are lit at once and only **two address pins** (A, B) exist.
 
-**How to recognise it:**
+**How to recognise it**
 
-- Panel label contains `-4S-` or similar 1/4 scan notation.
-- Physical dimensions are **32 columns × 16 rows**.
-- The connector exposes only **2 address pins** (A, B), matching
-  `rowsel_n_pins = log₂(height / 4) = log₂(4) = 2`.
-- The driver IC is typically **DP5020B** or equivalent.
-- The panel is usually an **outdoor** type (weatherproof casing, brighter LEDs).
+- Label contains `-4S-` or another 1/4 scan notation.
+- 32 columns × 16 rows, **2 address pins**: `rowsel_n_pins = log₂(height / 4) = 2`.
+- Driver IC typically DP5020B or equivalent; usually an outdoor type (weatherproof, bright LEDs).
 
-**What the mapping does:**
+**What the mapping does**
 
-The panel's internal shift registers are arranged in four vertical quarters rather than
-two halves. Pixels are interleaved in column-pair groups: a selector bit derived from the
-panel width determines whether a column-pair slot draws from the first or the second half
-of the available column pairs, and a group-row offset advances the source pointer at each
-scan-group boundary.
+The shift registers are arranged in **four vertical quarters** instead of two halves. Pixels are interleaved in column-pair groups: a selector bit derived from the panel width decides whether a column-pair slot draws from the first or the second half of the column pairs, and a group-row offset moves the source pointer at every scan-group boundary.
 
-```c
-// Key constants for 32×16, 1/4 scan
-// COLUMN_PAIRS        = 32 / 2 = 16
-// HALF_PAIRS          = 16 / 2 = 8   (= PAIR_HALF_BIT)
-// PAIR_HALF_SHIFT     = ctz(8) = 3
-// SCAN_GROUPS         = 2^rowsel_n_pins = 4
-// ROWS_PER_GROUP      = 16 / 4 = 4
-// GROUP_ROW_OFFSET    = 4 × 32 = 128 source pixels
-// HALF_PANEL_OFFSET   = (16 / 2) × 32 = 256 source pixels
+<details>
+<summary>Key constants for 32×16, 1/4 scan</summary>
+
 ```
+COLUMN_PAIRS      = 32 / 2        = 16
+HALF_PAIRS        = 16 / 2        = 8      (= PAIR_HALF_BIT)
+PAIR_HALF_SHIFT   = ctz(8)        = 3
+SCAN_GROUPS       = 2^rowsel_n_pins = 4
+ROWS_PER_GROUP    = 16 / 4        = 4
+GROUP_ROW_OFFSET  = 4 × 32        = 128 source pixels
+HALF_PANEL_OFFSET = (16 / 2) × 32 = 256 source pixels
+```
+</details>
 
-**Configuration:**
+**Configuration**
 
 ```cpp
-// 32×16 outdoor panel, 1/4 scan (4 rows lit, 2 address pins)
-constexpr Hub75Config panel_cfg{
+// 32×16 outdoor panel, 1/4 scan: 4 rows lit, 2 address pins
+constexpr Hub75Config cfg_p10{
     .panel = {
-        .matrix_panel_width = 32,
+        .matrix_panel_width  = 32,
         .matrix_panel_height = 16,
         .panel_kind = RowMapping::Split,
         .sm_clockdiv_factor = 1.0f,   // increase if ghosting occurs
-        .panel_chip = Hub75PanelChip::GENERIC,
     },
     .pins = { .rowsel_n_pins = 2 },
 };
 ```
 
-> ⚠️ **Do not use this value with larger panels or panels that have more than 2 address
-> lines.** The mapping constants are compiled in from the width and height, but the
-> quarter-split logic is specific to the 4S wiring architecture.
-
 ---
 
-### `RowMapping::S31` — Outdoor P3 64×64 Panel, Four-Row Multiplexing
+## `RowMapping::S31`
 
-Use this for the **QP3 outdoor 64×64** panel (1415 / 1.4 mm LED pitch, 1/16 scan) and
-panels with the same internal wiring convention — sometimes labelled `-16S-` on a 64-tall
-panel, which gives 64/16 = 4 rows lit simultaneously.
+For **outdoor P3 64×64 panels (1/16 scan)** such as the QP3 outdoor panel, and panels with the same internal wiring. Often labelled `-16S-` on a 64-row panel: 64/16 = **4 rows** lit at once.
 
-**How to recognise it:**
+**How to recognise it**
 
-- Panel label contains `-16S-` **on a 64-row-tall panel** (not 32-row). The key
-  distinction from a standard `-16S-` panel is that this one lights **4** rows at once,
-  not 2.
-- Physical dimensions are **64 columns × 64 rows**.
-- The connector exposes **4 address pins** (A, B, C, D), matching
-  `rowsel_n_pins = log₂(height / 4) = log₂(16) = 4`.
-- Compatible driver ICs include: **DP5125D**, **MBI5253**, **ICND2055**, **ICND2065**,
-  **ICND2153S**, **CFD325**, **MBI5264**, **CFD555**, **ICND2165**.
-- The panel is typically an **outdoor** type (weatherproof, high-brightness).
-- Confirmed working board: **P3QD / QP3 Outdoor** (see [Boards](#boards)).
+- `-16S-` label on a **64-row** panel - a standard `-16S-` panel lights 2 rows, this one lights 4.
+- 64 columns × 64 rows, **4 address pins**: `rowsel_n_pins = log₂(height / 4) = 4`.
+- Compatible driver ICs: DP5125D, MBI5253, ICND2055, ICND2065, ICND2153S, CFD325, MBI5264, CFD555, ICND2165.
+- Typically an outdoor type (weatherproof, high brightness). Confirmed working board: **P3QD / QP3 Outdoor** (see [Boards](#boards)).
 
-**What the mapping does:**
+**What the mapping does**
 
-The panel divides its 64 rows into four equal quarters of 16 rows each. The shift buffer
-is filled in a specific two-pass pattern per logical scan line: first the pixels from the
-second and fourth quarter are interleaved into even output slots, then the pixels from the
-first and third quarter are interleaved into the odd output slots (offset by
-`line_offset = 2 × matrix_panel_width`). This unusual ordering matches the internal
-scan-row pairing of this panel family.
+The 64 rows form **four quarters of 16 rows**. For each logical scan line the shift buffer is filled in two passes: first the pixels of the **second and fourth** quarter are interleaved into the **even** output slots, then those of the **first and third** quarter into the **odd** slots, offset by `line_offset = 2 × matrix_panel_width`. This ordering matches the scan-row pairing of this panel family.
 
-```c
-// Key geometry for 64×64, 1/16 scan
-// quarter       = 64 × 64 / 4 = 1024 pixels each
-// line_offset   = 2 × 64 = 128 output words
-//
-// Per logical row: even dst slots   ← quarters 2 & 4 (src pixels)
-//                  odd  dst slots   ← quarters 1 & 3 (src pixels, at dst + line_offset)
+<details>
+<summary>Key geometry for 64×64, 1/16 scan</summary>
+
 ```
+quarter     = 64 × 64 / 4 = 1024 pixels each
+line_offset = 2 × 64      = 128 output words
 
-**Configuration:**
+per logical row: even dst slots ← quarters 2 and 4 (src pixels)
+                 odd  dst slots ← quarters 1 and 3 (src pixels, at dst + line_offset)
+```
+</details>
+
+**Configuration**
 
 ```cpp
-// 64×64 outdoor P3 panel, 1/16 scan (4 rows lit, 4 address pins)
-constexpr Hub75Config panel_cfg{
+// 64×64 outdoor P3 panel, 1/16 scan: 4 rows lit, 4 address pins
+constexpr Hub75Config cfg_qp3{
     .panel = {
-        .matrix_panel_width = 64,
+        .matrix_panel_width  = 64,
         .matrix_panel_height = 64,
         .panel_kind = RowMapping::S31,
-        .sm_clockdiv_factor = 2.75f,   // recommended starting value for this panel family
-        .panel_chip = Hub75PanelChip::GENERIC,
+        .sm_clockdiv_factor = 2.75f,  // recommended starting value for this panel family
     },
     .pins = { .rowsel_n_pins = 4 },
 };
 ```
 
-> ⚠️ A 64×64 panel with a `-16S-` label **could also be a standard two-row panel** at
-> 1/32 scan that the manufacturer labelled inconsistently. If this value produces a
-> scrambled image, try `RowMapping::Standard` with `rowsel_n_pins = 5` instead.
-
 ---
 
-### How to Select the Correct Value — Decision Guide
+## Good to Know
 
-```
-Does your panel label contain "-16S-" or "-32S-" on a 64-tall panel
-with 5 address pins (A–E)?
-    └─ Yes → RowMapping::Standard  (standard 1/32 scan, 2 rows lit)
+- **`panel_kind` is one enum value** - exactly one mapping is active at a time
+- **`rowsel_n_pins` is not derived from `panel_kind`** - set `pins.rowsel_n_pins` yourself to the number of address pins. A wrong value selects the wrong rows, independent of the pixel mapping.
+- **Four-row panels (`Split`, `S31`) may ghost or flicker at full PIO speed** - start with `sm_clockdiv_factor = 1.0f` and raise it (`2.0f`, `2.75f`, …) if artefacts appear.
+- **Configure in your own `.cpp` file**, not in `hub75.hpp`: build a `constexpr Hub75Config` as shown above. Set only the fields that differ from the defaults - there is no need to repeat the whole struct.
 
-Does your panel label contain "-16S-" on a 64-tall panel
-with 4 address pins (A–D)?
-    └─ Yes → RowMapping::S31  (4 rows lit)
-              If image is still scrambled, try RowMapping::Standard
-
-Does your panel label contain "-4S-" and the panel is 32 × 16
-with 2 address pins (A, B)?
-    └─ Yes → RowMapping::Split
-
-For any other panel, or when uncertain:
-    └─ Start with RowMapping::Standard — it covers the majority of panels.
-       If the image is stable but scrambled or interleaved, try the others.
-```
-
-**Quick check table:**
-
-| Address pins on connector | Panel height | Rows lit simultaneously | Value to try first |
-|:---:|:---:|:---:|---|
-| 5 (A–E) | 64 | 2 | `RowMapping::Standard` |
-| 4 (A–D) | 64 | 2 | `RowMapping::Standard` (e.g. 64×32) |
-| 4 (A–D) | 64 | 4 | `RowMapping::S31` |
-| 3 (A–C) | 16 | 2 | `RowMapping::Standard` |
-| 2 (A, B) | 16 | 4 | `RowMapping::Split` |
-
----
-
-### What Happens When You Set `panel_kind`
-
-Setting `panel_kind` has **two effects**:
-
-1. **Selects the pixel reorder algorithm** used inside `update()` / `update_bgr()`. The
-   chosen algorithm determines how the driver maps each `(x, y)` coordinate from the
-   source buffer to the correct slot in the internal `frame_buffer_` that will be streamed
-   to the panel's shift registers.
-
-2. **Implicitly fixes the memory layout** of `frame_buffer_`. Different mappings produce
-   differently structured buffers. Activating a mapping that does not match the physical
-   panel causes address aliasing — pixels from unrelated source rows land in the same
-   shift-register slot — which is why the image appears scrambled rather than just offset.
-
-The CIE/CCM colour correction (`pack_lut_rgb`) is applied **inside the same copy loop**
-regardless of which value is active, so colour fidelity is unaffected by the choice of
-mapping.
-
----
-
-### Important Notes
-
-- **`panel_kind` picks exactly one mapping at a time** — it's a single enum field, so
-  there's no way to accidentally activate more than one (unlike the old preprocessor
-  defines, where defining two mapping macros at once was a possible mistake).
-
-- **`rowsel_n_pins` must match the mapping.** The number of address lines is not derived
-  from `panel_kind`; you must set `pins.rowsel_n_pins` explicitly and consistently. An
-  incorrect value causes wrong row selection independently of the pixel mapping.
-
-- **The fields are set in your own `.cpp` file**, not by editing `hub75.hpp` directly. Build
-  a `constexpr Hub75Config` value (see examples above). The `hub75.hpp` struct definitions
-  show the available fields and their defaults but are not the intended configuration point.
-
-- **Panel names are not standardised.** Two panels from different manufacturers with the
-  same printed label may have different internal wiring. If the expected mapping produces a
-  scrambled image, work through the decision guide above and test each option with a simple
-  solid-colour or stripe test pattern — change **one parameter at a time**.
-
-- **`sm_clockdiv_factor` may need adjustment for 4-row panels.** Panels using
-  `RowMapping::Split` or `RowMapping::S31` sometimes exhibit ghosting
-  or flicker at full PIO speed. Start with `sm_clockdiv_factor = 1.0f` and increase
-  (e.g. `2.0f`, `2.75f`) if artefacts appear. See
-  [Step 6 — State Machine Clock Divider](#step-6--state-machine-clock-divider-sm_clockdiv).
-
-
-> 💡 You only need to set the fields that differ from these defaults. There is no need to
-> repeat the entire struct for a standard setup.

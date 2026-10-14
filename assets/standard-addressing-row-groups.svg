@@ -1,51 +1,125 @@
-<svg width="680" height="260" viewBox="0 0 680 260" xmlns="http://www.w3.org/2000/svg" role="img">
-<title>Row-select addresses and the physical rows they drive (ROW_MAP_STANDARD, 64x32 / 1:16 scan example)</title>
+<svg width="680" height="420" viewBox="0 0 680 420" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img">
+<title>Row-select addresses and the physical rows they drive (RowMapping::Standard, 64x32 panel / 1:16 scan example)</title>
+<desc>The 32 rows of a panel drawn as a vertical stack, top to bottom. For address 0, 1 and 15 the two rows that are lit at the same time are highlighted: row R in the upper half and row R + 16 in the lower half. A dimension arrow marks the distance of 16 rows (SCAN_DEPTH).</desc>
 <style>
   .bg { fill: #ffffff; }
   .container { fill: none; stroke: #888780; stroke-width: 1; stroke-dasharray: 3 3; }
-  .chip { fill: #E1F5EE; stroke: #0F6E56; stroke-width: 1; }
+  .dim { fill: #F1EFE8; stroke: #D3D1C7; stroke-width: 0.75; }
+  .chip-a { fill: #E1F5EE; stroke: #0F6E56; stroke-width: 1; }
+  .chip-b { fill: #EEEDFE; stroke: #534AB7; stroke-width: 1; }
   .title { fill: #2C2C2A; font: 500 14px sans-serif; }
-  .label { fill: #04342C; font: 400 12px sans-serif; }
+  .label-a { fill: #04342C; font: 400 12px sans-serif; }
+  .label-b { fill: #26215C; font: 400 12px sans-serif; }
+  .sub { fill: #5F5E5A; font: 400 12px sans-serif; }
   .caption { fill: #5F5E5A; font: 400 12px sans-serif; }
   .ellipsis { fill: #5F5E5A; font: 500 20px sans-serif; }
+  .arrowline { stroke: #5F5E5A; stroke-width: 1; fill: none; }
+  .leaderline { stroke: #5F5E5A; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
   @media (prefers-color-scheme: dark) {
     .bg { fill: #1e1e1e; }
     .container { stroke: #B4B2A9; }
-    .chip { fill: #085041; stroke: #5DCAA5; }
+    .dim { fill: #2C2C2A; stroke: #5F5E5A; }
+    .chip-a { fill: #085041; stroke: #5DCAA5; }
+    .chip-b { fill: #3C3489; stroke: #AFA9EC; }
     .title { fill: #F1EFE8; }
-    .label { fill: #9FE1CB; }
+    .label-a { fill: #9FE1CB; }
+    .label-b { fill: #CECBF6; }
+    .sub { fill: #D3D1C7; }
     .caption { fill: #D3D1C7; }
     .ellipsis { fill: #D3D1C7; }
+    .arrowline { stroke: #D3D1C7; }
+    .leaderline { stroke: #D3D1C7; }
   }
 </style>
-<rect class="bg" x="0" y="0" width="680" height="260"/>
+<rect class="bg" x="0" y="0" width="680" height="420"/>
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" class="arrowline"/>
+  </marker>
+  <!-- 16 rows of one panel half, 8 px pitch -->
+  <g id="half">
+    <rect class="dim" x="0" y="0"   width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="8"   width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="16"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="24"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="32"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="40"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="48"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="56"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="64"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="72"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="80"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="88"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="96"  width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="104" width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="112" width="50" height="6" rx="1.5"/>
+    <rect class="dim" x="0" y="120" width="50" height="6" rx="1.5"/>
+  </g>
+  <!-- all 32 rows: upper half, small gap, lower half -->
+  <g id="stack">
+    <use xlink:href="#half" x="0" y="0"/>
+    <use xlink:href="#half" x="0" y="134"/>
+  </g>
+</defs>
 
+<text class="sub" x="340" y="18" text-anchor="middle">Panel rows, top to bottom (32 rows) — the two rows lit by each address are highlighted</text>
+<line class="arrowline" x1="22" y1="80" x2="22" y2="340" marker-end="url(#arrow)"/>
+
+<!-- Address 0 -->
 <g>
-<rect class="container" x="48" y="60" width="135" height="130" rx="10"/>
-<text class="title" x="115" y="82" text-anchor="middle">Address 0</text>
-<rect class="chip" x="58" y="95" width="115" height="30" rx="6"/><text class="label" x="115" y="114" text-anchor="middle">Row 0</text>
-<rect class="chip" x="58" y="135" width="115" height="30" rx="6"/><text class="label" x="115" y="154" text-anchor="middle">Row 16</text>
+<rect class="container" x="47" y="45" width="150" height="307" rx="10"/>
+<text class="title" x="122" y="65" text-anchor="middle">Address 0</text>
+<use xlink:href="#stack" x="63" y="80"/>
+<rect class="chip-a" x="61" y="78.5"  width="54" height="9" rx="3"/>
+<rect class="chip-b" x="61" y="212.5" width="54" height="9" rx="3"/>
+<text class="label-a" x="121" y="83"  dominant-baseline="central">Row 0</text>
+<text class="label-b" x="121" y="217" dominant-baseline="central">Row 16</text>
+<line class="leaderline" x1="165" y1="83"  x2="171" y2="83"/>
+<line class="leaderline" x1="165" y1="217" x2="171" y2="217"/>
+<line class="arrowline" x1="171" y1="83" x2="171" y2="217" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text class="sub" x="165" y="150" text-anchor="end" dominant-baseline="central">16 rows</text>
 </g>
 
+<!-- Address 1 -->
 <g>
-<rect class="container" x="198" y="60" width="135" height="130" rx="10"/>
-<text class="title" x="265" y="82" text-anchor="middle">Address 1</text>
-<rect class="chip" x="208" y="95" width="115" height="30" rx="6"/><text class="label" x="265" y="114" text-anchor="middle">Row 1</text>
-<rect class="chip" x="208" y="135" width="115" height="30" rx="6"/><text class="label" x="265" y="154" text-anchor="middle">Row 17</text>
+<rect class="container" x="209" y="45" width="150" height="307" rx="10"/>
+<text class="title" x="284" y="65" text-anchor="middle">Address 1</text>
+<use xlink:href="#stack" x="225" y="80"/>
+<rect class="chip-a" x="223" y="86.5"  width="54" height="9" rx="3"/>
+<rect class="chip-b" x="223" y="220.5" width="54" height="9" rx="3"/>
+<text class="label-a" x="283" y="91"  dominant-baseline="central">Row 1</text>
+<text class="label-b" x="283" y="225" dominant-baseline="central">Row 17</text>
+<line class="leaderline" x1="327" y1="91"  x2="333" y2="91"/>
+<line class="leaderline" x1="327" y1="225" x2="333" y2="225"/>
+<line class="arrowline" x1="333" y1="91" x2="333" y2="225" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text class="sub" x="327" y="158" text-anchor="end" dominant-baseline="central">16 rows</text>
 </g>
 
+<!-- Addresses 2-14 -->
 <g>
-<rect class="container" x="348" y="60" width="135" height="130" rx="10"/>
-<text class="ellipsis" x="415" y="132" text-anchor="middle">&#8942;</text>
-<text class="caption" x="415" y="172" text-anchor="middle">addresses 2-14</text>
+<rect class="container" x="371" y="45" width="100" height="307" rx="10"/>
+<circle class="ellipsis" cx="421" cy="176" r="2.2"/>
+<circle class="ellipsis" cx="421" cy="188" r="2.2"/>
+<circle class="ellipsis" cx="421" cy="200" r="2.2"/>
+<text class="caption" x="421" y="222" text-anchor="middle">addresses</text>
+<text class="caption" x="421" y="238" text-anchor="middle">2 – 14</text>
 </g>
 
+<!-- Address 15 -->
 <g>
-<rect class="container" x="498" y="60" width="135" height="130" rx="10"/>
-<text class="title" x="565" y="82" text-anchor="middle">Address 15</text>
-<rect class="chip" x="508" y="95" width="115" height="30" rx="6"/><text class="label" x="565" y="114" text-anchor="middle">Row 15</text>
-<rect class="chip" x="508" y="135" width="115" height="30" rx="6"/><text class="label" x="565" y="154" text-anchor="middle">Row 31</text>
+<rect class="container" x="483" y="45" width="150" height="307" rx="10"/>
+<text class="title" x="558" y="65" text-anchor="middle">Address 15</text>
+<use xlink:href="#stack" x="499" y="80"/>
+<rect class="chip-a" x="497" y="198.5" width="54" height="9" rx="3"/>
+<rect class="chip-b" x="497" y="332.5" width="54" height="9" rx="3"/>
+<text class="label-a" x="557" y="203" dominant-baseline="central">Row 15</text>
+<text class="label-b" x="557" y="337" dominant-baseline="central">Row 31</text>
+<line class="leaderline" x1="601" y1="203" x2="607" y2="203"/>
+<line class="leaderline" x1="601" y1="337" x2="607" y2="337"/>
+<line class="arrowline" x1="607" y1="203" x2="607" y2="337" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+<text class="sub" x="601" y="270" text-anchor="end" dominant-baseline="central">16 rows</text>
 </g>
 
-<text class="caption" x="340" y="220" text-anchor="middle">Each address lights exactly 2 rows: address R and address R + SCAN_DEPTH (SCAN_DEPTH = 16 here)</text>
+<text class="caption" x="340" y="380" text-anchor="middle">Each address lights exactly 2 rows: row R in the upper half and row R + SCAN_DEPTH in the lower half</text>
+<text class="caption" x="340" y="396" text-anchor="middle">(64×32 panel, 1:16 scan → SCAN_DEPTH = 16, ROWS_IN_PARALLEL = 2)</text>
 </svg>
