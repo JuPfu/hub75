@@ -1,3 +1,21 @@
+# How Pixel Mapping Works (General Idea)
+
+HUB75 panels do not accept pixels in simple row-major order.
+
+Instead, pixel data is shifted into the panel in the exact order expected by the
+panel's internal shift registers and multiplexing logic.
+
+Key properties:
+
+- Pixels are shifted **column-wise**, not row-wise
+- Multiple physical rows are driven **simultaneously**
+- The shift buffer therefore always contains pixels from **different vertical regions**
+- The exact ordering depends on:
+  - how many rows are multiplexed
+  - how the panel internally wires its row drivers
+
+Each mapping describes how pixels from the linear source buffer (`src`) are reordered into the panel's shift buffer (`frame_buffer_`).
+
 ## Pixel Mapping — Choosing the Right `RowMapping` for Your Panel
 
 `panel.panel_kind` (a `RowMapping` enum value) tells the `update()` / `update_bgr()` method how

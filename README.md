@@ -534,40 +534,6 @@ constexpr Hub75Config panel_cfg{
 
 ---
 
-### Pixel Mapping
-
-Each panel type has it's own pixel mapping.
-
-#### How Pixel Mapping Works (General Idea)
-
-HUB75 panels do not accept pixels in simple row-major order.
-
-Instead, pixel data is shifted into the panel in the exact order expected by the
-panel's internal shift registers and multiplexing logic.
-
-Key properties:
-
-- Pixels are shifted **column-wise**, not row-wise
-- Multiple physical rows are driven **simultaneously**
-- The shift buffer therefore always contains pixels from **different vertical regions**
-- The exact ordering depends on:
-  - how many rows are multiplexed
-  - how the panel internally wires its row drivers
-
-Each mapping describes how pixels from the linear source buffer (`src`) are reordered into the panel's shift buffer (`frame_buffer_`).
-
-### Practical Notes
-
-Not all of the demo effects will show correctly for matrix panels with a format different to 64x64 pixels. The first two demo effects use image data for a 64x64 layout. You will see some output, but it will look weird.
-
-The `bouncing balls` effect will not show the complete text as the position is hard coded. The `fire_effect` and the `rotator`might look as they should be.
-
-Have fun with adapting the source code or with implementing your own effects.
-
-Do not hesitate to contact me - I will gladly answer your questions!
-
----
-
 # Troubleshooting
 
 If your panel does not behave as expected, do **not** change multiple configuration options at once.
