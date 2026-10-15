@@ -34,6 +34,8 @@ PWM panels contain driver ICs (ICND2153) that **generate the grey levels themsel
 
 See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
 
+[ICND2153 PWM 96x48](https://raw.githubusercontent.com/JuPfu/hub75/assets/pwm_icnd2153.mp4)
+
 ## Where to go
 
 - [Quick start](#quick-start) – get your first panel running
