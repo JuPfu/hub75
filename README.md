@@ -115,8 +115,9 @@ The diagram shows the default mapping as defined in the hub75.cpp file.
 
 ## Overview
 
-Driver configuration now lives in code, as a `constexpr Hub75Config` value passed as a
-**template argument** to `Hub75Driver<Cfg>` (see [issue #21](https://github.com/JuPfu/hub75/issues/21)):
+Almost all Hub75 driver configuration is done in your application program. See [hub75_demo.cpp](hub75_demo.cpp#14) as an example to follow the description below.
+
+Values are passed as **template argument** to `Hub75Driver<Cfg>` :
 
 ```cpp
 #include "hub75.hpp"
@@ -133,7 +134,9 @@ using Panel = Hub75Driver<panel_cfg>;
 static Panel driver; // large fixed-size buffers - must have static storage duration
 ```
 
-This replaces the previous `target_compile_definitions`-based approach. The benefits:
+This replaces the previous `target_compile_definitions`-based approach. 
+
+The benefits:
 
 - **Strictly type-checked at compile time** — a typo like `.data_base_pinn = 0` is a compile
   error, not a silently-ignored preprocessor define.
@@ -157,11 +160,11 @@ complete, current list.
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
 Almost all Hub75 driver configuration is done in your application program. See [`hub75_demo.cpp`](hub75_demo.cpp#14) how to set the values of the [`Hub75Config`](include/hub75.hpp#95) structure to your needs.
-Configuration details are explained in chapter [Configuration in Code](#configuration-in-code) below. Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
+Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
 
 ### CMakeLists.txt Settings for Pico (RP2040) or Pico 2 (RP2430)
 
-The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
+The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt#26) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
 
 Here is the default configuration in the [`CMakeLists.txt`](CMakeLists.txt) file that comes with this library.
 
