@@ -7,6 +7,13 @@ GPIO ranges, different chain layout, different rotation, even different colour t
 single RP2350, side by side in the same program. See `hub75_demo_dual.cpp` for a complete,
 runnable example.
 
+
+
+
+[Dual Instance](https://github.com/user-attachments/assets/b7a8610e-c9b6-4e43-88a5-9f993925ecc7)
+
+
+
 ## Resource Limits
 
 Each `Hub75Driver<Cfg>` instance claims:
