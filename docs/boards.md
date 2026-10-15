@@ -6,7 +6,18 @@ This section lists every LED matrix panel used during development and testing of
 
 ---
 
-## Overview
+## Supported Panels Overview
+
+| Panel family | Example | Key settings |
+|---|---|---|
+| Standard HUB75, binary row address | 64×64 (1/32), 64×32 (1/16), 32x16 (1/8 or 1/4) | panel dimensions plus `rowsel_n_pins` |
+| HUB75 with special driver IC | P3-64×64-32S (RUL6024), FM6126A panels | `.panel_chip = Hub75PanelChip::RUL6024` / `FM6126A` |
+| **New:** shift-register row advance | Waveshare 96×48 SM5368 v2 | `.address_type = RowAddressing::ABCShiftRegister` |
+| Outdoor, four rows lit at once | outdoor panel | `.panel_kind = RowMapping::Split` / `S31` |
+| **New:** ICND2153 (S)PWM | Indoor panel 128×64 | `.panel_class = PanelClass::PWM`,</br> `.panel_chip = Hub75PanelChip::ICND2153`,</br>`.bitplanes = 16` |
+
+
+## Tested panels at a glance
 
 | # | Panel label | Dimensions | Scan / rows lit | `panel_kind` | Driver chip(s) | `panel_chip` |
 |:---:|---|:---:|:---:|---|---|---|
@@ -14,6 +25,7 @@ This section lists every LED matrix panel used during development and testing of
 | [2](#2-p3-64x64-32s-v20--2310p3) | P3-64x64-32S-V2.0 | 64 × 64 | 1/32 S · 2 rows | `RowMapping::Standard` | RUC7258D, RUL6024 | `Hub75PanelChip::RUL6024` |
 | [3](#3-qp3-outdoor--p3-1415-rowmappings31) | QP3 Outdoor P3-1415 | 64 × 64 | 1/16 S · 4 rows | `RowMapping::S31` | DP5125D | `Hub75PanelChip::GENERIC` |
 | [4](#4-p10-smd-16x32-b-rowmappingsplit) | P10-SMD-16x32-b | 16 × 32 | 1/4 S · 4 rows | `RowMapping::Split` | DP5020B | `Hub75PanelChip::GENERIC` |
+| [5](#5-X1.875-128x64-1515-32S-4L-V3.0) | X1.875-128x64-1515-32S-4L-V3.0 | 128x64 | 1/32 S · 2 rows | `RowMapping::Standard` | ICND2153 | `Hub75PanelChip::ICND2153` |
 
 ---
 

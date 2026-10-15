@@ -29,11 +29,13 @@ PWM panels contain driver ICs (ICND2153) that **generate the grey levels themsel
 
 See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
 
+#### Video Sequence of ICND2153 Panel in Action
+
 Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448):
 
-https://github.com/user-attachments/assets/dfa43ba3-5b67-45b4-a143-8567f13d43ec
+[ICND2153 PWM panel in action](https://github.com/user-attachments/assets/dfa43ba3-5b67-45b4-a143-8567f13d43ec)
 
-*Demo video: colours are much brighter and more brilliant in reality.*
+*Demo video: colours are much brighter, more vivid and more brilliant in reality.*
 
 ## Where to go
 
@@ -47,19 +49,9 @@ If you're interested in specific details — such as how to improve output quali
 - [Pixel mapping](docs/pixel-mapping.md) – `RowMapping::Standard`, `Split`, `S31`
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
 - [Chained panels and rotation](docs/chaining-and-rotation.md) - topology of chained panels and software rotation of the displayed image
-- [Dual Panel Instances](docs/dual-instances.md) - drive 2 independently attached Hub75 panels by this `Hub75 driver`
-- [Available and tested boards](docs/boards.md) - description and configuraton of available panels
+- [Dual Panel Instances](docs/dual-instances.md) - run two independently-configured HUB75 chains from a single Pico
+- [Supported, available and tested boards](docs/boards.md) - description and configuraton of supported and available panels
 - [Troubleshooting](docs/troubleshooting.md)
-
-## Supported panels at a glance
-
-| Panel family | Example | Key settings |
-|---|---|---|
-| Standard HUB75, binary row address | 64×64 (1/32), 64×32 (1/16), 32x16 (1/8 or 1/4) | panel dimensions plus `rowsel_n_pins` |
-| HUB75 with special driver IC | P3-64×64-32S (RUL6024), FM6126A panels | `.panel_chip = Hub75PanelChip::RUL6024` / `FM6126A` |
-| **New:** shift-register row advance | Waveshare 96×48 SM5368 v2 | `.address_type = RowAddressing::ABCShiftRegister` |
-| Outdoor, four rows lit at once | outdoor panel | `.panel_kind = RowMapping::Split` / `S31` |
-| **New:** ICND2153 (S)PWM | 128×64 | `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::ICND2153`,`.bitplanes = 16` |
 
 # Quick Start
 
