@@ -7,9 +7,6 @@ Once started, the driver streams the panel autonomously; only hardware-triggered
 
 *Demo video: colours are much brighter and more brilliant in reality.*
 
-<!-- TODO: drag assets/icnd2153_pwm.mov into the GitHub README editor (or convert it to .mp4/.gif).
-     A relative link to a .mov is only a download link; a user-attachments URL plays inline. -->
-
 ## Why this driver?
 
 - **Runs by itself.** DMA chains feed PIO state machines; no bit-banging, no timing loops on your core.
@@ -17,8 +14,6 @@ Once started, the driver streams the panel autonomously; only hardware-triggered
 - **Big and flexible.** Chain panels in serpentine (U-turn) layouts, rotate the display by 0/90/180/270°, or run two independent panels from one RP2350.
 - **Configured in one place.** A single [`constexpr Hub75Config`](hub75_demo.cpp#14) is a template argument of [`Hub75Driver<Cfg>`](include/hub75.hpp#95): typos are compile errors, unused code is not built.
 - **Many panel types.** From plain 64×64 panels to driver-IC specials, outdoor panels, shift-register panels and PWM panels (see below).
-
-<!-- TODO: add measured numbers here, e.g. refresh rate for 64x64 / 10 bit-planes (frame_rate_debug = true prints it). -->
 
 ## What's new
 
@@ -34,7 +29,11 @@ PWM panels contain driver ICs (ICND2153) that **generate the grey levels themsel
 
 See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
 
-[ICND2153 PWM 96x48](../assets/pwm_icnd2153.mp4)
+Here a brief sequence of the ICND2153 PWM panel in action:
+
+https://github.com/user-attachments/assets/dfa43ba3-5b67-45b4-a143-8567f13d43ec
+
+*Demo video: colours are much brighter and more brilliant in reality.*
 
 ## Where to go
 
