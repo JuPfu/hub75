@@ -729,7 +729,7 @@ void Hub75Driver<Cfg>::configure_pio()
     }
 }
 
-static float icnd2153_clkdiv_(uint32_t sys_hz) // f = max(floor, sys/5 - margin)
+static float icnd2153_clkdiv_(uint32_t sys_hz)
 {
     constexpr float m = -1.5f / 100.0f;
     constexpr float n = 10.25f;
