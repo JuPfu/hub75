@@ -255,6 +255,109 @@ constexpr Hub75Config cfg_qp3{
 
 ---
 
+
+## Configuration Examples - Most Common Cases
+
+The examples below cover the most common panel types. For each one, only `panel.matrix_panel_width`, `panel.matrix_panel_height`, `panel.panel_kind`, and `pins.rowsel_n_pins` need to be set — everything else falls back to the defaults.
+
+```cpp
+// Example for a 64×64 panel (1/32 scan) - 2 rows lit simultaneously
+constexpr Hub75Config cfg_64x64_2row{
+    .panel = {
+        .matrix_panel_width = 64,
+        .matrix_panel_height = 64,
+        .panel_kind = RowMapping::Standard,
+    },
+    // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
+    // That is 32 = 2 to the power of 5 - we need 5 row select pins
+    .pins = { .rowsel_n_pins = 5 },
+};
+
+
+// Example for a 64×32 panel (1/16 scan) - 2 rows lit simultaneously
+constexpr Hub75Config cfg_64x32_2row{
+    .panel = {
+        .matrix_panel_width = 64,
+        .matrix_panel_height = 32,
+        .panel_kind = RowMapping::Standard,
+    },
+    // Set the number of address lines - 2 rows lit simultaneously leaves 16 rows to be adressed via row select.
+    // That is 16 equals 2 to the power of 4 - we need 4 row select pins
+    .pins = { .rowsel_n_pins = 4 },
+};
+
+
+// Example for a 32×16 panel (1/8 scan) - 2 rows lit simultaneously
+constexpr Hub75Config cfg_32x16_2row{
+    .panel = {
+        .matrix_panel_width = 32,
+        .matrix_panel_height = 16,
+        .panel_kind = RowMapping::Standard,
+    },
+    // Set the number of address lines - 2 rows lit simultaneously leaves 8 rows to be adressed via row select.
+    // That is 8 equals 2 to the power of 3 - we need 3 row select pins
+    .pins = { .rowsel_n_pins = 3 },
+};
+
+
+// Example for a 64×64 panel (1/16 scan) - 4 rows lit simultaneously
+constexpr Hub75Config cfg_64x64_4row{
+    .panel = {
+        .matrix_panel_width = 64,
+        .matrix_panel_height = 64,
+        .panel_kind = RowMapping::S31,
+        // If ghosting or flicker occurs, try increasing sm_clockdiv_factor (see Step 6)
+        .sm_clockdiv_factor = 1.0f,
+    },
+    // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
+    // That is 16 equals = 2 to the power of 4 - we need 4 row select pins
+    .pins = { .rowsel_n_pins = 4 },
+};
+
+
+// Example for a 32×16 panel (1/4 scan) - 4 rows lit simultaneously
+constexpr Hub75Config cfg_32x16_4row{
+    .panel = {
+        .matrix_panel_width = 32,
+        .matrix_panel_height = 16,
+        .panel_kind = RowMapping::Split,
+        // If ghosting or flicker occurs, try increasing sm_clockdiv_factor (see Step 6)
+        .sm_clockdiv_factor = 1.0f,
+    },
+    // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
+    // That is 4 equals 2 to the power of 2 -> we need 2 row select pins
+    .pins = { .rowsel_n_pins = 2 },
+};
+```
+
+Note that the panel name usually does not encode the internal pixel wiring or the driver IC type.
+These must be determined visually or experimentally.
+But sometimes the name of the panel gives you a lot of information how the configuration has to be done.
+Here an example for a **P3-64*64-32S-V2.0** panel.
+
+```cpp
+constexpr Hub75Config panel_cfg{
+    // Width and height are encoded in the panel name
+    .panel = {
+        .matrix_panel_width = 64,
+        .matrix_panel_height = 64,
+
+        // The 32S in the panel name refers to (1/32 scan) - 2 rows lit simultaneously
+        // We can try the standard pixel mapping - maybe we are lucky and the pixel mapping fits
+        .panel_kind = RowMapping::Standard,
+
+        // Look at the back of the panel. If you detect a chip which is labeled RUL6024
+        // then set the appropriate panel chip
+        .panel_chip = Hub75PanelChip::RUL6024,
+    },
+    // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
+    // That is 32 equals 2 to the power of 5 -> we need 5 row select pins (as might be printed on the panel backside - A, B, C, D, E)
+    .pins = { .rowsel_n_pins = 5 },
+};
+```
+
+---
+
 ## Good to Know
 
 - **`panel_kind` is one enum value** - exactly one mapping is active at a time

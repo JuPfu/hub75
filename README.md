@@ -46,7 +46,7 @@ To explore the architectural details of the `Hub75 driver` see
 
 If you're interested in specific details — such as how to improve output quality or configure chained panels — the following links should help you explore the capabilities of the `Hub75 driver`
 - [Configuration reference](docs/configuration.md) – reference for all attributes
-- [Pixel mapping](docs/pixel-mapping.md) – `RowMapping::Standard`, `Split`, `S31`
+- [Pixel mapping](docs/pixel-mapping.md) – choose the correct pixel mapping for your matrix panel
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
 - [Chained panels and rotation](docs/chaining-and-rotation.md) - topology of chained panels and software rotation of the displayed image
 - [Dual Panel Instances](docs/dual-instances.md) - run two independently-configured HUB75 chains from a single Pico
@@ -159,7 +159,7 @@ complete, current list.
 
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
-Almost all Hub75 driver configuration is done in your application program. See [`hub75_demo.cpp`](hub75_demo.cpp#14) how to set the values of the [`Hub75Config`](include/hub75.hpp#95) structure to your needs.
+See [`hub75_demo.cpp`](hub75_demo.cpp#14) how to set the values of the [`Hub75Config`](include/hub75.hpp#95) structure to your needs.
 Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
 
 ### CMakeLists.txt Settings for Pico (RP2040) or Pico 2 (RP2430)
@@ -404,7 +404,7 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 
 ## Demo Effects
 
-The demo effects in `hub75_demo.cpp` are included to exercise the driver and showcase colour fidelity. They cycle automatically; press the button to advance to the next effect.
+The demo effects in `hub75_demo.cpp` are included to exercise the driver and showcase colour fidelity. They eefects cycle automatically.
 
 | # | Effect | Purpose |
 |---|--------|---------|
@@ -423,112 +423,10 @@ The demo effects in `hub75_demo.cpp` are included to exercise the driver and sho
 
 The core driver pipeline is stable. Possible future directions include:
 
-- **Additional panel mappings** — contributions for panels with unusual internal wiring (e.g. serpentine, split-scan) are welcome.
+- **Additional matrix panel support** — Implement support for additional PWM matrix panels or not yet supported matrix panel driver chips.
 - **RP2040 memory optimisations** — the `color.separate_cie_channels`, `color.balanced_light_output`, and `color.bitplanes` fields already allow memory/quality trade-offs; further tuning for constrained targets is an open area.
 
 For questions, bug reports, or feature discussions, feel free to open an issue on [GitHub](https://github.com/JuPfu/hub75).
-
----
-
-### Configuration Examples
-
-The examples below cover the most common panel types. For each one, only `panel.matrix_panel_width`, `panel.matrix_panel_height`, `panel.panel_kind`, and `pins.rowsel_n_pins` need to be set — everything else falls back to the defaults.
-
-```cpp
-// Example for a 64×64 panel (1/32 scan) - 2 rows lit simultaneously
-constexpr Hub75Config cfg_64x64_2row{
-    .panel = {
-        .matrix_panel_width = 64,
-        .matrix_panel_height = 64,
-        .panel_kind = RowMapping::Standard,
-    },
-    // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
-    // That is 32 = 2 to the power of 5 - we need 5 row select pins
-    .pins = { .rowsel_n_pins = 5 },
-};
-
-
-// Example for a 64×32 panel (1/16 scan) - 2 rows lit simultaneously
-constexpr Hub75Config cfg_64x32_2row{
-    .panel = {
-        .matrix_panel_width = 64,
-        .matrix_panel_height = 32,
-        .panel_kind = RowMapping::Standard,
-    },
-    // Set the number of address lines - 2 rows lit simultaneously leaves 16 rows to be adressed via row select.
-    // That is 16 equals 2 to the power of 4 - we need 4 row select pins
-    .pins = { .rowsel_n_pins = 4 },
-};
-
-
-// Example for a 32×16 panel (1/8 scan) - 2 rows lit simultaneously
-constexpr Hub75Config cfg_32x16_2row{
-    .panel = {
-        .matrix_panel_width = 32,
-        .matrix_panel_height = 16,
-        .panel_kind = RowMapping::Standard,
-    },
-    // Set the number of address lines - 2 rows lit simultaneously leaves 8 rows to be adressed via row select.
-    // That is 8 equals 2 to the power of 3 - we need 3 row select pins
-    .pins = { .rowsel_n_pins = 3 },
-};
-
-
-// Example for a 64×64 panel (1/16 scan) - 4 rows lit simultaneously
-constexpr Hub75Config cfg_64x64_4row{
-    .panel = {
-        .matrix_panel_width = 64,
-        .matrix_panel_height = 64,
-        .panel_kind = RowMapping::S31,
-        // If ghosting or flicker occurs, try increasing sm_clockdiv_factor (see Step 6)
-        .sm_clockdiv_factor = 1.0f,
-    },
-    // Set the number of address lines - 4 rows lit simultaneously leaves 16 rows to be adressed via row select.
-    // That is 16 equals = 2 to the power of 4 - we need 4 row select pins
-    .pins = { .rowsel_n_pins = 4 },
-};
-
-
-// Example for a 32×16 panel (1/4 scan) - 4 rows lit simultaneously
-constexpr Hub75Config cfg_32x16_4row{
-    .panel = {
-        .matrix_panel_width = 32,
-        .matrix_panel_height = 16,
-        .panel_kind = RowMapping::Split,
-        // If ghosting or flicker occurs, try increasing sm_clockdiv_factor (see Step 6)
-        .sm_clockdiv_factor = 1.0f,
-    },
-    // Set the number of address lines - 4 rows lit simultaneously leaves 4 rows to be adressed via row select.
-    // That is 4 equals 2 to the power of 2 -> we need 2 row select pins
-    .pins = { .rowsel_n_pins = 2 },
-};
-```
-
-Note that the panel name usually does not encode the internal pixel wiring or the driver IC type.
-These must be determined visually or experimentally.
-But sometimes the name of the panel gives you a lot of information how the configuration has to be done.
-Here an example for a **P3-64*64-32S-V2.0** panel.
-
-```cpp
-constexpr Hub75Config panel_cfg{
-    // Width and height are encoded in the panel name
-    .panel = {
-        .matrix_panel_width = 64,
-        .matrix_panel_height = 64,
-
-        // The 32S in the panel name refers to (1/32 scan) - 2 rows lit simultaneously
-        // We can try the standard pixel mapping - maybe we are lucky and the pixel mapping fits
-        .panel_kind = RowMapping::Standard,
-
-        // Look at the back of the panel. If you detect a chip which is labeled RUL6024
-        // then set the appropriate panel chip
-        .panel_chip = Hub75PanelChip::RUL6024,
-    },
-    // Set the number of address lines - 2 rows lit simultaneously leaves 32 rows to be adressed via row select.
-    // That is 32 equals 2 to the power of 5 -> we need 5 row select pins (as might be printed on the panel backside - A, B, C, D, E)
-    .pins = { .rowsel_n_pins = 5 },
-};
-```
 
 ---
 
