@@ -34,7 +34,7 @@
     ; If the FIFO is empty, Y is nonzero and the jump is taken.
     ; Continue refreshing without waiting for a new frame token.
     ; JMP Y-- decrements Y even when the jump is not taken.
-    jmp y--, seed_row   side 0b0
+    jmp y--, seed_row    side 0b0
 
     ; --------------------------------------------------------------------------
     ; FRAME-START HANDSHAKE
