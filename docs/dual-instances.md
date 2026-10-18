@@ -7,12 +7,9 @@ GPIO ranges, different chain layout, different rotation, even different colour t
 single RP2350, side by side in the same program. See `hub75_demo_dual.cpp` for a complete,
 runnable example.
 
+![Dual Instance](https://github.com/user-attachments/assets/b7a8610e-c9b6-4e43-88a5-9f993925ecc7)
 
-
-
-[Dual Instance](https://github.com/user-attachments/assets/b7a8610e-c9b6-4e43-88a5-9f993925ecc7)
-
-*Both panels run independently off a single RP2350 (pico2_w). The left panel (96x64) with 628Hz, the right one (160x64) with 379Hz. Both are using 10 Bitplanes and balanced light output.*
+*[Christoph´s show-case](https://github.com/cmair): Both panels run independently off a single RP2350 (pico2_w). The left panel (96x64) with 628Hz, the right one (160x64) with 379Hz. Both are using 10 Bitplanes and balanced light output.*
 
 
 ## Resource Limits

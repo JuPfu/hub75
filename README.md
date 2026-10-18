@@ -49,7 +49,7 @@ If you're interested in specific details — such as how to improve output quali
 - [Pixel mapping](docs/pixel-mapping.md) – choose the correct pixel mapping for your matrix panel
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
 - [Chained panels and rotation](docs/chaining-and-rotation.md) - topology of chained panels and software rotation of the displayed image
-- [Dual Panel Instances](docs/dual-instances.md) - run two independently-configured HUB75 chains from a single Pico
+- [Dual Panel Instances](docs/dual-instances.md) - [Christops´s show-case](https://github.com/cmair) to run two independently-configured HUB75 chains from a single Pico
 - [Supported, available and tested boards](docs/boards.md) - description and configuraton of supported and available panels
 - [Troubleshooting](docs/troubleshooting.md)
 
