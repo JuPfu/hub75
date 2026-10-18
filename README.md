@@ -43,6 +43,7 @@ Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: B
 
 To explore the architectural details of the `Hub75 driver` see
 - [Hub75 Matrix Panel Driver Version 3.0](docs/Hub75%20Matrix%20Panel%20Driver%20Version%203.0.md)
+- [INCD2153 PWM Panel Details](./docs/icnd2153.md)
 
 If you're interested in specific details — such as how to improve output quality or configure chained panels — the following links should help you explore the capabilities of the `Hub75 driver`
 - [Configuration reference](docs/configuration.md) – reference for all attributes
