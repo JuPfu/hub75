@@ -1086,8 +1086,11 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 
         uint32_t fb_index = 0;
 
+        // DMA header
+        // first word into higher 16 bits: scan depth - 1
         out[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
         out[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
+        // second word into lower 16 bits: (display width - 1) reduced further by 1 to treat the last 6 values separately
         out[fb_index++] = (CHAIN_WIDTH - 2) & 0xFF;
         out[fb_index++] = ((CHAIN_WIDTH - 2) >> 8) & 0xFF;
 
@@ -1111,6 +1114,7 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
                         pwm_expand_channels_(p, &out[fb_index]);
                     else
                     {
+                        // apply brightness before expanding
                         uint16_t v[6];
                         for (uint32_t k = 0; k < 6; ++k)
                             v[k] = static_cast<uint16_t>((static_cast<uint32_t>(p[k]) * scale + 32768u) >> 16);

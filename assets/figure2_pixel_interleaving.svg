@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 480" width="1000" height="480" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title id="t">Which pixel goes to which chip and output channel</title>
+<desc id="d">One lane of 8 chips serves 128 pixels in 16 rounds. In round 1 each chip receives the first pixel of its group of 16 for OUT15, in round 2 the second pixel for OUT14, and in round 16 the last pixel for OUT0.</desc>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#57606a"/></marker></defs>
+<rect x="1" y="1" width="998" height="478" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<text x="30" y="36" font-size="17" font-weight="600" fill="#1f2328">Which pixel goes to which chip and output channel</text>
+<text x="30" y="58" font-size="13" fill="#57606a">One lane with 8 chips serves the 128 pixels of a row. Rounds 1, 2 and 16 are shown.</text>
+<text x="250" y="82" font-size="12" fill="#57606a">within a round the chips are served in this order</text>
+<line x1="250" y1="90" x2="964" y2="90" stroke="#57606a" stroke-width="1.5" marker-end="url(#ar)"/>
+<rect x="250" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="292.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 1</text>
+<text x="292.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 0–15</text>
+<rect x="340" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="382.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 2</text>
+<text x="382.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 16–31</text>
+<rect x="430" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="472.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 3</text>
+<text x="472.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 32–47</text>
+<rect x="520" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="562.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 4</text>
+<text x="562.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 48–63</text>
+<rect x="610" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="652.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 5</text>
+<text x="652.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 64–79</text>
+<rect x="700" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="742.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 6</text>
+<text x="742.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 80–95</text>
+<rect x="790" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="832.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 7</text>
+<text x="832.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 96–111</text>
+<rect x="880" y="100" width="84" height="50" rx="6" fill="#f6f8fa" stroke="#57606a" stroke-width="1.2"/>
+<text x="922.0" y="121" text-anchor="middle" font-size="14" font-weight="600" fill="#1f2328">chip 8</text>
+<text x="922.0" y="140" text-anchor="middle" font-size="12" fill="#57606a">pixels 112–127</text>
+<text x="30" y="125" font-size="12" fill="#57606a">rounds are sent one after</text>
+<text x="30" y="141" font-size="12" fill="#57606a">the other, top to bottom ↓</text>
+<text x="30" y="180" font-size="15" font-weight="600" fill="#2f6fd0">Round 1</text>
+<text x="30" y="198" font-size="12" fill="#57606a">OUT15 of every chip</text>
+<rect x="250" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="292.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 0</text>
+<text x="292.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="340" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="382.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 16</text>
+<text x="382.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="430" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="472.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 32</text>
+<text x="472.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="520" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="562.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 48</text>
+<text x="562.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="610" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="652.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 64</text>
+<text x="652.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="700" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="742.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 80</text>
+<text x="742.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="790" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="832.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 96</text>
+<text x="832.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<rect x="880" y="160" width="84" height="46" rx="6" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.5"/>
+<text x="922.0" y="181" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 112</text>
+<text x="922.0" y="197" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT15</text>
+<text x="30" y="238" font-size="15" font-weight="600" fill="#b36b00">Round 2</text>
+<text x="30" y="256" font-size="12" fill="#57606a">OUT14 of every chip</text>
+<rect x="250" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="292.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 1</text>
+<text x="292.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="340" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="382.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 17</text>
+<text x="382.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="430" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="472.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 33</text>
+<text x="472.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="520" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="562.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 49</text>
+<text x="562.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="610" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="652.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 65</text>
+<text x="652.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="700" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="742.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 81</text>
+<text x="742.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="790" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="832.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 97</text>
+<text x="832.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<rect x="880" y="218" width="84" height="46" rx="6" fill="#fff0d6" stroke="#b36b00" stroke-width="1.5"/>
+<text x="922.0" y="239" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 113</text>
+<text x="922.0" y="255" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT14</text>
+<text x="30" y="338" font-size="15" font-weight="600" fill="#7a4fc1">Round 16</text>
+<text x="30" y="356" font-size="12" fill="#57606a">OUT0 of every chip</text>
+<rect x="250" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="292.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 15</text>
+<text x="292.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="340" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="382.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 31</text>
+<text x="382.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="430" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="472.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 47</text>
+<text x="472.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="520" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="562.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 63</text>
+<text x="562.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="610" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="652.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 79</text>
+<text x="652.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="700" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="742.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 95</text>
+<text x="742.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="790" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="832.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 111</text>
+<text x="832.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<rect x="880" y="318" width="84" height="46" rx="6" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.5"/>
+<text x="922.0" y="339" text-anchor="middle" font-size="15" font-weight="600" fill="#1f2328">pixel 127</text>
+<text x="922.0" y="355" text-anchor="middle" font-size="12" fill="#1f2328">→ OUT0</text>
+<text x="607.0" y="296" text-anchor="middle" font-size="14" fill="#57606a">···   rounds 3 to 15 follow the same pattern   ···</text>
+<rect x="30" y="391" width="940" height="62" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="50" y="417" font-size="14" fill="#1f2328"><tspan font-weight="600">pixel = (chip − 1) × 16 + (round − 1)</tspan><tspan fill="#57606a">    and    </tspan><tspan font-weight="600">output channel = OUT(16 − round)</tspan></text>
+<text x="50" y="440" font-size="13" fill="#57606a">Each chip receives only one of its 16 pixels per round. All six lanes use the same pixel positions at the same time.</text>
+</svg>

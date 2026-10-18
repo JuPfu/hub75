@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 535" width="1000" height="535" role="img" aria-labelledby="t d" font-family="system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+<title id="t">From frame to clock tick</title>
+<desc id="d">A frame consists of 32 row pairs and 65,536 clock ticks. One row pair has 16 rounds and 2,048 clock ticks. One round serves 8 chips with 128 clock ticks. One chip receives 16 bits in 16 clock ticks.</desc>
+<rect x="1" y="1" width="998" height="533" rx="12" fill="#ffffff" stroke="#d0d7de"/>
+<text x="30" y="36" font-size="17" font-weight="600" fill="#1f2328">From frame to clock tick</text>
+<text x="30" y="58" font-size="13" fill="#57606a">Each bar is the zoomed-in view of the outlined cell in the bar above.</text>
+<text x="30" y="89.0" font-size="15" font-weight="600" fill="#7a4fc1">Frame</text>
+<text x="30" y="107.0" font-size="13" fill="#1f2328">32 row pairs</text>
+<text x="30" y="124.0" font-size="12" fill="#57606a">65,536 clock ticks</text>
+<rect x="260.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#1f2328" stroke-width="2.5"/>
+<text x="270.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">0</text>
+<rect x="282.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="292.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">1</text>
+<rect x="304.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="314.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">2</text>
+<rect x="326.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="336.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">3</text>
+<rect x="349.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="359.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">4</text>
+<rect x="371.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="381.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">5</text>
+<rect x="393.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="403.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">6</text>
+<rect x="415.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="425.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">7</text>
+<rect x="438.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="448.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">8</text>
+<rect x="460.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="470.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">9</text>
+<rect x="482.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="492.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">10</text>
+<rect x="504.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="514.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">11</text>
+<rect x="527.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="537.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">12</text>
+<rect x="549.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="559.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">13</text>
+<rect x="571.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="581.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">14</text>
+<rect x="593.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="603.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">15</text>
+<rect x="616.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="626.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">16</text>
+<rect x="638.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="648.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">17</text>
+<rect x="660.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="670.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">18</text>
+<rect x="682.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="692.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">19</text>
+<rect x="705.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="715.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">20</text>
+<rect x="727.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="737.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">21</text>
+<rect x="749.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="759.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">22</text>
+<rect x="771.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="781.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">23</text>
+<rect x="794.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="804.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">24</text>
+<rect x="816.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="826.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">25</text>
+<rect x="838.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="848.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">26</text>
+<rect x="860.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="870.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">27</text>
+<rect x="883.00" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="893.12" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">28</text>
+<rect x="905.25" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="915.38" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">29</text>
+<rect x="927.50" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="937.62" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">30</text>
+<rect x="949.75" y="80" width="20.25" height="36" rx="4" fill="#e8def7" stroke="#7a4fc1" stroke-width="1.2"/>
+<text x="959.88" y="102.00" text-anchor="middle" font-size="10" fill="#1f2328">31</text>
+<text x="30" y="189.0" font-size="15" font-weight="600" fill="#2f6fd0">One row pair</text>
+<text x="30" y="207.0" font-size="13" fill="#1f2328">16 rounds</text>
+<text x="30" y="224.0" font-size="12" fill="#57606a">2,048 clock ticks</text>
+<rect x="260.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#1f2328" stroke-width="2.5"/>
+<text x="281.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">1</text>
+<text x="281.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT15</text>
+<rect x="304.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="325.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">2</text>
+<text x="325.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT14</text>
+<rect x="349.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="370.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">3</text>
+<text x="370.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT13</text>
+<rect x="393.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="414.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">4</text>
+<text x="414.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT12</text>
+<rect x="438.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="459.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">5</text>
+<text x="459.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT11</text>
+<rect x="482.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="503.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">6</text>
+<text x="503.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT10</text>
+<rect x="527.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="548.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">7</text>
+<text x="548.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT9</text>
+<rect x="571.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="592.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">8</text>
+<text x="592.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT8</text>
+<rect x="616.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="637.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">9</text>
+<text x="637.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT7</text>
+<rect x="660.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="681.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">10</text>
+<text x="681.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT6</text>
+<rect x="705.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="726.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">11</text>
+<text x="726.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT5</text>
+<rect x="749.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="770.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">12</text>
+<text x="770.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT4</text>
+<rect x="794.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="815.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">13</text>
+<text x="815.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT3</text>
+<rect x="838.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="859.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">14</text>
+<text x="859.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT2</text>
+<rect x="883.00" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="904.25" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">15</text>
+<text x="904.25" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT1</text>
+<rect x="927.50" y="180" width="42.50" height="36" rx="4" fill="#dce8fa" stroke="#2f6fd0" stroke-width="1.2"/>
+<text x="948.75" y="195" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">16</text>
+<text x="948.75" y="209" text-anchor="middle" font-size="10" fill="#1f2328">OUT0</text>
+<text x="30" y="289.0" font-size="15" font-weight="600" fill="#b36b00">One round</text>
+<text x="30" y="307.0" font-size="13" fill="#1f2328">8 chips</text>
+<text x="30" y="324.0" font-size="12" fill="#57606a">128 clock ticks</text>
+<rect x="260.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#1f2328" stroke-width="2.5"/>
+<text x="303.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 1</text>
+<text x="303.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="349.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="392.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 2</text>
+<text x="392.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="438.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="481.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 3</text>
+<text x="481.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="527.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="570.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 4</text>
+<text x="570.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="616.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="659.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 5</text>
+<text x="659.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="705.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="748.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 6</text>
+<text x="748.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="794.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="837.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 7</text>
+<text x="837.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<rect x="883.00" y="280" width="87.00" height="36" rx="4" fill="#fff0d6" stroke="#b36b00" stroke-width="1.2"/>
+<text x="926.50" y="295" text-anchor="middle" font-size="12" font-weight="600" fill="#1f2328">chip 8</text>
+<text x="926.50" y="309" text-anchor="middle" font-size="10" fill="#1f2328">16 ticks</text>
+<text x="30" y="389.0" font-size="15" font-weight="600" fill="#2e9e5b">One chip</text>
+<text x="30" y="407.0" font-size="13" fill="#1f2328">16 bits</text>
+<text x="30" y="424.0" font-size="12" fill="#57606a">16 clock ticks</text>
+<rect x="260.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#1f2328" stroke-width="2.5"/>
+<text x="281.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">15</text>
+<rect x="304.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="325.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">14</text>
+<rect x="349.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="370.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">13</text>
+<rect x="393.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="414.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">12</text>
+<rect x="438.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="459.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">11</text>
+<rect x="482.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="503.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">10</text>
+<rect x="527.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="548.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">9</text>
+<rect x="571.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="592.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">8</text>
+<rect x="616.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="637.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">7</text>
+<rect x="660.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="681.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">6</text>
+<rect x="705.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="726.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">5</text>
+<rect x="749.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="770.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">4</text>
+<rect x="794.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="815.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">3</text>
+<rect x="838.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="859.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">2</text>
+<rect x="883.00" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="904.25" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">1</text>
+<rect x="927.50" y="380" width="42.50" height="36" rx="4" fill="#dff3e6" stroke="#2e9e5b" stroke-width="1.2"/>
+<text x="948.75" y="402.00" text-anchor="middle" font-size="13" fill="#1f2328">0</text>
+<line x1="260.00" y1="116" x2="260" y2="180" stroke="#57606a" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="280.25" y1="116" x2="970" y2="180" stroke="#57606a" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="260.00" y1="216" x2="260" y2="280" stroke="#57606a" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="302.50" y1="216" x2="970" y2="280" stroke="#57606a" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="260.00" y1="316" x2="260" y2="380" stroke="#57606a" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="347.00" y1="316" x2="970" y2="380" stroke="#57606a" stroke-width="1.2" stroke-dasharray="5 4"/>
+<rect x="30" y="448" width="940" height="62" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+<text x="50" y="472" font-size="13" fill="#1f2328"><tspan font-weight="600">Row pair r</tspan> = row r (primary) and row r + 32 (paired), sent together. <tspan font-weight="600">Each clock tick</tspan> carries 6 bits.</text>
+<text x="50" y="494" font-size="13" fill="#1f2328"><tspan font-weight="600">32 × 16 × 8 × 16 = 65,536</tspan> clock ticks per frame (32 row pairs, 16 rounds, 8 chips, 16 bits).</text>
+</svg>

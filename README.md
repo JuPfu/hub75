@@ -349,6 +349,8 @@ constexpr Hub75Config panel_cfg{
 
 If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_order = true`.
 
+Details on the implementation of this PWM panel driver can be found in [INCD2153 explained](./docs/icnd2153.md).
+
  
 ## How to Use This Project in VSCode
 

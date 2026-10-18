@@ -208,7 +208,7 @@ vsync_loop:
     ; Read the two 16-bit counters from the first DMA word.
     ; OUT shifts the lower 16 bits into X, then the upper 16 bits into ISR.
     ; These values are pre-decremented loop counts, not literal counts.
-    out x, 16                   side 0b00  ; X   = transactions per frame - 1
+    out x, 16                   side 0b00  ; X   = transactions per frame - 2
     out isr, 16                 side 0b00  ; ISR = pixel-loop iterations - 1
 
 transactions:
