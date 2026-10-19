@@ -31,23 +31,7 @@
 // for the trailing `latches` bits of the LAST chip's shift — which, since
 // every chip's data is identical, is the same waveform as raising LE for
 // the trailing `cmd_signature` bits of the whole `display_width`-bit image,
-// i.e. exactly what icnd2153_write_register() below already does. No PIO
-// change was needed for the data-emission mechanism itself; DATA_LATCH was
-// removed from this file (see note above icnd2153_setup()).
-//
-// Remaining open points, not resolved by that reference:
-//   - PWCLK/OEN handling during the write: the ESP32 reference never touches
-//     its OE pin during icn2053_start() at all (only during per-row
-//     scanning), so holding PWCLK/OEN high here is a defensive choice
-//     (mirrors RUL6024's blanking), not something the reference requires.
-//   - Chain length = display_width / 16 chips, same convention as RUL6024 —
-//     the reference hardcodes driversNum=8 for its own panel, so this still
-//     needs confirming against your panel's actual chain length.
-//   - Register VALUES: the reference's 0x1F70/0xffff/0x40F3/0x0000/0x0000
-//     are tuned for a different board (and even that author left alternate
-//     values commented out) — icnd2153_control_command.png's register-map
-//     table is the more likely source of truth for your panel. CFG2 also
-//     still has an unresolved RED/GREEN/BLUE choice — see icnd2153.h.
+// i.e. exactly what icnd2153_write_register() below already does.
 // =============================================================================
 
 #include <cstdint>
@@ -207,16 +191,6 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
     icnd2153_write_control_command(pio, sm, ICND2153_CMD_PRE_ACT);
     // Write debug register
     icnd2153_write_register(pio, sm, display_width, ICND2153_CMD_WR_DBG, dbg_buf);
-
-    // Data latch command
-    // icnd2153_write_control_command(pio, sm, ICND2153_CMD_DATA_LATCH);
-
-    // NOTE: no trailing DATA_LATCH here. Per the icn2053.c reference,
-    // DATA_LATCH is issued as the trailing LE-high pulse on the *last*
-    // grayscale data packet of each row during normal scanning (see
-    // icn2053_send_datapacket()'s `sect == 7 ? 1 : 0`) — that belongs in
-    // icnd2153_bitplane_stream's own LE side-set, not in this one-time
-    // register-configuration sequence.
 }
 
 static void icnd2153_wait_idle(PIO pio, uint sm, uint offset)

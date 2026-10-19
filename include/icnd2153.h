@@ -34,39 +34,20 @@ static constexpr uint32_t ICND2153_CMD_DIS_OP = 13;    // disable all output cha
 static constexpr uint32_t ICND2153_CMD_PRE_ACT = 14;   // pre-active command          (no payload)
 
 // ---- Configuration register values -----------------------------------------
-// "Setting Example" rows from the ICND2153 Register Map. REG1, REG3 and REG4
-// are identical across the RED/GREEN/BLUE examples; only REG2 (current gain)
-// differs, so it's the one broken out per colour below.
-//
-// TODO(Jürgen): confirm which of these three you actually need — most panels
-// use a single shared register set for the whole chain rather than one per
-// colour. If your panel is one of those, just pick one CFG2 value (or a
-// custom-tuned one) and drop the other two.
-// 0x7e08, 0x0fb0, 0xe6fc, 0x60b6,  0x5a70}
-// 0x0008, 0x1f70, 0x6707, 0x40f7, 0x0040
-static constexpr uint16_t ICND2153_CFG1_VALUE = 0x1F70; // 0x0F70; // 0x1F70; // 0x0F70;
-static constexpr uint16_t ICND2153_CFG2_VALUE = 0xFF9C; // 0xffff; //0x7F9C;
-// static constexpr uint16_t ICND2153_CFG2_VALUE_GREEN = 0x679C;
-// static constexpr uint16_t ICND2153_CFG2_VALUE_BLUE = 0x5F9C;
-static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7; // 0x40F3; // 0x40F7; 0b0001 0010 1010 1100 => 0x12AC
-static constexpr uint16_t ICND2153_CFG4_VALUE = 0x0040; // 0x0000; // 0x0040;
-static constexpr uint16_t ICND2153_CFG5_VALUE = 0x0008; // 0x0000; // 0x0008; // debug register (REG5) example value
+static constexpr uint16_t ICND2153_CFG1_VALUE = 0x1F70;
+static constexpr uint16_t ICND2153_CFG2_VALUE = 0xFF9C;
+static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7;
+static constexpr uint16_t ICND2153_CFG4_VALUE = 0x0040;
+static constexpr uint16_t ICND2153_CFG5_VALUE = 0x0008;
 
 // ---- REG2 per LED colour --------------------------------------------------
 // From the register-map examples: only b14..b10 (ghost-eliminate level) differs per colour.
 static constexpr uint16_t ICND2153_CFG2_BY_COLOUR[3] = {0x7F9C /*R*/, 0x679C /*G*/, 0x5F9C /*B*/};
 
-// Extra bits OR-ed into every per-colour REG2 value. 0x8000 reproduces the old 0xFF9C on the red
-// lane (b15 is unused in the register map, but your working value had it set).
 static constexpr uint16_t ICND2153_CFG2_EXTRA = 0x8000;
 
-// false = old behaviour: ICND2153_CFG2_VALUE on all lanes (for A/B comparison)
 static constexpr bool ICND2153_CFG2_PER_COLOUR = true;
 
-// Logical channel index used by build_pixel_stream():
-//   0 = top R, 1 = top G, 2 = top B, 3 = bottom R, 4 = bottom G, 5 = bottom B
-// ICND2153_LANE_OF[k] = data lane (offset from data_base_pin) that must carry channel k.
-// Identity = HUB75 convention (R1 G1 B1 R2 G2 B2). MEASURE with debug_lane_bands(), then edit.
 static constexpr uint8_t ICND2153_LANE_OF[6] = {0, 1, 2, 3, 4, 5};
 
 constexpr bool icnd2153_lane_map_valid()
