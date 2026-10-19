@@ -75,8 +75,8 @@ row_loop:
 
     ; Generate the GCLK burst.
 gclk_loop:
-    nop                  side 0b1 ; GCLK high for one PIO cycle.
-    jmp y--, gclk_loop   side 0b0 ; GCLK low for one PIO cycle.
+    nop             [3]  side 0b1 ; GCLK high for one PIO cycle.
+    jmp y--, gclk_loop [3]  side 0b0 ; GCLK low for one PIO cycle.
 
     ; --------------------------------------------------------------------------
     ; ROW ADVANCE
@@ -200,7 +200,7 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
     set x, 2                    side 0b00
 vsync_loop:
     nop             [3]         side 0b10  ; LE=1, DCLK=0
-    jmp x--, vsync_loop         side 0b11  ; LE=1, DCLK=1
+    jmp x--, vsync_loop  [3]    side 0b11  ; LE=1, DCLK=1
 
     ; Tell the row SM that the VSYNC sequence has completed.
     irq nowait 3                side 0b00
