@@ -140,7 +140,9 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
     uint32_t *cfg4_buf = register_slot(REGISTER_SLOT_CFG4, display_width);
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
-    prepare_register_dma(ICND2153_CFG1_VALUE, cfg1_buf, display_width);
+    // not tested yet - set number of lines to half the physical rows of the panel
+    const uint16_t cfg1_value = (ICND2153_CFG1_VALUE & 0xE0FFu) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
+    prepare_register_dma(cfg1_value, cfg1_buf, display_width);
 
     // REG2 carries the pre-charge level, which depends on the LED colour the lane drives.
     uint16_t cfg2_lane[6];
