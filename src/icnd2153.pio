@@ -285,7 +285,7 @@ static inline void icnd2153_pixel_stream_program_init(
 ; and the WR_CFG1..WR_CFG4 / WR_DBG register values into every daisy-chained
 ; chip, then hands the PIO block back so icnd2153_row / icnd2153_bitplane_stream
 ; can drive the panel normally. Directly modelled on rul6024_write_register
-; above - the wire protocol is identical: a command is decoded purely by how
+; - the wire protocol is identical: a command is decoded purely by how
 ; many trailing DCLK rising edges occur while LE (LAT) is held high, per the
 ; "Control Command" table in icnd2153_control_command.png. See icnd2153.h for
 ; the command-signature constants and icnd2153.cpp for the C++ driver.
@@ -300,14 +300,6 @@ static inline void icnd2153_pixel_stream_program_init(
 ;                                sequence, mirroring how rul6024_write_register
 ;                                treats OEN, so no write-glitch is visible on
 ;                                the panel.
-;                                ASSUMPTION, please verify against real
-;                                hardware: the captured scope trace shows the
-;                                OE line toggling *during* the long "write
-;                                configuration register" burst - this may be
-;                                a free-running signal unrelated to this
-;                                write, or PWCLK may actually need to keep
-;                                pulsing here. Flagged in the accompanying
-;                                chat message.)
 ;
 ; "out pins, 6" targets 6 consecutive data pins (rgb_base_pin..+5), one bit
 ; per RGB sub-pixel lane, driven identically for every chip in the chain (see

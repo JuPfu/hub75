@@ -45,12 +45,16 @@ To explore the architectural details of the `Hub75 driver` see
 - [Hub75 Matrix Panel Driver Version 3.0](docs/Hub75%20Matrix%20Panel%20Driver%20Version%203.0.md)
 - [INCD2153 PWM Panel Details](./docs/icnd2153.md)
 
+[Christop](https://github.com/cmair) designed and implemented the refactoring of the driver code to allow multiple driver instances on a 
+single Raspberry Pi Pico microcontroller. The result is a much more robust implementation where the compiler can check for configuration
+mistakes and multiple (different) displays can operate independently off a single Pico as long as enough hardware resources are available.
+- [Dual Panel Instances](docs/dual-instances.md) - show-case to run two independently-configured HUB75 chains from a single Pico
+
 If you're interested in specific details — such as how to improve output quality or configure chained panels — the following links should help you explore the capabilities of the `Hub75 driver`
 - [Configuration reference](docs/configuration.md) – reference for all attributes
 - [Pixel mapping](docs/pixel-mapping.md) – choose the correct pixel mapping for your matrix panel
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
 - [Chained panels and rotation](docs/chaining-and-rotation.md) - topology of chained panels and software rotation of the displayed image
-- [Dual Panel Instances](docs/dual-instances.md) - [Christops´s show-case](https://github.com/cmair) to run two independently-configured HUB75 chains from a single Pico
 - [Supported, available and tested boards](docs/boards.md) - description and configuraton of supported and available panels
 - [Troubleshooting](docs/troubleshooting.md)
 
