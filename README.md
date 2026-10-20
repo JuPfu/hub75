@@ -45,7 +45,7 @@ To explore the architectural details of the `Hub75 driver` see
 - [Hub75 Matrix Panel Driver Version 3.0](docs/Hub75%20Matrix%20Panel%20Driver%20Version%203.0.md)
 - [INCD2153 PWM Panel Details](./docs/icnd2153.md)
 
-[Christop](https://github.com/cmair) designed and implemented the refactoring of the driver code to allow multiple driver instances on a 
+[Christoph](https://github.com/cmair) designed and implemented the refactoring of the driver code to allow multiple driver instances on a 
 single Raspberry Pi Pico microcontroller. The result is a much more robust implementation where the compiler can check for configuration
 mistakes and multiple (different) displays can operate independently off a single Pico as long as enough hardware resources are available.
 - [Dual Panel Instances](docs/dual-instances.md) - show-case to run two independently-configured HUB75 chains from a single Pico
