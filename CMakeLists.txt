@@ -47,6 +47,7 @@ add_library(hub75 STATIC)
 target_sources(hub75 PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/src/hub75.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/icnd2153.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/fm6363b.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/rul6024.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/fm6126a.cpp
 )
