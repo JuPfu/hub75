@@ -81,6 +81,7 @@ enum class Hub75PanelChip
     FM6126A,
     RUL6024,
     ICND2153,
+    FM6363B,
 };
 
 enum class Hub75Rotation

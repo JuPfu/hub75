@@ -50,6 +50,8 @@ static constexpr bool ICND2153_CFG2_PER_COLOUR = true;
 
 static constexpr uint8_t ICND2153_LANE_OF[6] = {0, 1, 2, 3, 4, 5};
 
+static constexpr uint32_t ICND2153_GCLK_RISES = 138;
+
 constexpr bool icnd2153_lane_map_valid()
 {
     uint32_t seen = 0;

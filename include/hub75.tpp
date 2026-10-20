@@ -14,6 +14,7 @@
 #include "icnd2153.pio.h"
 
 #include "icnd2153.h"
+#include "fm6363b.h"
 #include "rul6024.h"
 #include "fm6126a.h"
 
@@ -54,6 +55,8 @@ void Hub75Driver<Cfg>::create()
         rul6024_initialize(Cfg);
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         icnd2153_initialize(Cfg);
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363B)
+        fm6363b_initialize(Cfg);
 
     configure_pio();
     setup_dma_transfers();
@@ -725,7 +728,14 @@ void Hub75Driver<Cfg>::configure_pio()
 
         icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
 
-        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, 138);
+        if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
+        {
+            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+        }
+        else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363B)
+        {
+            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, FM6363B_GCLK_RISES);
+        }
     }
 }
 
