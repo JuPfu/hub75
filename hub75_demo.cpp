@@ -48,7 +48,7 @@ constexpr Hub75Config panel_cfg{
         .ccm_rg_shift = 6,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
         .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     },
-    .frame_rate_debug = false, // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor
+    .frame_rate_debug = true, // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor
 };
 
 using Panel = Hub75Driver<panel_cfg>;
@@ -174,7 +174,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 266MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(266000, true);
+    set_sys_clock_khz(200000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
