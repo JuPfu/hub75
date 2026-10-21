@@ -1056,7 +1056,7 @@ inline void Hub75Driver<Cfg>::write_pixel(size_t &fb, const uint8_t *src, int dx
 }
 
 // v[0..5] = top R,G,B, bottom R,G,B (16-bit, already corrected). Writes 16 bytes, MSB first.
-static inline void pwm_expand_channels_(const uint16_t *v, uint8_t *dst)
+__attribute__((optimize("unroll-loops"))) static inline void pwm_expand_channels_(const uint16_t *v, uint8_t *dst)
 {
     for (uint32_t bit = 0; bit < 16; ++bit)
     {
