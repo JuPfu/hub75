@@ -70,6 +70,11 @@ row_loop:
     mov pins, ~x           side 0b0
     ; ISR contains gclk_pulses_per_burst - 1.
     ; Reload Y for every row so each row receives the same GCLK pulse count.
+
+    set y, 20            side 0
+settle:
+    jmp y--, settle      side 0 [7]  ; GCLK low gap, 30 x 8 cycles; tune
+
     mov y, isr           side 0b0
 
     ; Generate the GCLK burst.
