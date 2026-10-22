@@ -1,0 +1,439 @@
+.pio_version 0
+
+.pio_version 0
+
+; ==============================================================================
+; PROGRAM 1: ROW & GCLK (PWM CLOCK) CONTROLLER
+;
+; Responsibilities:
+;   - Generate GCLK pulses for the ICND2153 panel.
+;   - Advance the row-selection signals between GCLK bursts.
+;   - Refresh continuously while no frame-start token is pending.
+;   - Synchronise with the pixel-stream state machine at frame boundaries.
+;
+; Register usage:
+;   ISR = GCLK pulse count per burst, minus one.
+;   OSR = Number of scan rows per refresh, minus one.
+;   X   = Working row counter, copied from OSR.
+;   Y   = Temporary status result or GCLK pulse counter.
+;
+; Protocol:
+;   TX FIFO empty    -> continue refreshing.
+;   TX FIFO nonempty -> consume frame-start token and synchronise with the pixel-stream state machine.
+; ==============================================================================
+
+.program icnd2153_row
+.side_set 1 ; Side-set pin drives GCLK.
+
+.wrap_target
+    ; STATUS is configured as TX FIFO level < 1:
+    ;   FIFO empty    -> Y = 0xFFFFFFFF
+    ;   FIFO nonempty -> Y = 0x00000000
+    mov y, status        side 0b0
+
+    ; If the FIFO is empty, Y is nonzero and the jump is taken.
+    ; Continue refreshing without waiting for a new frame token.
+    ; JMP Y-- decrements Y even when the jump is not taken.
+    jmp y--, seed_row    side 0b0
+
+    ; --------------------------------------------------------------------------
+    ; FRAME-START HANDSHAKE
+    ; Reached only when the TX FIFO contains a frame-start token.
+    ; --------------------------------------------------------------------------
+
+    ; Consume the token. Its intended value is scan_rows - 1.
+    ; The blocking pull waits if the FIFO becomes empty.
+    pull block           side 0b0
+
+    ; Signal IRQ 2 to the pixel-stream state machine.
+    ; That state machine is responsible for its VSYNC/frame-start action.
+    irq nowait 2         side 0b0
+
+    ; Wait until the pixel-stream state machine signals IRQ 3.
+    ; This handshake must be completed by the other state machine.
+    wait 1 irq 3         side 0b0
+
+    ; --------------------------------------------------------------------------
+    ; SEED ROW 0
+    ; Reload the row counter and apply the panel-specific row-0 sequence.
+    ; --------------------------------------------------------------------------
+seed_row:
+    ; OSR contains scan_rows - 1.
+    mov x, osr           side 0b0
+
+    ; Apply the panel-specific decoder reset/row-0 sequence.
+    set pins, 0b101 [3]  side 0b0
+    set pins, 0b000 [3]  side 0b0
+
+    ; --------------------------------------------------------------------------
+    ; ROW REFRESH LOOP
+    ; --------------------------------------------------------------------------
+row_loop:
+    ; ISR contains gclk_pulses_per_burst - 1.
+    ; Reload Y for every row so each row receives the same GCLK pulse count.
+    mov y, isr           side 0b0
+
+    ; Generate the GCLK burst.
+gclk_loop:
+    nop             [3]  side 0b1 ; GCLK high for one PIO cycle.
+    jmp y--, gclk_loop [3]  side 0b0 ; GCLK low for one PIO cycle.
+
+    ; --------------------------------------------------------------------------
+    ; ROW ADVANCE
+    ; --------------------------------------------------------------------------
+
+    ; Apply the panel-specific row-advance sequence.
+    set pins, 0b001 [3]  side 0b0 ; RA=1, RB=0, RC=0.
+    set pins, 0b000 [3]  side 0b0 ; Return all row-select signals low.
+
+    jmp x--, row_loop    side 0b0
+.wrap
+
+% c-sdk {
+#include "hardware/clocks.h"
+
+static inline void icnd2153_row_program_init(
+    PIO pio,
+    uint sm,
+    uint offset,
+    uint rowsel_base_pin,          // 3 consecutive pins: RA, RB, RC
+    uint gclk_pin,                 // HUB75 OE pin (ICND2153 GCLK)
+    uint32_t num_scan_rows,        // e.g. 32 for 1/32 scan
+    uint32_t gclk_pulses_per_burst // e.g. 138
+)
+{
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_clear_fifos(pio, sm);
+
+    // Configure the three consecutive row-select GPIOs and the GCLK GPIO as outputs controlled by this PIO state machine.
+    pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 3, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
+
+    // Connect the GPIOs to the PIO peripheral.
+    for (uint i = 0; i < 3; i++)
+    {
+        pio_gpio_init(pio, rowsel_base_pin + i);
+    }
+    pio_gpio_init(pio, gclk_pin);
+
+    pio_sm_config c = icnd2153_row_program_get_default_config(offset);
+
+    // Map SET instructions to the three row-select GPIOs.
+    sm_config_set_set_pins(&c, rowsel_base_pin, 3);
+
+    // Map side-set bit 0 to the GCLK output GPIO.
+    sm_config_set_sideset_pins(&c, gclk_pin);
+
+    // Shift OUT data right; disable autopull.
+    // This program explicitly controls when words are pulled from the TX FIFO.
+    sm_config_set_out_shift(&c, true, false, 32);
+
+    // MOV Y, STATUS returns all ones when TX FIFO level < 1, and zero otherwise. 
+    // With a threshold of 1, this detects an empty FIFO.
+    sm_config_set_mov_status(&c, STATUS_TX_LESSTHAN, 1);
+
+    pio_sm_init(pio, sm, offset, &c);
+
+    // --------------------------------------------------------------------------
+    // PRELOAD THE GCLK PULSE COUNT
+    // --------------------------------------------------------------------------
+
+    // Queue the GCLK pulse count minus one in the TX FIFO and wait for FIFO space if necessary.
+    pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
+
+    // Execute a nonblocking PULL directly on the state machine.
+    // The FIFO contains a word, so the word is transferred into OSR.
+    // (If the FIFO were empty, this instruction would copy X into OSR instead.)
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false));
+
+    // Transfer the 32-bit GCLK pulse count from OSR into ISR.
+    // The ISR retains this value for subsequent row-refresh bursts.
+    pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
+}
+
+static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
+{
+    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);       // first token: VSYNC + frame start
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_rows)
+{
+    if (pio_sm_is_tx_fifo_empty(pio, sm))                  // never block in the IRQ, never stack tokens
+        pio_sm_put(pio, sm, num_scan_rows - 1);
+}
+%}
+
+; ==============================================================================
+; PROGRAM 2: PIXEL DATA & COMMAND STREAMER
+;
+; Drives the panel's six parallel RGB data lines and generates DCLK and LE/LAT.
+;
+; OUT pins:
+;   Six consecutive pins: R0, G0, B0, R1, G1, B1
+;
+; Side-set pins:
+;   Bit 0: DCLK (data clock)
+;   Bit 1: LE / LAT (latch enable)
+;
+; Synchronization with icnd2153_row:
+;   IRQ 2: Row SM signals that the pixel stream may start.
+;   IRQ 3: Pixel SM acknowledges completion of the VSYNC sequence.
+;
+; DMA stream header (two 16-bit fields in the first 32-bit word):
+;   Bits  0..15: Number of transactions per frame minus one (X)
+;   Bits 16..31: Number of pixel-loop iterations per transaction minus one (ISR)
+;
+; The OUT shift register is configured for right shifting with 32-bit autopull.
+; Each OUT instruction consumes bits from the DMA stream; autopull fetches the
+; next 32-bit word when the output shift register becomes empty.
+
+.program icnd2153_pixel_stream
+
+.side_set 2
+
+.wrap_target
+    ; Wait until the row SM signals that the pixel stream can begin.
+    wait 1 irq 2                side 0b00
+
+    ; Generate three VSYNC pulses on LE/LAT.
+    set x, 2                    side 0b00
+vsync_loop:
+    nop             [3]         side 0b10  ; LE=1, DCLK=0
+    jmp x--, vsync_loop  [3]    side 0b11  ; LE=1, DCLK=1
+
+    ; Tell the row SM that the VSYNC sequence has completed.
+    irq nowait 3                side 0b00
+
+    ; Read the two 16-bit counters from the first DMA word.
+    ; OUT shifts the lower 16 bits into X, then the upper 16 bits into ISR.
+    ; These values are pre-decremented loop counts, not literal counts.
+    out x, 16                   side 0b00  ; X   = transactions per frame - 2
+    out isr, 16                 side 0b00  ; ISR = pixel-loop iterations - 1
+
+transactions:
+    ; Reload the pixel-loop counter for each transaction.
+    mov y, isr                  side 0b00
+
+normal_pulse:
+    ; Output six RGB data bits, then generate a DCLK rising edge.
+    out pins, 6     [2]         side 0b00  ; RGB data valid; DCLK low
+    out null, 2     [3]         side 0b01  ; Consume clock bits; DCLK high
+    jmp y--, normal_pulse       side 0b00  ; Repeat while Y was nonzero
+
+    ; Output the final six RGB data bits for this transaction.
+    ; Raise LE/LAT while generating the final clock pulse to latch the data.
+    out pins, 6     [3]         side 0b10  ; Final RGB data; LE high, DCLK low
+    out null, 2     [3]         side 0b11  ; LE high, DCLK high
+
+    ; Repeat for the remaining transactions in the frame.
+    jmp x--, transactions       side 0b00
+.wrap
+
+% c-sdk {
+static inline void icnd2153_pixel_stream_program_init(
+    PIO pio,
+    uint sm,
+    uint offset,
+    uint rgb_base_pin,
+    uint dclk_pin // Two consecutive side-set pins: DCLK, then LE/LAT
+)
+{
+    // Configure the state machine from a known disabled state.
+    pio_sm_set_enabled(pio, sm, false);
+    pio_sm_clear_fifos(pio, sm);
+
+    // Configure the six consecutive RGB data pins as outputs.
+    pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+
+    // Configure the two consecutive side-set pins as outputs.
+    pio_sm_set_consecutive_pindirs(pio, sm, dclk_pin, 2, true);
+
+    // Connect the GPIOs to the PIO block.
+    for (uint i = 0; i < 6; i++)
+    {
+        pio_gpio_init(pio, rgb_base_pin + i);
+    }
+    pio_gpio_init(pio, dclk_pin);     // DCLK
+    pio_gpio_init(pio, dclk_pin + 1); // LE / LAT
+
+    // Configure the RGB output bus and the two side-set pins.
+    pio_sm_config c = icnd2153_pixel_stream_program_get_default_config(offset);
+    sm_config_set_out_pins(&c, rgb_base_pin, 6);
+    sm_config_set_sideset_pins(&c, dclk_pin);
+
+    // Shift output data right and automatically pull another 32-bit word
+    // from the TX FIFO whenever the output shift register is exhausted.
+    // This allows the pixel stream to be supplied continuously by DMA.
+    sm_config_set_out_shift(&c, true, true, 32);
+
+    // Use the entire FIFO for TX buffering; RX FIFO capacity is not needed.
+    sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+    // Apply the configuration and start execution at the program entry point.
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
+; =============================================================================
+; PROGRAM: icnd2153_write_register
+; =============================================================================
+; One-time control-command / configuration-register writer for a chain of
+; ICND2153 driver ICs. Runs BEFORE normal row/bitplane scanning starts: it
+; borrows the PIO/GPIO resources long enough to shift PRE_ACT / EN_OP / VSYNC
+; and the WR_CFG1..WR_CFG4 / WR_DBG register values into every daisy-chained
+; chip, then hands the PIO block back so icnd2153_row / icnd2153_bitplane_stream
+; can drive the panel normally. Directly modelled on rul6024_write_register
+; - the wire protocol is identical: a command is decoded purely by how
+; many trailing DCLK rising edges occur while LE (LAT) is held high, per the
+; "Control Command" table in icnd2153_control_command.png. See icnd2153.h for
+; the command-signature constants and icnd2153.cpp for the C++ driver.
+;
+; set pin group (clock_base_pin, 3 pins) - SAME ordering as
+; icnd2153_bitplane_stream_program_init() above, so both programs can be
+; pointed at the same three GPIOs:
+;   bit0 (clock_base_pin + 0) = CLK
+;   bit1 (clock_base_pin + 1) = LE     (a.k.a. LAT)
+;   bit2 (clock_base_pin + 2) = PWCLK  (-> panel OEN pin; held HIGH/blanked
+;                                for the whole control-command / register-write
+;                                sequence, mirroring how rul6024_write_register
+;                                treats OEN, so no write-glitch is visible on
+;                                the panel.
+;
+; "out pins, 6" targets 6 consecutive data pins (rgb_base_pin..+5), one bit
+; per RGB sub-pixel lane, driven identically for every chip in the chain (see
+; prepare_register_dma() in icnd2153.cpp - the same 16-bit register value is
+; shifted once per daisy-chained chip, exactly as for RUL6024).
+;
+; Wire protocol, per call to icnd2153_write_register() (C-SDK helper below) -
+; identical structure to rul6024_write_register():
+;
+;   Phase 1 (once): receive `data_length = display_width - cmd_signature`,
+;     the number of CLK pulses to send with LE held LOW.
+;   Phase 2 (data_loop, `data_length` iterations): shift the leading portion
+;     of the register image in with LE LOW - still real register data, the
+;     chip keeps shifting on every CLK pulse regardless of LE.
+;   Phase 3 (le_data_loop, `cmd_signature` iterations): shift the remaining
+;     `cmd_signature` pulses in with LE HIGH. Together with Phase 2 this
+;     clocks in exactly `display_width` bits total, and the trailing run of
+;     `cmd_signature` LE-high pulses is what the chip decodes as the command
+;     once CLK stops toggling (1 = DATA_LATCH, 2 = WR_DBG, 3 = VSYNC,
+;     4 = WR_CFG1, 6 = WR_CFG2, 8 = WR_CFG3, 10 = WR_CFG4, 12 = EN_OP,
+;     13 = DIS_OP, 14 = PRE_ACT - see icnd2153.h).
+;
+; Timing: sm_config_set_clkdiv(&c, 10.0f) below matches rul6024_write_register's
+; divider. If you ever change sys_clk or clkdiv, recompute the resulting CLK
+; high/low time and re-check it against the ICND2153's timing spec.
+.program icnd2153_write_register
+.wrap_target
+    ; ---- Phase 1: latch in the data/command split point for this write ----
+    pull block
+    out x, 32                ; x = data_length - 1 (CLK pulses to send with LE low)
+    set pins, 0b100 [7]      ; PWCLK/OEN=1 (blanked), LE=0, CLK=0 — idle/rest state
+
+    ; ---- Phase 2: shift register data in, LE low (not yet part of the command signature) ----
+data_loop:
+    pull block
+    out pins, 6              ; drive this cycle's 6 data lanes (1 bit/lane, all chips identical)
+    set pins, 0b101 [7]      ; PWCLK/OEN=1 LE=0 CLK=1  (chip samples data on this rising edge)
+    set pins, 0b100 [7]      ; PWCLK/OEN=1 LE=0 CLK=0
+    jmp x-- data_loop
+
+    ; ---- Phase 3: shift the final cmd_signature bits in with LE held high ----
+    pull block
+    out x, 32                ; x = cmd_signature - 1   e.g. 4->3 for WR_CFG1, 14->13 for PRE_ACT
+    set pins, 0b110 [7]      ; LE up first, CLK still low (LE setup)
+le_data_loop:
+    pull block               ; still real shift-register data — LE doesn't gate data, only marks the command
+    out pins, 6
+    set pins, 0b111 [7]      ; PWCLK/OEN=1 LE=1 CLK=1  (data sampled on this rising edge)
+    set pins, 0b110 [7]      ; PWCLK/OEN=1 LE=1 CLK=0
+    jmp x-- le_data_loop
+.wrap
+
+% c-sdk {
+    // Configures GPIO directions/muxing and the state machine for
+    // icnd2153_write_register. Call once per chain before any
+    // icnd2153_write_register() / icnd2153_write_control_command() calls;
+    // the SM stays enabled and reusable for repeated writes (PRE_ACT, EN_OP,
+    // VSYNC, WR_CFG1..4, WR_DBG, DATA_LATCH, ...) until the caller tears it
+    // down (see icnd2153_initialize() in icnd2153.cpp).
+    //
+    //   rgb_base_pin    -> first of 6 consecutive RGB data lane pins
+    //   clock_base_pin  -> CLK; clock_base_pin+1 and +2 must be LE and
+    //                      PWCLK/OEN respectively (three *consecutive* GPIOs,
+    //                      same grouping as icnd2153_bitplane_stream_program_init)
+    //
+    static inline void icnd2153_write_register_program_init(PIO pio, uint sm, uint offset, uint rgb_base_pin, uint clock_base_pin)
+    {
+        pio_sm_set_enabled(pio, sm, false);
+        pio_sm_clear_fifos(pio, sm);
+
+        pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
+        pio_sm_set_consecutive_pindirs(pio, sm, clock_base_pin, 3, true);
+        for (uint i = 0; i < 6; i++)
+            pio_gpio_init(pio, rgb_base_pin + i);
+        pio_gpio_init(pio, clock_base_pin);     // CLK
+        pio_gpio_init(pio, clock_base_pin + 1); // LE (LAT)
+        pio_gpio_init(pio, clock_base_pin + 2); // PWCLK / OEN
+
+        pio_sm_config c = icnd2153_write_register_program_get_default_config(offset);
+        sm_config_set_out_pins(&c, rgb_base_pin, 6);
+        sm_config_set_set_pins(&c, clock_base_pin, 3);
+        sm_config_set_out_shift(&c, true, false, 32); // shift_right=true, autopull off (all pulls explicit)
+
+        // Divides the PIO clock relative to sys_clk
+        sm_config_set_clkdiv(&c, 10.0f);
+        sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
+
+        pio_sm_init(pio, sm, offset, &c);
+        pio_sm_set_enabled(pio, sm, true);
+    }
+
+    // Issues one register write: shifts `dma_words[0 .. display_width-1]` into
+    // the chain (one 6-bit word per CLK pulse) and asserts LE for the trailing
+    // `cmd_signature` of those pulses, so the chain latches the shifted-in
+    // value as the command identified by cmd_signature (e.g.
+    // ICND2153_CMD_WR_CFG1 = 4, ICND2153_CMD_WR_CFG2 = 6, ... — see
+    // icnd2153.h).
+    //
+    // dma_words must hold exactly `display_width` entries, pre-expanded by
+    // prepare_register_dma() in icnd2153.cpp. This function only streams
+    // them to the PIO FIFO, it does no encoding of its own.
+    static inline void icnd2153_write_register(PIO pio, uint sm, uint32_t display_width, uint32_t cmd_signature, const uint32_t *dma_words)
+    {
+        uint16_t data_length = display_width - cmd_signature; // LE-low portion (Phase 2)
+
+        pio_sm_put_blocking(pio, sm, data_length - 1); // Phase 1: loop count for data_loop
+        for (uint32_t i = 0; i < data_length; i++)
+        {
+            pio_sm_put_blocking(pio, sm, dma_words[i]);
+        }
+
+        pio_sm_put_blocking(pio, sm, cmd_signature - 1); // Phase 3: loop count for le_data_loop
+        for (uint32_t i = data_length; i < data_length + cmd_signature; i++)
+        {
+            pio_sm_put_blocking(pio, sm, dma_words[i]);
+        }
+    }
+
+    // Issues a no-payload control command: PRE_ACT, EN_OP, VSYNC, DIS_OP, or
+    // DATA_LATCH. Per the Control Command table these carry no register data
+    // of their own — the chip only decodes the trailing LE-high pulse count
+    // once CLK stops toggling, so what gets shifted through beforehand
+    // doesn't matter (mirrors rul6024_data_latch() / rul6024_reset_oen() in
+    // hub75.pio, which use the same idiom for RUL6024's no-payload commands).
+    //
+    // icnd2153_write_register()'s "jmp x--" loop can't do a genuine
+    // zero-iteration pass (x = 0 still runs the loop body once before the
+    // exit test), so the shortest legal transaction is 1 LE-low dummy pulse
+    // followed by the `cmd_signature` LE-high pulses -> display_width =
+    // cmd_signature + 1. The dummy data is all zero since the DATA pins are
+    // don't-care for these commands.
+    static inline void icnd2153_write_control_command(PIO pio, uint sm, uint32_t cmd_signature)
+    {
+        static const uint32_t dummy[15] = {0}; // sized for the longest command (PRE_ACT, 14 -> display_width 15)
+        icnd2153_write_register(pio, sm, /*display_width=*/cmd_signature + 1, cmd_signature, dummy);
+    }
+%}

@@ -140,18 +140,43 @@ static void fm6363b_setup(PIO pio, uint sm, uint offset)
     uint32_t *cfg4_buf = register_slot(REGISTER_SLOT_CFG4, display_width);
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
-    prepare_register_dma(FM6363B_CFG1_VALUE, cfg1_buf, display_width);
+
+    // not tested yet - set number of lines to half the physical rows of the panel
+    uint16_t cfg1_lane[6];
+    for (uint32_t n = 0; n < 6; ++n) {
+            cfg1_lane[n] = FM6363B_CFG1_PER_COLOUR
+                           ? static_cast<uint16_t>(FM6363B_CFG1_BY_COLOUR[fm6363b_lane_colour(n)] | FM6363B_CFG1_EXTRA)
+                           : FM6363B_CFG1_VALUE;
+            cfg1_lane[n] = (cfg1_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
+    }
+                        
+    const uint16_t cfg1_value = (FM6363B_CFG1_VALUE & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
+    prepare_register_dma_lanes(cfg1_lane, cfg1_buf, display_width);
+
+    // prepare_register_dma(FM6363B_CFG1_VALUE, cfg1_buf, display_width);
 
     // REG2 carries the pre-charge level, which depends on the LED colour the lane drives.
     uint16_t cfg2_lane[6];
-    for (uint32_t n = 0; n < 6; ++n)
+    for (uint32_t n = 0; n < 6; ++n) {
         cfg2_lane[n] = FM6363B_CFG2_PER_COLOUR
                            ? static_cast<uint16_t>(FM6363B_CFG2_BY_COLOUR[fm6363b_lane_colour(n)] | FM6363B_CFG2_EXTRA)
                            : FM6363B_CFG2_VALUE;
+            cfg2_lane[n] = (cfg2_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
+            cfg2_lane[n] = (cfg2_lane[n] & ~0x03FE) | (0xE7 << 1); 
+    }
     prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
 
     prepare_register_dma(FM6363B_CFG3_VALUE, cfg3_buf, display_width);
-    prepare_register_dma(FM6363B_CFG4_VALUE, cfg4_buf, display_width);
+
+    uint16_t cfg4_lane[6];
+    for (uint32_t n = 0; n < 6; ++n) {
+            cfg4_lane[n] = FM6363B_CFG4_PER_COLOUR
+                           ? static_cast<uint16_t>(FM6363B_CFG4_BY_COLOUR[fm6363b_lane_colour(n)] | FM6363B_CFG4_EXTRA)
+                           : FM6363B_CFG4_VALUE;
+            cfg4_lane[n] = (cfg4_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
+    }
+    prepare_register_dma_lanes(cfg4_lane, cfg2_buf, display_width);
+
     prepare_register_dma(FM6363B_CFG5_VALUE, dbg_buf, display_width);
 
     icnd2153_write_register_program_init(pio, sm, offset, cfg.pins.data_base_pin, cfg.pins.clk_pin);

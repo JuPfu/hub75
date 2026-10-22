@@ -742,7 +742,7 @@ void Hub75Driver<Cfg>::configure_pio()
 static float icnd2153_clkdiv_(uint32_t sys_hz)
 {
     constexpr float m = -1.5f / 100.0f;
-    constexpr float n = 10.25f;
+    constexpr float n = 12.0f; //10.25f;
     const float clkdiv = (sys_hz / 1e6f) * m + n;
 
     return clkdiv;
