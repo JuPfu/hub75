@@ -42,9 +42,16 @@ static constexpr uint16_t FM6363B_CFG5_VALUE = 0x7E08;
 
 // ---- REG2 per LED colour --------------------------------------------------
 // From the register-map examples: only b14..b10 (ghost-eliminate level) differs per colour.
-static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x3FF0 /*R*/, 0x3FB0 /*G*/, 0x3FB0 /*B*/};
-static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0xF39D /*R*/, 0xE79D /*G*/, 0xD79D /*B*/};
-static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0x5A00 /*R*/, 0x5A70 /*G*/, 0x5A70 /*B*/};
+
+// 0x0fb0, 0x0fb0, 0x60b6, 0x0fb0, 0x7e08 
+
+static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x0fb0 /*R*/, 0x0fb0 /*G*/, 0x0fb0 /*B*/};
+static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0x0fb0 /*R*/, 0x0fb0 /*G*/, 0x0fb0 /*B*/};
+static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0x0fb0 /*R*/, 0x0fb0 /*G*/, 0x0fb0 /*B*/};
+
+// static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x3FF0 /*R*/, 0x3FB0 /*G*/, 0x3FB0 /*B*/};
+// static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0xF39D /*R*/, 0xF39D /*G*/, 0xF39D /*B*/};
+// static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0x5A70 /*R*/, 0x5A70 /*G*/, 0x5A70 /*B*/};
 
 static constexpr uint16_t FM6363B_CFG1_EXTRA = 0x8000;
 static constexpr uint16_t FM6363B_CFG2_EXTRA = 0x8000;

@@ -29,7 +29,7 @@ constexpr Hub75Config panel_cfg{
         .base_addr_ns = 260,                      // wait time in nano-seconds to stabilise row addressing
     },
     .screen = {
-        .rotation = Hub75Rotation::DEG_0, // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
+        .rotation = Hub75Rotation::DEG_270, // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
     },
     .pins = {
         .data_base_pin = 0,   // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
@@ -145,7 +145,7 @@ int led_init(void)
  */
 bool skip_to_next_demo(__unused struct repeating_timer *t)
 {
-    if (++demo_index > 6)
+    if (++demo_index > 7)
     {
         demo_index = 0; // Cycle through all examples
     }
@@ -174,7 +174,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 266MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(150000, true);
+    set_sys_clock_khz(266000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
@@ -219,7 +219,7 @@ int main()
     // Pico RAM is finite - due to your configuration of panel_cfg (dimensions, bitplanes,
     // balanced_light_output and separate_cie_channels) you have to select just a selection of demos!
 
-    // static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
+    static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
 
     // static Rectangle<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rectangle;
 
@@ -238,10 +238,10 @@ int main()
     const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel
-    driver.setBasisBrightness(8);
+    driver.setBasisBrightness(5);
 
     // set full brightness of panel
-    float intensity = 1.0f;
+    float intensity = 0.45f;
     driver.setIntensity(intensity);
 
     float step = -0.005f;
@@ -290,12 +290,12 @@ int main()
             pixelFill.fill();
             driver.update(&pixelFill);
         }
-        // else if (demo_index == 7)
-        // {
-        //     greyScaleStripes.drawStripes();
-        //     driver.update(&greyScaleStripes);
-        // }
-        // else if (demo_index == 8)
+        else if (demo_index == 7)
+        {
+            greyScaleStripes.drawStripes();
+            driver.update(&greyScaleStripes);
+        }
+        else if (demo_index == 8)
         // {
         //     rectangle.draw();
         //     driver.update(&rectangle);

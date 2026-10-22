@@ -607,9 +607,9 @@ private:
         PIO row_pio = nullptr;
         uint row_prog_offs = 0;
 
-        uint sm_gclk = 0;
-        PIO gclk_pio = nullptr;
-        uint gclk_prog_offs = 0;
+        uint sm_dclk = 0;
+        PIO dclk_pio = nullptr;
+        uint dclk_prog_offs = 0;
 
         uint sm_read = 0;
         PIO pio_read = nullptr;

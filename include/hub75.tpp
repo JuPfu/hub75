@@ -73,6 +73,15 @@ void Hub75Driver<Cfg>::create()
     register_instance();
 }
 
+static float icnd2153_clkdiv_(uint32_t sys_hz)
+{
+    constexpr float m = -1.5f / 100.0f;
+    constexpr float n = 20.25f;
+    const float clkdiv = (sys_hz / 1e6f) * m + n;
+
+    return clkdiv;
+}
+
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::start()
 {
@@ -102,7 +111,37 @@ void Hub75Driver<Cfg>::start()
 
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
+        uint32_t sys_clk_hz = clock_get_hz(clk_sys);
+        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
+        pio_sm_set_clkdiv(pio_config_.dclk_pio, pio_config_.sm_dclk, sm_clockdiv);
+
+        printf("start icnd2153_dclk_start\n");
+        icnd2153_dclk_start(pio_config_.dclk_pio, pio_config_.sm_dclk, Cfg.pins.clk_pin);
+
+        printf("dclk: pio=%u sm=%u offs=%u abs_pc=%u funcsel=%d\n",
+               pio_get_index(pio_config_.dclk_pio), pio_config_.sm_dclk,
+               pio_config_.dclk_prog_offs,
+               pio_sm_get_pc(pio_config_.dclk_pio, pio_config_.sm_dclk),
+               (int)gpio_get_function(Cfg.pins.clk_pin));
+        uint32_t edges = 0;
+        bool last = gpio_get(Cfg.pins.clk_pin);
+        for (int i = 0; i < 2000; ++i)
+        {
+            bool v = gpio_get(Cfg.pins.clk_pin);
+            edges += (v != last);
+            last = v;
+        }
+        printf("clk edges seen: %u\n", edges);
+
         icnd2153_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
+        printf("start icnd2153_row_start started\n");
+
+        sleep_ms(500);
+        printf("pc data=%u row=%u dclk=%u  dma_left=%u\n",
+               pio_sm_get_pc(pio_config_.data_pio, pio_config_.sm_data) - pio_config_.data_prog_offs,
+               pio_sm_get_pc(pio_config_.row_pio, pio_config_.sm_row) - pio_config_.row_prog_offs,
+               pio_sm_get_pc(pio_config_.dclk_pio, pio_config_.sm_dclk) - pio_config_.dclk_prog_offs,
+               dma_channel_hw_addr(pixel_chan_)->transfer_count);
     }
     else if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
@@ -382,6 +421,7 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
                 swap_frame_buffer_pending_ = false;
             }
             __dmb();
+
             dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true); // restart: count is reloaded
             icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
 
@@ -713,12 +753,20 @@ void Hub75Driver<Cfg>::configure_pio()
                                                        true); });
                 if (row_ok)
                 {
-                    placed = true;
-                    break;
-                }
-            }
 
-            release_pio_block_for_row_stream(pio_index);
+                    bool clk_ok = pio_claim_free_sm_and_add_program_for_gpio_range(
+                        &icnd2153_dclk_program,
+                        &pio_config_.dclk_pio, &pio_config_.sm_dclk, &pio_config_.dclk_prog_offs,
+                        Cfg.pins.clk_pin, 1, true);
+
+                    if (clk_ok)
+                    {
+                        placed = true;
+                        break;
+                    }
+                }
+                release_pio_block_for_row_stream(pio_index);
+            }
         }
 
         if (!placed)
@@ -726,26 +774,19 @@ void Hub75Driver<Cfg>::configure_pio()
             panic("Failed to find a PIO block with room for icnd2153_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
         }
 
-        icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+        icnd2153_dclk_program_init(pio_config_.dclk_pio, pio_config_.sm_dclk, pio_config_.dclk_prog_offs, Cfg.pins.clk_pin);
+
+        icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
 
         if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         {
-            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
         }
         else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363B)
         {
-            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, FM6363B_GCLK_RISES);
+            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, FM6363B_GCLK_RISES);
         }
     }
-}
-
-static float icnd2153_clkdiv_(uint32_t sys_hz)
-{
-    constexpr float m = -1.5f / 100.0f;
-    constexpr float n = 10.25f;
-    const float clkdiv = (sys_hz / 1e6f) * m + n;
-
-    return clkdiv;
 }
 
 // Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output

@@ -67,13 +67,13 @@ seed_row:
     ; ROW REFRESH LOOP
     ; --------------------------------------------------------------------------
 row_loop:
-    mov pins, ~x           side 0b0
+    mov pins, !x           side 0b0   ; bitwise not only for panel height which match power of 2
     ; ISR contains gclk_pulses_per_burst - 1.
     ; Reload Y for every row so each row receives the same GCLK pulse count.
 
-    set y, 20            side 0
+    ;set y, 20            side 0
 settle:
-    jmp y--, settle      side 0 [7]  ; GCLK low gap, 30 x 8 cycles; tune
+    ;jmp y--, settle      side 0 [7]  ; GCLK low gap, 30 x 8 cycles; tune
 
     mov y, isr           side 0b0
 
@@ -100,7 +100,8 @@ static inline void icnd2153_row_program_init(
     PIO pio,
     uint sm,
     uint offset,
-    uint rowsel_base_pin,          // 3 consecutive pins: RA, RB, RC
+    uint rowsel_base_pin,          // 
+    uint rowsel_n_pins,
     uint gclk_pin,                 // HUB75 OE pin (ICND2153 GCLK)
     uint32_t num_scan_rows,        // e.g. 32 for 1/32 scan
     uint32_t gclk_pulses_per_burst // e.g. 138
@@ -110,7 +111,7 @@ static inline void icnd2153_row_program_init(
     pio_sm_clear_fifos(pio, sm);
 
     // Configure the three consecutive row-select GPIOs and the GCLK GPIO as outputs controlled by this PIO state machine.
-    pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 5, true);
+    pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, rowsel_n_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
 
     // Connect the GPIOs to the PIO peripheral.
@@ -194,45 +195,34 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
 ; next 32-bit word when the output shift register becomes empty.
 
 .program icnd2153_pixel_stream
-
-.side_set 2
-
+.side_set 1                              ; LE only
 .wrap_target
-    ; Wait until the row SM signals that the pixel stream can begin.
-    wait 1 irq 2                side 0b00
+    wait 1 irq 2                  side 0 ; DCLK keeps running elsewhere
 
-    ; Generate three VSYNC pulses on LE/LAT.
-    set x, 2                    side 0b00
+    set x, 2                      side 0
+    ;wait 1 pin 0                  side 0
+    ;wait 0 pin 0                  side 0  ; DCLK just fell
 vsync_loop:
-    nop             [3]         side 0b10  ; LE=1, DCLK=0
-    jmp x--, vsync_loop  [3]    side 0b11  ; LE=1, DCLK=1
+    wait 1 pin 0                  side 1  ; counted rising edge
+    wait 0 pin 0                  side 1
+    jmp x--, vsync_loop           side 1
+    irq nowait 3                  side 0
 
-    ; Tell the row SM that the VSYNC sequence has completed.
-    irq nowait 3                side 0b00
-
-    ; Read the two 16-bit counters from the first DMA word.
-    ; OUT shifts the lower 16 bits into X, then the upper 16 bits into ISR.
-    ; These values are pre-decremented loop counts, not literal counts.
-    out x, 16                   side 0b00  ; X   = transactions per frame - 2
-    out isr, 16                 side 0b00  ; ISR = pixel-loop iterations - 1
-
+    out x, 16                     side 0
+    out isr, 16                   side 0
 transactions:
-    ; Reload the pixel-loop counter for each transaction.
-    mov y, isr                  side 0b00
-
+    mov y, isr                    side 0
 normal_pulse:
-    ; Output six RGB data bits, then generate a DCLK rising edge.
-    out pins, 6     [2]         side 0b00  ; RGB data valid; DCLK low
-    out null, 2     [3]         side 0b01  ; Consume clock bits; DCLK high
-    jmp y--, normal_pulse       side 0b00  ; Repeat while Y was nonzero
-
-    ; Output the final six RGB data bits for this transaction.
-    ; Raise LE/LAT while generating the final clock pulse to latch the data.
-    out pins, 6     [3]         side 0b10  ; Final RGB data; LE high, DCLK low
-    out null, 2     [3]         side 0b11  ; LE high, DCLK high
-
-    ; Repeat for the remaining transactions in the frame.
-    jmp x--, transactions       side 0b00
+    wait 0 pin 0                  side 0
+    out pins, 6                   side 0 ; data changes only while DCLK is low
+    out null, 2                   side 0
+    wait 1 pin 0                  side 0 ; chip samples on this rising edge
+    jmp y--, normal_pulse         side 0
+    wait 0 pin 0                  side 0
+    out pins, 6                   side 1
+    out null, 2                   side 1
+    wait 1 pin 0               side 1  ; rising edge with LE high, then hold LE ~3 cycles
+    jmp x--, transactions         side 0
 .wrap
 
 % c-sdk {
@@ -241,7 +231,8 @@ static inline void icnd2153_pixel_stream_program_init(
     uint sm,
     uint offset,
     uint rgb_base_pin,
-    uint dclk_pin // Two consecutive side-set pins: DCLK, then LE/LAT
+    uint clk_pin,
+    uint le_pin
 )
 {
     // Configure the state machine from a known disabled state.
@@ -251,21 +242,21 @@ static inline void icnd2153_pixel_stream_program_init(
     // Configure the six consecutive RGB data pins as outputs.
     pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
 
-    // Configure the two consecutive side-set pins as outputs.
-    pio_sm_set_consecutive_pindirs(pio, sm, dclk_pin, 2, true);
+    // Configure the le (latch/strobe) pin as output.
+    pio_sm_set_consecutive_pindirs(pio, sm, le_pin, 1, true);
 
     // Connect the GPIOs to the PIO block.
     for (uint i = 0; i < 6; i++)
     {
         pio_gpio_init(pio, rgb_base_pin + i);
     }
-    pio_gpio_init(pio, dclk_pin);     // DCLK
-    pio_gpio_init(pio, dclk_pin + 1); // LE / LAT
+    pio_gpio_init(pio, le_pin); // LE / LAT
 
     // Configure the RGB output bus and the two side-set pins.
     pio_sm_config c = icnd2153_pixel_stream_program_get_default_config(offset);
+    sm_config_set_in_pins(&c, clk_pin);
     sm_config_set_out_pins(&c, rgb_base_pin, 6);
-    sm_config_set_sideset_pins(&c, dclk_pin);
+    sm_config_set_sideset_pins(&c, le_pin);
 
     // Shift output data right and automatically pull another 32-bit word
     // from the TX FIFO whenever the output shift register is exhausted.
@@ -277,6 +268,34 @@ static inline void icnd2153_pixel_stream_program_init(
 
     // Apply the configuration and start execution at the program entry point.
     pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+%}
+
+.program icnd2153_dclk
+.wrap_target
+    set pins, 1 [2]
+    set pins, 0 [2]
+.wrap
+
+% c-sdk {
+static inline void icnd2153_dclk_program_init(PIO pio, uint sm, uint offset, uint dclk_pin) {
+    // Configure the state machine from a known disabled state.
+    pio_sm_set_enabled(pio, sm, false);
+
+    pio_sm_config c = icnd2153_dclk_program_get_default_config(offset);
+
+    sm_config_set_set_pins(&c, dclk_pin, 1);
+
+    // sm_config_set_clkdiv(&c, ...);   // optional: 16 cycles/period = sys_clk/16
+    pio_sm_init(pio, sm, offset, &c);
+    pio_sm_set_consecutive_pindirs(pio, sm, dclk_pin, 1, true);
+    pio_gpio_init(pio, dclk_pin);
+}
+
+static inline void icnd2153_dclk_start(PIO pio, uint sm, uint clk_pin) {
+    pio_gpio_init(pio, clk_pin);
+    pio_sm_set_consecutive_pindirs(pio, sm, clk_pin, 1, true);
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
