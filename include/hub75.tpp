@@ -73,36 +73,26 @@ void Hub75Driver<Cfg>::create()
     register_instance();
 }
 
-static float icnd2153_clkdiv_(uint32_t sys_hz)
+template <Hub75Config Cfg>
+float Hub75Driver<Cfg>::icnd2153_clkdiv_(uint32_t sys_hz)
 {
-    /*
-        150 => 120 / clkdiv 12
-        250 => 160 / clkdiv 11.76
+    if constexpr (Cfg.panel.panel_chip ==  Hub75PanelChip::ICND2153)
+    {
 
-        y = mx + n
-        25 = 250 / 2 m + n
-        15 = 150 / 2 m + n
+        constexpr float m = -1.5f / 100.0f;
+        constexpr float n = 10.25f;
+        const float clkdiv = (sys_hz / 1e6f) * m + n;
 
-        10 = 50 m => m = 1/5
-        25 = 125 / 5 + n
-        n = 25 - 25 = 0
+        return clkdiv;
+    }
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363B)
+    {
+        constexpr float m = 1.25f / 100.0f;
+        constexpr float n = 8.125f;
+        const float clkdiv = (sys_hz / 1e6f) * m + n;
 
-        y = x / 5 
-
-
-        
-    */
-    // constexpr float m = 1.0f / 5.0f;
-    // constexpr float n = 0.0f;
-    // const float clkdiv = (sys_hz / 1e6f) * m + n;
-
-    printf("sys=%f clkdiv = %f\n", (sys_hz / 1e6f), ((sys_hz / 2e6f) /5.0f));
-    constexpr float m = -1.5f / 100.0f;
-    constexpr float n = 15.750f;
-    const float clkdiv = (sys_hz / 1e6f) * m + n;
-    printf("clkdiv = %f\n", clkdiv);
-
-    return clkdiv;
+        return clkdiv;
+    }
 }
 
 template <Hub75Config Cfg>

@@ -508,6 +508,8 @@ private:
     // --- panel/addressing constants -----------------------------------------------------------
 
     // ===>>> ICND2153 definitions
+    float icnd2153_clkdiv_(uint32_t sys_hz);
+
     // Clock pulses per transaction = chips per lane x 16 = the WHOLE chain, not one chain row
     static constexpr uint32_t CHAIN_WIDTH = Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols;
     static constexpr uint32_t PWM_FRAME_BYTES = 4 + CHAIN_WIDTH * SCAN_DEPTH * 16; // header + 16 channels x 16 bit
@@ -622,6 +624,7 @@ private:
     void setup_display_irq();
     void setup_bitplane_stream_irq();
 
+    
     void emit_frame_rate(); // activate for debug purpose only via ".frame_rate_debug = true"
 
     void handle_ctrl_irq() override;
