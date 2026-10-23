@@ -184,7 +184,7 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
 ; next 32-bit word when the output shift register becomes empty.
 
 .program icnd2153_pixel_stream
-.side_set 1                              ; LE only
+.side_set 1                       ; LE only
 .wrap_target
     wait 1 irq 2          side 0 ; DCLK keeps running elsewhere
 
@@ -203,9 +203,9 @@ transactions:
     mov y, isr            side 0
 normal_pulse:
     wait 0 pin 0          side 0
-    out pins, 6           side 0 ; data changes only while DCLK is low
+    out pins, 6           side 0  ; data changes only while DCLK is low
     out null, 2           side 0
-    wait 1 pin 0          side 0 ; chip samples on this rising edge
+    wait 1 pin 0          side 0  ; chip samples on this rising edge
     jmp y--, normal_pulse side 0
     wait 0 pin 0          side 0
     out pins, 6           side 1
@@ -276,7 +276,6 @@ static inline void icnd2153_dclk_program_init(PIO pio, uint sm, uint offset, uin
 
     sm_config_set_set_pins(&c, dclk_pin, 1);
 
-    // sm_config_set_clkdiv(&c, ...);   // optional: 16 cycles/period = sys_clk/16
     pio_sm_init(pio, sm, offset, &c);
     pio_sm_set_consecutive_pindirs(pio, sm, dclk_pin, 1, true);
     pio_gpio_init(pio, dclk_pin);
