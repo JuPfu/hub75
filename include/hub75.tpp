@@ -76,6 +76,9 @@ void Hub75Driver<Cfg>::create()
 static float icnd2153_clkdiv_(uint32_t sys_hz)
 {
     /*
+        150 => 120 / clkdiv 12
+        250 => 160 / clkdiv 11.76
+
         y = mx + n
         25 = 250 / 2 m + n
         15 = 150 / 2 m + n
@@ -95,7 +98,7 @@ static float icnd2153_clkdiv_(uint32_t sys_hz)
 
     printf("sys=%f clkdiv = %f\n", (sys_hz / 1e6f), ((sys_hz / 2e6f) /5.0f));
     constexpr float m = -1.5f / 100.0f;
-    constexpr float n = 12.25f;
+    constexpr float n = 15.750f;
     const float clkdiv = (sys_hz / 1e6f) * m + n;
     printf("clkdiv = %f\n", clkdiv);
 

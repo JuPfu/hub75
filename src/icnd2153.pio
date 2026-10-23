@@ -27,12 +27,12 @@
     ; STATUS is configured as TX FIFO level < 1:
     ;   FIFO empty    -> Y = 0xFFFFFFFF
     ;   FIFO nonempty -> Y = 0x00000000
-    mov y, status        side 0b0
+    mov y, status       side 0b0
 
     ; If the FIFO is empty, Y is nonzero and the jump is taken.
     ; Continue refreshing without waiting for a new frame token.
     ; JMP Y-- decrements Y even when the jump is not taken.
-    jmp y--, seed_row    side 0b0
+    jmp y--, seed_row   side 0b0
 
     ; --------------------------------------------------------------------------
     ; FRAME-START HANDSHAKE
@@ -41,15 +41,15 @@
 
     ; Consume the token. Its intended value is scan_rows - 1.
     ; The blocking pull waits if the FIFO becomes empty.
-    pull block           side 0b0
+    pull block          side 0b0
 
     ; Signal IRQ 2 to the pixel-stream state machine.
     ; That state machine is responsible for its VSYNC/frame-start action.
-    irq nowait 2         side 0b0
+    irq nowait 2        side 0b0
 
     ; Wait until the pixel-stream state machine signals IRQ 3.
     ; This handshake must be completed by the other state machine.
-    wait 1 irq 3         side 0b0
+    wait 1 irq 3        side 0b0
 
     ; --------------------------------------------------------------------------
     ; SEED ROW 0
@@ -57,40 +57,29 @@
     ; --------------------------------------------------------------------------
 seed_row:
     ; OSR contains scan_rows - 1.
-    mov x, osr           side 0b0
-
-    ; Apply the panel-specific decoder reset/row-0 sequence.
-    ; set pins, 0b111 [7]  side 0b0
-    ; set pins, 0b100 [7]  side 0b0
+    mov x, osr          side 0b0
 
     ; --------------------------------------------------------------------------
     ; ROW REFRESH LOOP
     ; --------------------------------------------------------------------------
 row_loop:
-    mov pins, !x           side 0b0   ; bitwise not only for panel height which match power of 2
-    ; ISR contains gclk_pulses_per_burst - 1.
-    ; Reload Y for every row so each row receives the same GCLK pulse count.
-
-    ;set y, 20            side 0
-settle:
-    ;jmp y--, settle      side 0 [7]  ; GCLK low gap, 30 x 8 cycles; tune
-
-    mov y, isr           side 0b0
-
-    ; Generate the GCLK burst.
-gclk_loop:
-    nop             [3]  side 0b1 ; GCLK high for one PIO cycle.
-    jmp y--, gclk_loop [3]  side 0b0 ; GCLK low for one PIO cycle.
 
     ; --------------------------------------------------------------------------
     ; ROW ADVANCE
     ; --------------------------------------------------------------------------
+    mov pins, !x        side 0b0   ; next row - bitwise not - only for panel height which matches power of 2
 
-    ; Apply the panel-specific row-advance sequence.
-    ; set pins, 0b011 [3]  side 0b0 ; RA=1, RB=0, RC=0.
-    ; set pins, 0b000 [7]  side 0b0 ; Return all row-select signals low.
+    ; ISR contains gclk_pulses_per_burst - 1.
+    ; Reload Y for every row so each row receives the same GCLK pulse count. 
 
-    jmp x--, row_loop    side 0b0
+    mov y, isr          side 0b0
+
+    ; Generate the GCLK burst.
+gclk_loop:
+    nop                 side 0b1 ; GCLK high for one PIO cycle.
+    jmp y--, gclk_loop  side 0b0 ; GCLK low for one PIO cycle.
+
+    jmp x--, row_loop   side 0b0
 .wrap
 
 % c-sdk {
@@ -197,32 +186,32 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
 .program icnd2153_pixel_stream
 .side_set 1                              ; LE only
 .wrap_target
-    wait 1 irq 2                  side 0 ; DCLK keeps running elsewhere
+    wait 1 irq 2          side 0 ; DCLK keeps running elsewhere
 
-    set x, 2                      side 0
-    ;wait 1 pin 0                  side 0
-    ;wait 0 pin 0                  side 0  ; DCLK just fell
+    set x, 2              side 0
+    wait 1 pin 0          side 0
+    wait 0 pin 0          side 0  ; DCLK just fell
 vsync_loop:
-    wait 1 pin 0                  side 1  ; counted rising edge
-    wait 0 pin 0                  side 1
-    jmp x--, vsync_loop           side 1
-    irq nowait 3                  side 0
+    wait 1 pin 0          side 1  ; counted rising edge
+    wait 0 pin 0          side 1
+    jmp x--, vsync_loop   side 1
+    irq nowait 3          side 0
 
-    out x, 16                     side 0
-    out isr, 16                   side 0
+    out x, 16             side 0
+    out isr, 16           side 0
 transactions:
-    mov y, isr                    side 0
+    mov y, isr            side 0
 normal_pulse:
-    wait 0 pin 0                  side 0
-    out pins, 6                   side 0 ; data changes only while DCLK is low
-    out null, 2                   side 0
-    wait 1 pin 0                  side 0 ; chip samples on this rising edge
-    jmp y--, normal_pulse         side 0
-    wait 0 pin 0                  side 0
-    out pins, 6                   side 1
-    out null, 2                   side 1
-    wait 1 pin 0                  side 1  ; rising edge with LE high, then hold LE ~3 cycles
-    jmp x--, transactions         side 0
+    wait 0 pin 0          side 0
+    out pins, 6           side 0 ; data changes only while DCLK is low
+    out null, 2           side 0
+    wait 1 pin 0          side 0 ; chip samples on this rising edge
+    jmp y--, normal_pulse side 0
+    wait 0 pin 0          side 0
+    out pins, 6           side 1
+    out null, 2           side 1
+    wait 1 pin 0          side 1  ; rising edge with LE high, then hold LE ~3 cycles
+    jmp x--, transactions side 0
 .wrap
 
 % c-sdk {
