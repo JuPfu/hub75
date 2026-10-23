@@ -75,9 +75,29 @@ void Hub75Driver<Cfg>::create()
 
 static float icnd2153_clkdiv_(uint32_t sys_hz)
 {
+    /*
+        y = mx + n
+        25 = 250 / 2 m + n
+        15 = 150 / 2 m + n
+
+        10 = 50 m => m = 1/5
+        25 = 125 / 5 + n
+        n = 25 - 25 = 0
+
+        y = x / 5 
+
+
+        
+    */
+    // constexpr float m = 1.0f / 5.0f;
+    // constexpr float n = 0.0f;
+    // const float clkdiv = (sys_hz / 1e6f) * m + n;
+
+    printf("sys=%f clkdiv = %f\n", (sys_hz / 1e6f), ((sys_hz / 2e6f) /5.0f));
     constexpr float m = -1.5f / 100.0f;
-    constexpr float n = 20.25f;
+    constexpr float n = 12.25f;
     const float clkdiv = (sys_hz / 1e6f) * m + n;
+    printf("clkdiv = %f\n", clkdiv);
 
     return clkdiv;
 }
@@ -869,11 +889,11 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
 
         // icnd2153 pixel stream can run between 20 MHz and 35 MHz
-        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
-        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
+        // float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
+        // pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
 
         // icnd2153 row can run between 20 MHz and 35 MHz
-        sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
+        float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
 }

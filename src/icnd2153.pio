@@ -221,7 +221,7 @@ normal_pulse:
     wait 0 pin 0                  side 0
     out pins, 6                   side 1
     out null, 2                   side 1
-    wait 1 pin 0               side 1  ; rising edge with LE high, then hold LE ~3 cycles
+    wait 1 pin 0                  side 1  ; rising edge with LE high, then hold LE ~3 cycles
     jmp x--, transactions         side 0
 .wrap
 
@@ -274,8 +274,8 @@ static inline void icnd2153_pixel_stream_program_init(
 
 .program icnd2153_dclk
 .wrap_target
-    set pins, 1 [2]
-    set pins, 0 [2]
+    set pins, 1
+    set pins, 0
 .wrap
 
 % c-sdk {

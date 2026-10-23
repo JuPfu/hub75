@@ -16,7 +16,7 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_width = 64,                // your matrix panel width
         .matrix_panel_height = 64,                // your matrix panel height
         .chain_rows = 1,                          // number of chain rows stacked vertically (rows)
-        .chain_cols = 1,                          // number of panels chained left-to-right in a single chain row (columns)
+        .chain_cols = 2,                          // number of panels chained left-to-right in a single chain row (columns)
         .panel_class = PanelClass::PWM,         // it's a HUB75 panel not a PWM panel
         .chain_mode = Hub75ChainMode::SERPENTINE, // default is serpentine (U-Turn with compensation for 180° rotation)
         .panel_kind = RowMapping::Standard,       // how to map the rgb888 buffer onto the panel
@@ -234,7 +234,7 @@ int main()
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
-    const float fps = 75.0f;
+    const float fps = 30.0f;
     const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel

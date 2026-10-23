@@ -168,7 +168,7 @@ static void fm6363b_setup(PIO pio, uint sm, uint offset)
     }
     prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
 
-    // prepare_register_dma(FM6363B_CFG3_VALUE, cfg3_buf, display_width);
+    prepare_register_dma(FM6363B_CFG3_VALUE, cfg3_buf, display_width);
 
     uint16_t cfg4_lane[6];
     for (uint32_t n = 0; n < 6; ++n) {
@@ -200,14 +200,14 @@ static void fm6363b_setup(PIO pio, uint sm, uint offset)
     icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG1, cfg1_buf);
 
     // Pre-active command
-    // icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
     // Write configuration register 2
-    // icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG2, cfg2_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG2, cfg2_buf);
 
     // Pre-active command
-    // icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
     // Write configuration register 3
-    // icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG3, cfg3_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG3, cfg3_buf);
 
     // Pre-active command
     icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
@@ -215,9 +215,9 @@ static void fm6363b_setup(PIO pio, uint sm, uint offset)
     icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG4, cfg4_buf);
 
     // Pre-active command
-    // icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
     // Write debug register
-    // icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_DBG, dbg_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_DBG, dbg_buf);
 }
 
 static void fm6363b_wait_idle(PIO pio, uint sm, uint offset)
