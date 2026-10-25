@@ -76,7 +76,7 @@ void Hub75Driver<Cfg>::create()
 template <Hub75Config Cfg>
 float Hub75Driver<Cfg>::icnd2153_clkdiv_(uint32_t sys_hz)
 {
-    if constexpr (Cfg.panel.panel_chip ==  Hub75PanelChip::ICND2153)
+    if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
     {
 
         constexpr float m = -1.5f / 100.0f;
@@ -128,38 +128,38 @@ void Hub75Driver<Cfg>::start()
         float sm_clockdiv = icnd2153_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.dclk_pio, pio_config_.sm_dclk, sm_clockdiv);
 
-        printf("start icnd2153_dclk_start\n");
         icnd2153_dclk_start(pio_config_.dclk_pio, pio_config_.sm_dclk, Cfg.pins.clk_pin);
 
-        printf("dclk: pio=%u sm=%u offs=%u abs_pc=%u funcsel=%d\n",
-               pio_get_index(pio_config_.dclk_pio), pio_config_.sm_dclk,
-               pio_config_.dclk_prog_offs,
-               pio_sm_get_pc(pio_config_.dclk_pio, pio_config_.sm_dclk),
-               (int)gpio_get_function(Cfg.pins.clk_pin));
-        uint32_t edges = 0;
-        bool last = gpio_get(Cfg.pins.clk_pin);
-        for (int i = 0; i < 2000; ++i)
-        {
-            bool v = gpio_get(Cfg.pins.clk_pin);
-            edges += (v != last);
-            last = v;
-        }
-        printf("clk edges seen: %u\n", edges);
+        // printf("dclk: pio=%u sm=%u offs=%u abs_pc=%u funcsel=%d\n",
+        //        pio_get_index(pio_config_.dclk_pio), pio_config_.sm_dclk,
+        //        pio_config_.dclk_prog_offs,
+        //        pio_sm_get_pc(pio_config_.dclk_pio, pio_config_.sm_dclk),
+        //        (int)gpio_get_function(Cfg.pins.clk_pin));
+        // uint32_t edges = 0;
+        // bool last = gpio_get(Cfg.pins.clk_pin);
+        // for (int i = 0; i < 2000; ++i)
+        // {
+        //     bool v = gpio_get(Cfg.pins.clk_pin);
+        //     edges += (v != last);
+        //     last = v;
+        // }
 
         icnd2153_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
-        printf("start icnd2153_row_start started\n");
 
-        sleep_ms(500);
-        printf("pc data=%u row=%u dclk=%u  dma_left=%u\n",
-               pio_sm_get_pc(pio_config_.data_pio, pio_config_.sm_data) - pio_config_.data_prog_offs,
-               pio_sm_get_pc(pio_config_.row_pio, pio_config_.sm_row) - pio_config_.row_prog_offs,
-               pio_sm_get_pc(pio_config_.dclk_pio, pio_config_.sm_dclk) - pio_config_.dclk_prog_offs,
-               dma_channel_hw_addr(pixel_chan_)->transfer_count);
+        // sleep_ms(500);
+
+        // printf("pc data=%u row=%u dclk=%u  dma_left=%u\n",
+        //        pio_sm_get_pc(pio_config_.data_pio, pio_config_.sm_data) - pio_config_.data_prog_offs,
+        //        pio_sm_get_pc(pio_config_.row_pio, pio_config_.sm_row) - pio_config_.row_prog_offs,
+        //        pio_sm_get_pc(pio_config_.dclk_pio, pio_config_.sm_dclk) - pio_config_.dclk_prog_offs,
+        //        dma_channel_hw_addr(pixel_chan_)->transfer_count);
     }
     else if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
+
+    printf("START FINISHED\n");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -170,9 +170,14 @@ template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::apply_brightness_()
 {
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
         build_row_cmd_buffer(brightness_fp_);
+    }
     else
-        build_pixel_stream(); // re-serialises the last rgb_buffer_ with the new scale
+    {
+       //printf("APPLY BRIGHTNESS\n");
+       build_pixel_stream(); // re-serialises the last rgb_buffer_ with the new scale
+    }
 }
 
 template <Hub75Config Cfg>
@@ -426,7 +431,8 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
         {
             dma_channel_acknowledge_irq0(pixel_chan_);
 
-            if (swap_frame_buffer_pending_)
+            // printf("ctrl_handler swap_frame_buffer_pending_=%b\n", swap_frame_buffer_pending_);
+            if (swap_frame_buffer_pending_ )
             {
                 uint8_t *new_front = frame_buffer_;
                 frame_buffer_ = (new_front == storage_.frame_buffer1_) ? storage_.frame_buffer2_ : storage_.frame_buffer1_;
@@ -802,7 +808,7 @@ void Hub75Driver<Cfg>::configure_pio()
     }
 }
 
-// Configures multiple DMA channels to transfer pixel data, dummy pixel data, and output
+// Configures multiple DMA channels to transfer pixel data and output
 // enable signal, to the PIO state machines controlling the HUB75 matrix. Also configures
 // the DMA channel which gets active when an output enable signal has finished.
 template <Hub75Config Cfg>
@@ -1191,6 +1197,7 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 
         __dmb();
         swap_frame_buffer_pending_ = true;
+        // printf("I build_pixel_stream swap_frame_buffer_pending_=%b\n", swap_frame_buffer_pending_);
     }
 }
 
