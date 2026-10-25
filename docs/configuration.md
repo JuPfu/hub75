@@ -85,8 +85,6 @@ Describes **the physical panel**: its size, how several panels are chained, how 
 | [`base_latch_ns`](#base_latch_ns--base_addr_ns) | `uint32_t` | `80` | Latch settle time in ns |
 | [`base_addr_ns`](#base_latch_ns--base_addr_ns) | `uint32_t` | `160` | Row-address settle time in ns |
 
-> 💡 **Don't want to set all of this by hand?** For common panels a [panel profile](#shortcut-panel-profiles) fills in size, address pin count, addressing type and R/B swap for you.
-
 ### `matrix_panel_width` / `matrix_panel_height`
 
 **Size of a single physical panel in pixels** - never the size of the whole chain.
@@ -213,7 +211,7 @@ Selects the **initialisation sequence** sent to the panel's driver IC before str
 |---|---|
 | `Hub75PanelChip::GENERIC` *(default)* | Plain driver chips that need no init |
 | `Hub75PanelChip::FM6126A` | Panels with FM6126A chips - they typically stay blank or garbled without the init sequence |
-| `Hub75PanelChip::RUL6024` | Panels such as *P3-64\*64-32S-V2.0* that carry a RUL6024 |
+| `Hub75PanelChip::RUL6024` | Panels that carry a RUL6024 |
 | `Hub75PanelChip::ICND2153` | PWM-class panels with ICND2153 chips |
 
 Check the chip markings on the back of the panel or the shop listing. If a panel stays dark although the wiring is right, `FM6126A` or `RUL6024` is a good first try.

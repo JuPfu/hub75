@@ -81,7 +81,7 @@ enum class Hub75PanelChip
     FM6126A,
     RUL6024,
     ICND2153,
-    FM6363B,
+    FM6363C,
 };
 
 enum class Hub75Rotation
@@ -507,8 +507,7 @@ private:
 
     // --- panel/addressing constants -----------------------------------------------------------
 
-    // ===>>> ICND2153 definitions
-    float icnd2153_clkdiv_(uint32_t sys_hz);
+    float pwm_clkdiv_(uint32_t sys_hz);
 
     // Clock pulses per transaction = chips per lane x 16 = the WHOLE chain, not one chain row
     static constexpr uint32_t CHAIN_WIDTH = Cfg.panel.matrix_panel_width * Cfg.panel.chain_rows * Cfg.panel.chain_cols;

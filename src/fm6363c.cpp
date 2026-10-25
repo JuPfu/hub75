@@ -1,19 +1,19 @@
 // =============================================================================
-// fm6363b.cpp
+// fm6363c.cpp
 //
-// One-time configuration sequence for a chain of FM6363B HUB75 driver ICs.
+// One-time configuration sequence for a chain of fm6363c HUB75 driver ICs.
 // This runs BEFORE normal HUB75 scanning starts: it borrows the PIO/GPIO
 // resources long enough to run PRE_ACT / EN_OP / VSYNC and shift the
 // WR_CFG1..WR_CFG4 / WR_DBG register values into every daisy-chained chip,
 // then hands the PIO block back so icnd2153_row / icnd2153_bitplane_stream
 // can drive the panel normally.
 //
-// Directly modelled on rul6024.cpp — see icnd2153.pio's fm6363b_write_register
+// Directly modelled on rul6024.cpp — see icnd2153.pio's fm6363c_write_register
 // program for the shared wire protocol (identical to rul6024_write_register:
 // a command is decoded purely by its trailing LE-high pulse count), and
-// fm6363b.h for the command-signature / register-value constants.
+// fm6363c.h for the command-signature / register-value constants.
 //
-// Sequence, per fm6363b_control_command.png:
+// Sequence, per fm6363c_control_command.png:
 //   1. PRE_ACT   (14 LE-high pulses, no payload)
 //   2. EN_OP     (12 LE-high pulses, no payload)
 //   3. VSYNC     ( 3 LE-high pulses, no payload)
@@ -31,7 +31,7 @@
 // for the trailing `latches` bits of the LAST chip's shift — which, since
 // every chip's data is identical, is the same waveform as raising LE for
 // the trailing `cmd_signature` bits of the whole `display_width`-bit image,
-// i.e. exactly what fm6363b_write_register() below already does.
+// i.e. exactly what fm6363c_write_register() below already does.
 // =============================================================================
 
 #include <cstdint>
@@ -43,9 +43,9 @@
 #include "hardware/pio.h"
 
 #include "hub75.hpp"
-#include "icnd2153.pio.h"
+#include "fm6363c.pio.h"
 
-#include "fm6363b.h"
+#include "fm6363c.h"
 
 // Cached panel/pin configuration for the chain currently being initialized.
 // NOTE: file-scope static -> not reentrant, same caveat as rul6024.cpp's cfg.
@@ -68,7 +68,7 @@ static std::vector<uint32_t> register_dma_buffer;
 
 // (Re)sizes register_dma_buffer for the given display_width. Must be called
 // before the first register_slot() use for that display_width —
-// FM6363B_setup() does this as its first step.
+// fm6363c_setup() does this as its first step.
 static void ensure_register_dma_buffer_capacity(uint32_t display_width)
 {
     assert(display_width > 0);
@@ -96,8 +96,7 @@ static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 // the chain currently receives the identical register value; there's no
 // support yet for giving different chips different WR_CFG*/WR_DBG values.
 // -----------------------------------------------------------------------------
-static constexpr uint8_t FM6363B_DATA_HIGH = 0x3f;
-static constexpr uint8_t FM6363B_DATA_LOW = 0x00;
+
 
 // Expands six 16-bit lane values into `display_width` words (one per CLK pulse), MSB first,
 // repeated once per chained chip. Bit n of every word goes to data lane n (data_base_pin + n).
@@ -122,12 +121,12 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 }
 
 // -----------------------------------------------------------------------------
-// FM6363B_setup()
+// fm6363c_setup()
 //
-// Runs the configuration sequence for one FM6363B chain — see the sequence
+// Runs the configuration sequence for one fm6363c chain — see the sequence
 // and open-questions notes at the top of this file.
 // -----------------------------------------------------------------------------
-static void fm6363b_setup(PIO pio, uint sm, uint offset)
+static void fm6363c_setup(PIO pio, uint sm, uint offset)
 {
     uint32_t display_width = cfg.panel.matrix_panel_width * cfg.panel.chain_cols * cfg.panel.chain_rows;
 
@@ -146,7 +145,7 @@ static void fm6363b_setup(PIO pio, uint sm, uint offset)
     uint16_t cfg1_lane[6];
     for (uint32_t n = 0; n < 6; ++n)
     {
-        cfg1_lane[n] = static_cast<uint16_t>(FM6363B_CFG1_BY_COLOUR[fm6363b_lane_colour(n)]);
+        cfg1_lane[n] = static_cast<uint16_t>(FM6363C_CFG1_BY_COLOUR[fm6363c_lane_colour(n)]);
         cfg1_lane[n] = (cfg1_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
     }
 
@@ -156,63 +155,63 @@ static void fm6363b_setup(PIO pio, uint sm, uint offset)
     uint16_t cfg2_lane[6];
     for (uint32_t n = 0; n < 6; ++n)
     {
-        cfg2_lane[n] = static_cast<uint16_t>(FM6363B_CFG2_BY_COLOUR[fm6363b_lane_colour(n)]);
+        cfg2_lane[n] = static_cast<uint16_t>(FM6363C_CFG2_BY_COLOUR[fm6363c_lane_colour(n)]);
         cfg2_lane[n] = (cfg2_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
     }
     prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
 
-    prepare_register_dma(FM6363B_CFG3_VALUE, cfg3_buf, display_width);
+    prepare_register_dma(FM6363C_CFG3_VALUE, cfg3_buf, display_width);
 
     uint16_t cfg4_lane[6];
     for (uint32_t n = 0; n < 6; ++n)
     {
-        cfg4_lane[n] = static_cast<uint16_t>(FM6363B_CFG4_BY_COLOUR[fm6363b_lane_colour(n)]);
+        cfg4_lane[n] = static_cast<uint16_t>(FM6363C_CFG4_BY_COLOUR[fm6363c_lane_colour(n)]);
         cfg4_lane[n] = (cfg4_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
     }
     prepare_register_dma_lanes(cfg4_lane, cfg2_buf, display_width);
 
-    prepare_register_dma(FM6363B_CFG5_VALUE, dbg_buf, display_width);
+    prepare_register_dma(FM6363C_CFG5_VALUE, dbg_buf, display_width);
 
     icnd2153_write_register_program_init(pio, sm, offset, cfg.pins.data_base_pin, cfg.pins.clk_pin);
 
     // ---- 1. Pre-activate, enable outputs, vertical sync — all no-payload ----
     // Pre-active command
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_PRE_ACT);
 
     // Enable all output channels
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_EN_OP);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_EN_OP);
 
     // Vertical sync. signal
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_VSYNC);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_VSYNC);
 
     // ---- 2. Configuration registers 1..4, then the debug register (REG5) ----
     // Pre-active command
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_PRE_ACT);
     // Write configuration register 1
-    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG1, cfg1_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363C_CMD_WR_CFG1, cfg1_buf);
 
     // Pre-active command
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_PRE_ACT);
     // Write configuration register 2
-    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG2, cfg2_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363C_CMD_WR_CFG2, cfg2_buf);
 
     // Pre-active command
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_PRE_ACT);
     // Write configuration register 3
-    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG3, cfg3_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363C_CMD_WR_CFG3, cfg3_buf);
 
     // Pre-active command
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_PRE_ACT);
     // Write configuration register 4
-    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_CFG4, cfg4_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363C_CMD_WR_CFG4, cfg4_buf);
 
     // Pre-active command
-    icnd2153_write_control_command(pio, sm, FM6363B_CMD_PRE_ACT);
+    icnd2153_write_control_command(pio, sm, FM6363C_CMD_PRE_ACT);
     // Write debug register
-    icnd2153_write_register(pio, sm, display_width, FM6363B_CMD_WR_DBG, dbg_buf);
+    icnd2153_write_register(pio, sm, display_width, FM6363C_CMD_WR_DBG, dbg_buf);
 }
 
-static void fm6363b_wait_idle(PIO pio, uint sm, uint offset)
+static void fm6363c_wait_idle(PIO pio, uint sm, uint offset)
 {
     while (!pio_sm_is_tx_fifo_empty(pio, sm))
         tight_loop_contents();
@@ -222,15 +221,15 @@ static void fm6363b_wait_idle(PIO pio, uint sm, uint offset)
 }
 
 // -----------------------------------------------------------------------------
-// fm6363b_initialize()
+// fm6363c_initialize()
 //
 // Entry point: claims a PIO state machine covering every GPIO this chain's
 // control-command sequence touches (6 data lanes + CLK/LE/PWCLK), runs
-// fm6363b_setup(), then releases the program and state machine so the
+// fm6363c_setup(), then releases the program and state machine so the
 // normal HUB75 row/bitplane PIO programs can use that PIO block. Structured
 // identically to rul6024_initialize().
 // -----------------------------------------------------------------------------
-void fm6363b_initialize(Hub75Config Cfg)
+void fm6363c_initialize(Hub75Config Cfg)
 {
     cfg = Cfg;
 
@@ -262,19 +261,19 @@ void fm6363b_initialize(Hub75Config Cfg)
             static_cast<uint>(max_gpio - min_gpio + 1),
             true))
     {
-        panic("Failed to claim PIO SM for fm6363b_write_register_program\n");
+        panic("Failed to claim PIO SM for fm6363c_write_register_program\n");
         return;
     }
 
     // setup initialisation sequence and emit it to panel
-    fm6363b_setup(pio, sm, offset);
+    fm6363c_setup(pio, sm, offset);
 
-    fm6363b_wait_idle(pio, sm, offset);
+    fm6363c_wait_idle(pio, sm, offset);
 
     // disable state machine
     pio_sm_set_enabled(pio, sm, false);
 
-    // remove fm6363b_write_register_program and unclaim state machine
+    // remove fm6363c_write_register_program and unclaim state machine
     pio_remove_program(pio, &icnd2153_write_register_program, offset);
     pio_sm_unclaim(pio, sm);
 }
