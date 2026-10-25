@@ -13,15 +13,15 @@
 // Matches a single generic 64x64 panel wired to GPIO 0-13.
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,                // your matrix panel width
+        .matrix_panel_width = 64,                 // your matrix panel width
         .matrix_panel_height = 64,                // your matrix panel height
-        .chain_rows = 1,                          // number of chain rows stacked vertically (rows)
-        .chain_cols = 2,                          // number of panels chained left-to-right in a single chain row (columns)
-        .panel_class = PanelClass::PWM,         // it's a HUB75 panel not a PWM panel
+        .chain_rows = 2,                          // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                          // number of panels chained left-to-right in a single chain row (columns)
+        .panel_class = PanelClass::PWM,           // it's a HUB75 panel not a PWM panel
         .chain_mode = Hub75ChainMode::SERPENTINE, // default is serpentine (U-Turn with compensation for 180° rotation)
         .panel_kind = RowMapping::Standard,       // how to map the rgb888 buffer onto the panel
         .address_type = RowAddressing::Binary,    // row addressing via address pins
-        .scan_mode = 32,                           // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
+        .scan_mode = 32,                          // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
         .panel_chip = Hub75PanelChip::FM6363B,    // mainly used for initialisation sequence but also for panel specific characteristics
         .inverted_stb = false,                    // inverted pin signal for strobe (latch) pin
         .sm_clockdiv_factor = 1.0f,               // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
@@ -162,6 +162,8 @@ void core1_entry()
     driver.create();
     driver.start();
 
+    multicore_fifo_push_blocking(1); // tell core 0 the driver is ready
+
     // KEEP CORE 1 ALIVE — without this, Core 1's NVIC is torn down and DMA_IRQ_1 stops firing
     //
     // Add your additional tasks for core1 here
@@ -185,6 +187,7 @@ void initialize()
         // Run hub75 driver on core1
         multicore_reset_core1();             // Reset core 1
         multicore_launch_core1(core1_entry); // Launch core 1 entry function - the Hub75 driver is doing its job there
+        multicore_fifo_pop_blocking();       // wait until the driver is running
     }
     else
     {
@@ -234,14 +237,14 @@ int main()
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
-    const float fps = 40.0f;
+    const float fps = 30.0f;
     const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel
-    driver.setBasisBrightness(5);
+    // driver.setBasisBrightness(2);
 
     // set full brightness of panel
-    float intensity = 0.45f;
+    float intensity = 0.35f;
     driver.setIntensity(intensity);
 
     float step = -0.005f;
@@ -295,7 +298,7 @@ int main()
             greyScaleStripes.drawStripes();
             driver.update(&greyScaleStripes);
         }
-        else if (demo_index == 8)
+        // else if (demo_index == 8)
         // {
         //     rectangle.draw();
         //     driver.update(&rectangle);
@@ -306,7 +309,7 @@ int main()
 
         // Update intensity for next loop
         intensity += step;
-        if (intensity >= 1.0f)
+        if (intensity >= 0.35f)
         {
             step = -step;
         }
