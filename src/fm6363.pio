@@ -4,7 +4,7 @@
 ; PROGRAM 1: ROW & GCLK (PWM CLOCK) CONTROLLER
 ;
 ; Responsibilities:
-;   - Generate GCLK pulses for the FM6363C panel.
+;   - Generate GCLK pulses for the FM6363 panel.
 ;   - Advance the row-selection signals between GCLK bursts.
 ;   - Refresh continuously while no frame-start token is pending.
 ;   - Synchronise with the pixel-stream state machine at frame boundaries.
@@ -20,7 +20,7 @@
 ;   TX FIFO nonempty -> consume frame-start token and synchronise with the pixel-stream state machine.
 ; ==============================================================================
 
-.program fm6363c_row
+.program fm6363_row
 .side_set 1 ; Side-set pin drives GCLK.
 
 .wrap_target
@@ -85,13 +85,13 @@ gclk_loop:
 % c-sdk {
 #include "hardware/clocks.h"
 
-static inline void fm6363c_row_program_init(
+static inline void fm6363_row_program_init(
     PIO pio,
     uint sm,
     uint offset,
     uint rowsel_base_pin,          // 
     uint rowsel_n_pins,
-    uint gclk_pin,                 // HUB75 OE pin (FM6363C GCLK)
+    uint gclk_pin,                 // HUB75 OE pin (FM6363 GCLK)
     uint32_t num_scan_rows,        // e.g. 32 for 1/32 scan
     uint32_t gclk_pulses_per_burst // e.g. 138
 )
@@ -110,7 +110,7 @@ static inline void fm6363c_row_program_init(
     }
     pio_gpio_init(pio, gclk_pin);
 
-    pio_sm_config c = fm6363c_row_program_get_default_config(offset);
+    pio_sm_config c = fm6363_row_program_get_default_config(offset);
 
     // Map SET instructions to the three row-select GPIOs.
     // sm_config_set_set_pins(&c, rowsel_base_pin, 3);
@@ -146,13 +146,13 @@ static inline void fm6363c_row_program_init(
     pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
 }
 
-static inline void fm6363c_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
+static inline void fm6363_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
 {
     pio_sm_put_blocking(pio, sm, num_scan_rows - 1);       // first token: VSYNC + frame start
     pio_sm_set_enabled(pio, sm, true);
 }
 
-static inline void fm6363c_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_rows)
+static inline void fm6363_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_rows)
 {
     if (pio_sm_is_tx_fifo_empty(pio, sm))                  // never block in the IRQ, never stack tokens
         pio_sm_put(pio, sm, num_scan_rows - 1);
@@ -171,7 +171,7 @@ static inline void fm6363c_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_
 ;   Bit 0: DCLK (data clock)
 ;   Bit 1: LE / LAT (latch enable)
 ;
-; Synchronization with fm6363c_row:
+; Synchronization with fm6363_row:
 ;   IRQ 2: Row SM signals that the pixel stream may start.
 ;   IRQ 3: Pixel SM acknowledges completion of the VSYNC sequence.
 ;
@@ -183,7 +183,7 @@ static inline void fm6363c_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_
 ; Each OUT instruction consumes bits from the DMA stream; autopull fetches the
 ; next 32-bit word when the output shift register becomes empty.
 
-.program fm6363c_pixel_stream
+.program fm6363_pixel_stream
 .side_set 1                       ; LE only
 .wrap_target
     wait 1 irq 2          side 0 ; DCLK keeps running elsewhere
@@ -215,7 +215,7 @@ normal_pulse:
 .wrap
 
 % c-sdk {
-static inline void fm6363c_pixel_stream_program_init(
+static inline void fm6363_pixel_stream_program_init(
     PIO pio,
     uint sm,
     uint offset,
@@ -242,7 +242,7 @@ static inline void fm6363c_pixel_stream_program_init(
     pio_gpio_init(pio, le_pin); // LE / LAT
 
     // Configure the RGB output bus and the two side-set pins.
-    pio_sm_config c = fm6363c_pixel_stream_program_get_default_config(offset);
+    pio_sm_config c = fm6363_pixel_stream_program_get_default_config(offset);
     sm_config_set_in_pins(&c, clk_pin);
     sm_config_set_out_pins(&c, rgb_base_pin, 6);
     sm_config_set_sideset_pins(&c, le_pin);
@@ -261,18 +261,18 @@ static inline void fm6363c_pixel_stream_program_init(
 }
 %}
 
-.program fm6363c_dclk
+.program fm6363_dclk
 .wrap_target
     set pins, 1
     set pins, 0
 .wrap
 
 % c-sdk {
-static inline void fm6363c_dclk_program_init(PIO pio, uint sm, uint offset, uint dclk_pin) {
+static inline void fm6363_dclk_program_init(PIO pio, uint sm, uint offset, uint dclk_pin) {
     // Configure the state machine from a known disabled state.
     pio_sm_set_enabled(pio, sm, false);
 
-    pio_sm_config c = fm6363c_dclk_program_get_default_config(offset);
+    pio_sm_config c = fm6363_dclk_program_get_default_config(offset);
 
     sm_config_set_set_pins(&c, dclk_pin, 1);
 
@@ -281,7 +281,7 @@ static inline void fm6363c_dclk_program_init(PIO pio, uint sm, uint offset, uint
     pio_gpio_init(pio, dclk_pin);
 }
 
-static inline void fm6363c_dclk_start(PIO pio, uint sm, uint clk_pin) {
+static inline void fm6363_dclk_start(PIO pio, uint sm, uint clk_pin) {
     pio_gpio_init(pio, clk_pin);
     pio_sm_set_consecutive_pindirs(pio, sm, clk_pin, 1, true);
     pio_sm_set_enabled(pio, sm, true);
@@ -289,21 +289,21 @@ static inline void fm6363c_dclk_start(PIO pio, uint sm, uint clk_pin) {
 %}
 
 ; =============================================================================
-; PROGRAM: fm6363c_write_register
+; PROGRAM: fm6363_write_register
 ; =============================================================================
 ; One-time control-command / configuration-register writer for a chain of
-; FM6363C driver ICs. Runs BEFORE normal row scanning starts: it
+; FM6363 driver ICs. Runs BEFORE normal row scanning starts: it
 ; borrows the PIO/GPIO resources long enough to shift PRE_ACT / EN_OP / VSYNC
 ; and the WR_CFG1..WR_CFG4 / WR_DBG register values into every daisy-chained
-; chip, then hands the PIO block back so fm6363c_row
+; chip, then hands the PIO block back so fm6363_row
 ; can drive the panel normally. Directly modelled on rul6024_write_register
 ; - the wire protocol is identical: a command is decoded purely by how
 ; many trailing DCLK rising edges occur while LE (LAT) is held high, per the
-; "Control Command" table in fm6363c_control_command.png. See fm6363c.h for
-; the command-signature constants and fm6363c.cpp for the C++ driver.
+; "Control Command" table in fm6363_control_command.png. See fm6363.h for
+; the command-signature constants and fm6363.cpp for the C++ driver.
 ;
 ; set pin group (clock_base_pin, 3 pins) - SAME ordering as
-; fm6363c_pixel_stream_program_init() above, so both programs can be
+; fm6363_pixel_stream_program_init() above, so both programs can be
 ; pointed at the same three GPIOs:
 ;   bit0 (clock_base_pin + 0) = CLK
 ;   bit1 (clock_base_pin + 1) = LE     (a.k.a. LAT)
@@ -315,10 +315,10 @@ static inline void fm6363c_dclk_start(PIO pio, uint sm, uint clk_pin) {
 ;
 ; "out pins, 6" targets 6 consecutive data pins (rgb_base_pin..+5), one bit
 ; per RGB sub-pixel lane, driven identically for every chip in the chain (see
-; prepare_register_dma() in fm6363c.cpp - the same 16-bit register value is
+; prepare_register_dma() in fm6363.cpp - the same 16-bit register value is
 ; shifted once per daisy-chained chip, exactly as for RUL6024).
 ;
-; Wire protocol, per call to fm6363c_write_register() (C-SDK helper below) -
+; Wire protocol, per call to fm6363_write_register() (C-SDK helper below) -
 ; identical structure to rul6024_write_register():
 ;
 ;   Phase 1 (once): receive `data_length = display_width - cmd_signature`,
@@ -332,12 +332,12 @@ static inline void fm6363c_dclk_start(PIO pio, uint sm, uint clk_pin) {
 ;     `cmd_signature` LE-high pulses is what the chip decodes as the command
 ;     once CLK stops toggling (1 = DATA_LATCH, 2 = WR_DBG, 3 = VSYNC,
 ;     4 = WR_CFG1, 6 = WR_CFG2, 8 = WR_CFG3, 10 = WR_CFG4, 12 = EN_OP,
-;     13 = DIS_OP, 14 = PRE_ACT - see fm6363c.h).
+;     13 = DIS_OP, 14 = PRE_ACT - see fm6363.h).
 ;
 ; Timing: sm_config_set_clkdiv(&c, 10.0f) below matches rul6024_write_register's
 ; divider. If you ever change sys_clk or clkdiv, recompute the resulting CLK
-; high/low time and re-check it against the fm6363c's timing spec.
-.program fm6363c_write_register
+; high/low time and re-check it against the fm6363's timing spec.
+.program fm6363_write_register
 .wrap_target
     ; ---- Phase 1: latch in the data/command split point for this write ----
     pull block
@@ -366,18 +366,18 @@ le_data_loop:
 
 % c-sdk {
     // Configures GPIO directions/muxing and the state machine for
-    // fm6363c_write_register. Call once per chain before any
-    // fm6363c_write_register() / fm6363c_write_control_command() calls;
+    // fm6363_write_register. Call once per chain before any
+    // fm6363_write_register() / fm6363_write_control_command() calls;
     // the SM stays enabled and reusable for repeated writes (PRE_ACT, EN_OP,
     // VSYNC, WR_CFG1..4, WR_DBG, DATA_LATCH, ...) until the caller tears it
-    // down (see fm6363c_initialize() in fm6363c.cpp).
+    // down (see fm6363_initialize() in fm6363.cpp).
     //
     //   rgb_base_pin    -> first of 6 consecutive RGB data lane pins
     //   clock_base_pin  -> CLK; clock_base_pin+1 and +2 must be LE and
     //                      PWCLK/OEN respectively (three *consecutive* GPIOs,
-    //                      same grouping as fm6363c_pixel_stream_program_init)
+    //                      same grouping as fm6363_pixel_stream_program_init)
     //
-    static inline void fm6363c_write_register_program_init(PIO pio, uint sm, uint offset, uint rgb_base_pin, uint clock_base_pin)
+    static inline void fm6363_write_register_program_init(PIO pio, uint sm, uint offset, uint rgb_base_pin, uint clock_base_pin)
     {
         pio_sm_set_enabled(pio, sm, false);
         pio_sm_clear_fifos(pio, sm);
@@ -390,7 +390,7 @@ le_data_loop:
         pio_gpio_init(pio, clock_base_pin + 1); // LE (LAT)
         pio_gpio_init(pio, clock_base_pin + 2); // PWCLK / OEN
 
-        pio_sm_config c = fm6363c_write_register_program_get_default_config(offset);
+        pio_sm_config c = fm6363_write_register_program_get_default_config(offset);
         sm_config_set_out_pins(&c, rgb_base_pin, 6);
         sm_config_set_set_pins(&c, clock_base_pin, 3);
         sm_config_set_out_shift(&c, true, false, 32); // shift_right=true, autopull off (all pulls explicit)
@@ -407,13 +407,13 @@ le_data_loop:
     // the chain (one 6-bit word per CLK pulse) and asserts LE for the trailing
     // `cmd_signature` of those pulses, so the chain latches the shifted-in
     // value as the command identified by cmd_signature (e.g.
-    // FM6363C_CMD_WR_CFG1 = 4, FM6363C_CMD_WR_CFG2 = 6, ... — see
-    // fm6363c.h).
+    // FM6363_CMD_WR_CFG1 = 4, FM6363_CMD_WR_CFG2 = 6, ... — see
+    // fm6363.h).
     //
     // dma_words must hold exactly `display_width` entries, pre-expanded by
-    // prepare_register_dma() in fm6363c.cpp. This function only streams
+    // prepare_register_dma() in fm6363.cpp. This function only streams
     // them to the PIO FIFO, it does no encoding of its own.
-    static inline void fm6363c_write_register(PIO pio, uint sm, uint32_t display_width, uint32_t cmd_signature, const uint32_t *dma_words)
+    static inline void fm6363_write_register(PIO pio, uint sm, uint32_t display_width, uint32_t cmd_signature, const uint32_t *dma_words)
     {
         uint16_t data_length = display_width - cmd_signature; // LE-low portion (Phase 2)
 
@@ -437,15 +437,15 @@ le_data_loop:
     // doesn't matter (mirrors rul6024_data_latch() / rul6024_reset_oen() in
     // hub75.pio, which use the same idiom for RUL6024's no-payload commands).
     //
-    // fm6363c_write_register()'s "jmp x--" loop can't do a genuine
+    // fm6363_write_register()'s "jmp x--" loop can't do a genuine
     // zero-iteration pass (x = 0 still runs the loop body once before the
     // exit test), so the shortest legal transaction is 1 LE-low dummy pulse
     // followed by the `cmd_signature` LE-high pulses -> display_width =
     // cmd_signature + 1. The dummy data is all zero since the DATA pins are
     // don't-care for these commands.
-    static inline void fm6363c_write_control_command(PIO pio, uint sm, uint32_t cmd_signature)
+    static inline void fm6363_write_control_command(PIO pio, uint sm, uint32_t cmd_signature)
     {
         static const uint32_t dummy[15] = {0}; // sized for the longest command (PRE_ACT, 14 -> display_width 15)
-        fm6363c_write_register(pio, sm, /*display_width=*/cmd_signature + 1, cmd_signature, dummy);
+        fm6363_write_register(pio, sm, /*display_width=*/cmd_signature + 1, cmd_signature, dummy);
     }
 %}

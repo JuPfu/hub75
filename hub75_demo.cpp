@@ -22,7 +22,7 @@ constexpr Hub75Config panel_cfg{
         .panel_kind = RowMapping::Standard,       // how to map the rgb888 buffer onto the panel
         .address_type = RowAddressing::Binary,    // row addressing via address pins
         .scan_mode = 32,                          // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
-        .panel_chip = Hub75PanelChip::FM6363C,    // mainly used for initialisation sequence but also for panel specific characteristics
+        .panel_chip = Hub75PanelChip::FM6363,     // mainly used for initialisation sequence but also for panel specific characteristics
         .inverted_stb = false,                    // inverted pin signal for strobe (latch) pin
         .sm_clockdiv_factor = 1.0f,               // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                     // wait time in nano-seconds to stabilise latch

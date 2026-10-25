@@ -12,10 +12,10 @@
 
 #include "hub75.pio.h"
 #include "icnd2153.pio.h"
-#include "fm6363c.pio.h"
+#include "fm6363.pio.h"
 
 #include "icnd2153.h"
-#include "fm6363c.h"
+#include "fm6363.h"
 #include "rul6024.h"
 #include "fm6126a.h"
 
@@ -56,8 +56,8 @@ void Hub75Driver<Cfg>::create()
         rul6024_initialize(Cfg);
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         icnd2153_initialize(Cfg);
-    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363C)
-        fm6363c_initialize(Cfg);
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+        fm6363_initialize(Cfg);
 
     configure_pio();
     setup_dma_transfers();
@@ -86,7 +86,7 @@ float Hub75Driver<Cfg>::pwm_clkdiv_(uint32_t sys_hz)
 
         return clkdiv;
     }
-    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363C)
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
     {
         constexpr float m = 1.25f / 100.0f;
         constexpr float n = 8.125f;
@@ -135,8 +135,8 @@ void Hub75Driver<Cfg>::start()
         }
         else
         {
-            fm6363c_dclk_start(pio_config_.dclk_pio, pio_config_.sm_dclk, Cfg.pins.clk_pin);
-            fm6363c_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
+            fm6363_dclk_start(pio_config_.dclk_pio, pio_config_.sm_dclk, Cfg.pins.clk_pin);
+            fm6363_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
         }
     }
     else if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
@@ -426,7 +426,7 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
             }
             else
             {
-                fm6363c_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
+                fm6363_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
             }
 
             if constexpr (Cfg.frame_rate_debug)
@@ -747,7 +747,7 @@ void Hub75Driver<Cfg>::configure_pio()
             {
                 stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                     &fm6363c_pixel_stream_program,
+                                                     &fm6363_pixel_stream_program,
                                                      &pio_config_.data_pio,
                                                      &pio_config_.sm_data,
                                                      &pio_config_.data_prog_offs,
@@ -779,7 +779,7 @@ void Hub75Driver<Cfg>::configure_pio()
                 {
                     row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
                                                 { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &fm6363c_row_program,
+                                                      &fm6363_row_program,
                                                       &pio_config_.row_pio,
                                                       &pio_config_.sm_row,
                                                       &pio_config_.row_prog_offs,
@@ -790,10 +790,10 @@ void Hub75Driver<Cfg>::configure_pio()
                 if (row_ok)
                 {
 
-                    if (Cfg.panel.panel_chip == Hub75PanelChip::FM6363C)
+                    if (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
                     {
                         bool clk_ok = pio_claim_free_sm_and_add_program_for_gpio_range(
-                            &fm6363c_dclk_program,
+                            &fm6363_dclk_program,
                             &pio_config_.dclk_pio, &pio_config_.sm_dclk, &pio_config_.dclk_prog_offs,
                             Cfg.pins.clk_pin, 1, true);
                     }
@@ -816,7 +816,7 @@ void Hub75Driver<Cfg>::configure_pio()
             }
             else
             {
-                panic("Failed to find a PIO block with room for fm6363c_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
+                panic("Failed to find a PIO block with room for fm6363_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
             }
         }
 
@@ -825,11 +825,11 @@ void Hub75Driver<Cfg>::configure_pio()
             icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
             icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
         }
-        else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363C)
+        else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
-            fm6363c_dclk_program_init(pio_config_.dclk_pio, pio_config_.sm_dclk, pio_config_.dclk_prog_offs, Cfg.pins.clk_pin);
-            fm6363c_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
-            fm6363c_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, FM6363C_GCLK_RISES);
+            fm6363_dclk_program_init(pio_config_.dclk_pio, pio_config_.sm_dclk, pio_config_.dclk_prog_offs, Cfg.pins.clk_pin);
+            fm6363_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
+            fm6363_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, FM6363_GCLK_RISES);
         }
     }
 }
@@ -897,7 +897,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
     }
     else
     {
-        // icnd2153_pixel_stream or fm6363c_pixel_stream receives pixel data fed by DMA
+        // icnd2153_pixel_stream or fm6363_pixel_stream receives pixel data fed by DMA
         pixel_chan_ = dma_claim_unused_channel(true);
 
         // The pixel_chan iterates over all transactions in one big swoop.
@@ -913,7 +913,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
 
-        // icnd2153 or fm6363c row can run between 20 MHz and 35 MHz
+        // icnd2153 or fm6363 row can run between 20 MHz and 35 MHz
         float sm_clockdiv = pwm_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
