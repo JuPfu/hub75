@@ -245,9 +245,9 @@ int main()
 
     // set full brightness of panel
     float intensity = 0.35f;
-    driver.setIntensity(intensity);
+    // driver.setIntensity(intensity);
 
-    float step = -0.005f;
+    float step = -0.001f;
 
     absolute_time_t next_frame = make_timeout_time_ms((uint32_t)frame_delay_ms);
 
@@ -305,7 +305,7 @@ int main()
         // }
 
         // matrix panel brightness will vary when you uncomment the following api call
-        // driver.setIntensity(intensity);
+        driver.setIntensity(0.35, false);
 
         // Update intensity for next loop
         intensity += step;

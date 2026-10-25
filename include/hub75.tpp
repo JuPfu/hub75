@@ -175,7 +175,6 @@ void Hub75Driver<Cfg>::apply_brightness_()
     }
     else
     {
-       //printf("APPLY BRIGHTNESS\n");
        build_pixel_stream(); // re-serialises the last rgb_buffer_ with the new scale
     }
 }
@@ -183,14 +182,10 @@ void Hub75Driver<Cfg>::apply_brightness_()
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::setBasisBrightness(uint8_t factor)
 {
-    if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
-    {
-        (void)factor;
-    }
-    else
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         basis_factor_ = (factor > 0u) ? factor : 1u;
-        apply_brightness_();
+        // apply_brightness_();
     }
 }
 
@@ -216,8 +211,6 @@ void Hub75Driver<Cfg>::setIntensity(float intensity, bool linear_brightness_cont
         }
         brightness_fp_ = (uint32_t)(y * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
     }
-
-    apply_brightness_();
 }
 
 template <Hub75Config Cfg>
