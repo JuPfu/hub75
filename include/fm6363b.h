@@ -36,30 +36,23 @@ static constexpr uint32_t FM6363B_CMD_PRE_ACT = 14;   // pre-active command     
 // ---- Configuration register values -----------------------------------------
 static constexpr uint16_t FM6363B_CFG1_VALUE = 0x3FF0;
 static constexpr uint16_t FM6363B_CFG2_VALUE = 0xF39D;
-static constexpr uint16_t FM6363B_CFG3_VALUE = 0x60b6;
+static constexpr uint16_t FM6363B_CFG3_VALUE = 0x3076; // 0x60b6;  0011 00 00 0111 0110  0x3076
 static constexpr uint16_t FM6363B_CFG4_VALUE = 0x5A00;
-static constexpr uint16_t FM6363B_CFG5_VALUE = 0x7E08;
+static constexpr uint16_t FM6363B_CFG5_VALUE = 0x4f1D; // 0x7E08;  0100 1111 0001 1101  0x4f1D
 
 // ---- REG2 per LED colour --------------------------------------------------
 // From the register-map examples: only b14..b10 (ghost-eliminate level) differs per colour.
 
 // 0x0fb0, 0x0fb0, 0x60b6, 0x0fb0, 0x7e08 
+// {0x7e08, 0x0fb0, 0xe6fc, 0x60b6,  0x5a70};
 
-static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x0fb0 /*R*/, 0x0fb0 /*G*/, 0x0fb0 /*B*/};
-static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0x0fb0 /*R*/, 0x0fb0 /*G*/, 0x0fb0 /*B*/};
-static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0x0fb0 /*R*/, 0x0fb0 /*G*/, 0x0fb0 /*B*/};
+// static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x3eAB /*R*/, 0x3eAB /*G*/, 0x3eAB /*B*/}; //0x3eab
+// static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0xFC20, 0xF020, 0xDC20}; //  1101 1100 0010 0000  0xFC20
+// static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0xEf05 /*R*/, 0xEf05 /*G*/, 0xEf05 /*B*/}; // 0x6f05  0110 1111 0000  0101
 
-// static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x3FF0 /*R*/, 0x3FB0 /*G*/, 0x3FB0 /*B*/};
-// static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0xF39D /*R*/, 0xF39D /*G*/, 0xF39D /*B*/};
-// static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0x5A70 /*R*/, 0x5A70 /*G*/, 0x5A70 /*B*/};
-
-static constexpr uint16_t FM6363B_CFG1_EXTRA = 0x8000;
-static constexpr uint16_t FM6363B_CFG2_EXTRA = 0x8000;
-static constexpr uint16_t FM6363B_CFG4_EXTRA = 0x8000;
-
-static constexpr bool FM6363B_CFG1_PER_COLOUR = true;
-static constexpr bool FM6363B_CFG2_PER_COLOUR = true;
-static constexpr bool FM6363B_CFG4_PER_COLOUR = true;
+static constexpr uint16_t FM6363B_CFG1_BY_COLOUR[3] = {0x3FF0 /*R*/, 0x3FB0 /*G*/, 0x3FB0 /*B*/};
+static constexpr uint16_t FM6363B_CFG2_BY_COLOUR[3] = {0xF39D /*R*/, 0xF39D /*G*/, 0xF39D /*B*/};
+static constexpr uint16_t FM6363B_CFG4_BY_COLOUR[3] = {0xDA70 /*R*/, 0xDA70 /*G*/, 0xDA70 /*B*/}; //0xf0b6
 
 static constexpr uint8_t FM6363B_LANE_OF[6] = {0, 1, 2, 3, 4, 5};
 
