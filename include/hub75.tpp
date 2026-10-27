@@ -822,8 +822,8 @@ void Hub75Driver<Cfg>::configure_pio()
 
         if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         {
-            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
-            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
         }
         else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
