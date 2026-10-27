@@ -156,7 +156,6 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
     for (uint32_t n = 0; n < 6; ++n)
     {
         cfg2_lane[n] = static_cast<uint16_t>(FM6363_CFG2_BY_COLOUR[fm6363_lane_colour(n)]);
-        cfg2_lane[n] = (cfg2_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
     }
     prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
 
@@ -166,7 +165,6 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
     for (uint32_t n = 0; n < 6; ++n)
     {
         cfg4_lane[n] = static_cast<uint16_t>(FM6363_CFG4_BY_COLOUR[fm6363_lane_colour(n)]);
-        cfg4_lane[n] = (cfg4_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
     }
     prepare_register_dma_lanes(cfg4_lane, cfg2_buf, display_width);
 

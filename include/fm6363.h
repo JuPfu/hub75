@@ -6,7 +6,7 @@
 // =============================================================================
 // fm6363.h
 //
-// Command / configuration-register definitions for the FM6363 HUB75 driver IC family, 
+// Command / configuration-register definitions for the FM6363 HUB75 driver IC family,
 // taken from the FM6363 Programming Guide.
 //
 // Mirrors the role of rul6024.h: every command below is identified purely by
@@ -35,16 +35,16 @@ static constexpr uint32_t FM6363_CMD_PRE_ACT = 14;   // pre-active command      
 // ---- Configuration register values -----------------------------------------
 static constexpr uint16_t FM6363_CFG1_VALUE = 0x3FF0;
 static constexpr uint16_t FM6363_CFG2_VALUE = 0xF39D;
-static constexpr uint16_t FM6363_CFG3_VALUE = 0x3076; // 0x60b6;  0011 00 00 0111 0110  0x3076
+static constexpr uint16_t FM6363_CFG3_VALUE = 0x3076;
 static constexpr uint16_t FM6363_CFG4_VALUE = 0x5A00;
-static constexpr uint16_t FM6363_CFG5_VALUE = 0x4C1D; // 0x7E08;  0100 1100 0001 1101  0x4f1D
+static constexpr uint16_t FM6363_CFG5_VALUE = 0x4C1D;
 
 // ---- REG2 per LED colour --------------------------------------------------
 // From the register-map examples: only b14..b10 (ghost-eliminate level) differs per colour.
 
 static constexpr uint16_t FM6363_CFG1_BY_COLOUR[3] = {0xBF5B /*R*/, 0xBF5B /*G*/, 0xBF5B /*B*/};
 static constexpr uint16_t FM6363_CFG2_BY_COLOUR[3] = {0xFC41 /*R*/, 0xF021 /*G*/, 0xD021 /*B*/};
-static constexpr uint16_t FM6363_CFG4_BY_COLOUR[3] = {0xDF04 /*R*/, 0xDF04 /*G*/, 0xDF04 /*B*/};
+static constexpr uint16_t FM6363_CFG4_BY_COLOUR[3] = {0xFF04 /*R*/, 0xFF04 /*G*/, 0xFF04 /*B*/};
 
 static constexpr uint8_t FM6363_LANE_OF[6] = {0, 1, 2, 3, 4, 5};
 
