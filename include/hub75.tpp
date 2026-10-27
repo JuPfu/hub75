@@ -143,8 +143,6 @@ void Hub75Driver<Cfg>::start()
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
-
-    printf("START FINISHED\n");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -170,7 +168,6 @@ void Hub75Driver<Cfg>::setBasisBrightness(uint8_t factor)
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         basis_factor_ = (factor > 0u) ? factor : 1u;
-        // apply_brightness_();
     }
 }
 
@@ -409,7 +406,6 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
         {
             dma_channel_acknowledge_irq0(pixel_chan_);
 
-            // printf("ctrl_handler swap_frame_buffer_pending_=%b\n", swap_frame_buffer_pending_);
             if (swap_frame_buffer_pending_)
             {
                 uint8_t *new_front = frame_buffer_;
@@ -418,7 +414,6 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
                 swap_frame_buffer_pending_ = false;
             }
             __dmb();
-
             dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true); // restart: count is reloaded
             if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
             {
@@ -822,8 +817,8 @@ void Hub75Driver<Cfg>::configure_pio()
 
         if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         {
-            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
             icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
         }
         else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
@@ -915,6 +910,8 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
         // icnd2153 or fm6363 row can run between 20 MHz and 35 MHz
         float sm_clockdiv = pwm_clkdiv_(sys_clk_hz);
+        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
+        // icnd2153 row can run between 20 MHz and 35 MHz
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
     }
 }
@@ -1219,7 +1216,6 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
 
         __dmb();
         swap_frame_buffer_pending_ = true;
-        // printf("I build_pixel_stream swap_frame_buffer_pending_=%b\n", swap_frame_buffer_pending_);
     }
 }
 
