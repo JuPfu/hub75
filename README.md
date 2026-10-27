@@ -31,7 +31,7 @@ See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-bas
 
 #### Video Sequence of ICND2153 Panel in Action
 
-Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: By iHeartRadioCA, CC BY 3.0, https://commons.wikimedia.org/w/index.php?curid=137551448):
+Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: By iHeartRadioCA, CC BY 3.0, <https://commons.wikimedia.org/w/index.php?curid=137551448>):
 
 [ICND2153 PWM panel in action](https://github.com/user-attachments/assets/dfa43ba3-5b67-45b4-a143-8567f13d43ec)
 
@@ -42,15 +42,18 @@ Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: B
 - [Quick start](#quick-start) – get your first panel running
 
 To explore the architectural details of the `Hub75 driver` see
+
 - [Hub75 Matrix Panel Driver Version 3.0](docs/Hub75%20Matrix%20Panel%20Driver%20Version%203.0.md)
 - [INCD2153 PWM Panel Details](./docs/icnd2153.md)
 
-[Christoph](https://github.com/cmair) designed and implemented the refactoring of the driver code to allow multiple driver instances on a 
+[Christoph](https://github.com/cmair) designed and implemented the refactoring of the driver code to allow multiple driver instances on a
 single Raspberry Pi Pico microcontroller. The result is a much more robust implementation where the compiler can check for configuration
 mistakes and multiple (different) displays can operate independently off a single Pico as long as enough hardware resources are available.
+
 - [Dual Panel Instances](docs/dual-instances.md) - show-case to run two independently-configured HUB75 chains from a single Pico
 
 If you're interested in specific details — such as how to improve output quality or configure chained panels — the following links should help you explore the capabilities of the `Hub75 driver`
+
 - [Configuration reference](docs/configuration.md) – reference for all attributes
 - [Pixel mapping](docs/pixel-mapping.md) – choose the correct pixel mapping for your matrix panel
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
@@ -113,7 +116,6 @@ The diagram shows the default mapping as defined in the hub75.cpp file.
 - **`pins.strobe_pin`** (latch): GPIO 12
 - **`pins.oen_pin`** (output enable): GPIO 13
 
-
 ---
 
 # Configuration in Code
@@ -139,7 +141,7 @@ using Panel = Hub75Driver<panel_cfg>;
 static Panel driver; // large fixed-size buffers - must have static storage duration
 ```
 
-This replaces the previous `target_compile_definitions`-based approach. 
+This replaces the previous `target_compile_definitions`-based approach.
 
 The benefits:
 
@@ -191,6 +193,7 @@ target_compile_definitions(hub75_demo PRIVATE
 ```
 
 ### Driver Configuration for Pico (RP2040) or Pico 2 (RP2430)
+
 As mentioned earlier, the rest of your panel’s configuration is done in your application program. This is easier than it seems at first glance! The `Hub75 driver` has default values for all attributes. You only need to change an attribute if it does not match this default value. If you have a “standard” Hub75 matrix panel with 64 rows and 64 columns and have chosen to wire the pins as described earlier, you do not need to specify a single attribute, since the fallbacks in the `Hub75 driver` have already preset them accordingly. Your configuration therefore reduces to the minimal case listed here
 
 ```cpp
@@ -210,10 +213,79 @@ constexpr Hub75Config panel_cfg{
 
 as panel dimensions 64x64 (64 rows and 64 columns) is the default.
 
+## How to Use This Project in VSCode
+
+You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. Follow these steps:
+
+1. **Open VSCode and start a new window**.
+2. **Clone the repository**:
+   - Press `Ctrl+Shift+P` and select `Git: Clone`.
+   - Paste the URL: `https://github.com/JuPfu/hub75`
+
+      <img src="assets/VSCode_1.png" width="460" height="116">
+
+   - Choose a local directory to clone the repository into.
+
+      <img src="assets/VSCode_2.png" width="603" height="400">
+
+3. **Project Import Prompt**:
+   - Consent to open the project.
+
+      <img src="assets/VSCode_3.png" width="603" height="400">
+
+   - When prompted, "Do you want to import this project as Raspberry Pi Pico project?", click **Yes** or wait a few seconds until the dialog prompt disappears by itself.
+
+4. **Configure Pico SDK Settings**:
+   - A settings page will open automatically.
+   - Use the default settings unless you have a specific setup.
+
+      <img src="assets/VSCode_4.png" width="603" height="400">
+
+   - Click **Import** to finalize project setup.
+   - Switch the board-type to your Pico model.
+
+      <img src="assets/VSCode_5.png" width="599" height="415">
+
+5. **Wait for Setup Completion**:
+   - VSCode will download required tools, the Pico SDK, and any plugins.
+
+6. **Connect the Hardware**:
+   - Make sure the HUB75 LED matrix is properly connected to the Raspberry Pi Pico.
+   - Attach the Rasberry Pi Pico USB cable to your computer
+
+7. **Build and Upload**:
+   - Compiling the project can be done without a Pico attached to the computer.
+
+      <img src="assets/VSCode_6.png" width="600" height="416">
+
+   - Click the **Run** button in the bottom taskbar.
+   - VSCode will compile and upload the firmware to your Pico board.
+
+> 💡 If everything is set up correctly, your matrix should come to life
+
+---
+
+## Demo Effects
+
+The demo effects in `hub75_demo.cpp` are included to exercise the driver and showcase colour fidelity. They eefects cycle automatically.
+
+| # | Effect | Purpose |
+| --- | -------- | --------- |
+| 0 | Bouncing balls with text | Tests real-time animation; text position is hard-coded for 64×64 |
+| 1 | Fire effect | Demonstrates per-pixel colour blending at high refresh rates |
+| 2 | Static 64×64 images | Verify colour accuracy and panel mapping on the reference panel size |
+| 3 | Rotator | Geometric transformation test - rotating antialiased line |
+| 4 | Analog clock | Geometric transformation test - application of multiple rotating antialiased lines |
+| 5 | Colour gradient / plasma | Full-spectrum colour coverage |
+| 6 | Straight lines | Helps to detect mapping errors |
+| 7 | Grey-scale ramp | **Calibration tool** — equal R, G, B at every luminance step. Use this with the [CCM Tuning Procedure](docs/colour.md#tuning-procedure) to eliminate colour tints |
+
+> ⚠️ The demo has been tested on a **Raspberry Pi Pico 2 RP2350A** and **Raspberry Pi Pico 2 RP2350B**. On a RP2040 you may need to comment out some effects due to tighter memory constraints. Open an issue if you need help.
+
 ## Overview of Driver Configuration Attributes
 
-To give you an overview of the available options let's show them all in brief (details in [Configuration in Code](#configuration-in-code)). Look at the start of `hub75_demo.cpp` to see how it is used. 
- 
+To give you an overview of the available options let's show them all in brief (details in [Configuration in Code](#configuration-in-code)). Look at the start of `hub75_demo.cpp` to see how it is used.
+
 ```cpp
 // hub75_demo.cpp / your own .cpp file
 constexpr Hub75Config panel_cfg{
@@ -325,26 +397,27 @@ constexpr Hub75Config panel_cfg{
     },
 }
 ```
-### Settings for a ICND2153 Based PWM Hub75 Panel
+
+### Settings for a ICND2153 Based PWM Hub75 Panel with Shift Register for Row Addressing (RowAddressing ABCShiftRegister)
 
 PWM modules generate the pulse width modulation themselves – in contrast, the BCM (Binary Coded Modulation), including the balanced light output, is generated by the `Hub75 driver` for Hub75 panels (`.panel_class = PanelClass::HUB75`). The `Hub75 driver` implementation for the ICND2153 PWM panel therefore is different. This is reflected in three configuration attributes `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::ICND2153`. and `.bitplanes = 16`.
 
 ```cpp
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 128,                 // your matrix panel width
-        .matrix_panel_height = 64,                 // your matrix panel height
-        .panel_class = PanelClass::PWM,            // it's a PWM panel
-        .address_type = RowAddressing::Binary,     // row addressing via address pins
-        .panel_chip = Hub75PanelChip::ICND2153,    // mainly used for initialisation sequence but also for panel specific characteristics
-        .pwm_reverse_chain_order = false           // PWM panels only - reverse the order of the panels inside a chain
+        .matrix_panel_width = 128,                       // your matrix panel width
+        .matrix_panel_height = 64,                       // your matrix panel height
+        .panel_class = PanelClass::PWM,                  // it's a PWM panel
+        .address_type = RowAddressing::ABCShiftRegister, // row addressing via address pins
+        .panel_chip = Hub75PanelChip::ICND2153,          // mainly used for initialisation sequence but also for panel specific characteristics
+        .pwm_reverse_chain_order = false                 // PWM panels only - reverse the order of the panels inside a chain
      },
     .color = {
-        .bitplanes = 16,                           // number (count) of bit-planes for a ICND2153 PWM panel
-        .separate_cie_channels = true,             // use separate CIE channels for improved colour representation - needs more memory
-        .balanced_light_output = true,             // ⚠️ setting is ignored for PWM panels  
+        .bitplanes = 16,                                 // number (count) of bit-planes for a ICND2153 PWM panel
+        .separate_cie_channels = true,                   // use separate CIE channels for improved colour representation - needs more memory
+        .balanced_light_output = true,                   // ⚠️ setting is ignored for PWM panels  
      },
-    .frame_rate_debug = false,                     // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
+    .frame_rate_debug = false,                           // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
 };
 ```
 
@@ -356,75 +429,36 @@ If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_orde
 
 Details on the implementation of this PWM panel driver can be found in [INCD2153 explained](./docs/icnd2153.md).
 
- 
-## How to Use This Project in VSCode
+### Settings for a FM6363 Based PWM Hub75 Panel with Standard Row Addressing (RowAddressing Binary)
 
-You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. Follow these steps:
+PWM modules generate the pulse width modulation themselves – in contrast, the BCM (Binary Coded Modulation), including the balanced light output, is generated by the `Hub75 driver` for Hub75 panels (`.panel_class = PanelClass::HUB75`). The `Hub75 driver` implementation for the FM6363 PWM panel therefore is different. This is reflected in three configuration attributes `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::FM6363`. and `.bitplanes = 16`.
 
-1. **Open VSCode and start a new window**.
-2. **Clone the repository**:
-   - Press `Ctrl+Shift+P` and select `Git: Clone`.
-   - Paste the URL: `https://github.com/JuPfu/hub75`
+```cpp
+constexpr Hub75Config panel_cfg{
+    .panel = {
+        .matrix_panel_width = 64,                 // your matrix panel width
+        .matrix_panel_height = 64,                 // your matrix panel height
+        .panel_class = PanelClass::PWM,            // it's a PWM panel
+        .address_type = RowAddressing::Binary,     // row addressing via address pins
+        .panel_chip = Hub75PanelChip::FM3636,      // mainly used for initialisation sequence but also for panel specific characteristics
+        .pwm_reverse_chain_order = false           // PWM panels only - reverse the order of the panels inside a chain
+     },
+    .color = {
+        .bitplanes = 16,                           // number (count) of bit-planes for a ICND2153 PWM panel
+        .separate_cie_channels = true,             // use separate CIE channels for improved colour representation - needs more memory
+        .balanced_light_output = true,             // ⚠️ setting is ignored for PWM panels  
+     },
+    .frame_rate_debug = false,                     // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
+};
+```
 
-      <img src="assets/VSCode_1.png" width="460" height="116">
+**Tested panel:** ??? (64×64, 1/32 scan).
 
-   - Choose a local directory to clone the repository into.
+**Memory:** this configuration needs ample memory – a Pico (RP2040) might do but plan for an Pico 2 (RP2350). Chaining of two such panels should work for Pico 2 but is not verified.
 
-      <img src="assets/VSCode_2.png" width="603" height="400">
+If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_order = true`.
 
-3. **Project Import Prompt**:
-   - Consent to open the project.
-
-      <img src="assets/VSCode_3.png" width="603" height="400">
-
-   - When prompted, "Do you want to import this project as Raspberry Pi Pico project?", click **Yes** or wait a few seconds until the dialog prompt disappears by itself.
-
-4. **Configure Pico SDK Settings**:
-   - A settings page will open automatically.
-   - Use the default settings unless you have a specific setup.
-
-      <img src="assets/VSCode_4.png" width="603" height="400">
-
-   - Click **Import** to finalize project setup.
-   - Switch the board-type to your Pico model.
-
-      <img src="assets/VSCode_5.png" width="599" height="415">
-
-5. **Wait for Setup Completion**:
-   - VSCode will download required tools, the Pico SDK, and any plugins.
-
-6. **Connect the Hardware**:
-   - Make sure the HUB75 LED matrix is properly connected to the Raspberry Pi Pico.
-   - Attach the Rasberry Pi Pico USB cable to your computer
-
-7. **Build and Upload**:
-   - Compiling the project can be done without a Pico attached to the computer.
-
-      <img src="assets/VSCode_6.png" width="600" height="416">
-
-   - Click the **Run** button in the bottom taskbar.
-   - VSCode will compile and upload the firmware to your Pico board.
-
-> 💡 If everything is set up correctly, your matrix should come to life
-
----
-
-## Demo Effects
-
-The demo effects in `hub75_demo.cpp` are included to exercise the driver and showcase colour fidelity. They eefects cycle automatically.
-
-| # | Effect | Purpose |
-|---|--------|---------|
-| 0 | Bouncing balls with text | Tests real-time animation; text position is hard-coded for 64×64 |
-| 1 | Fire effect | Demonstrates per-pixel colour blending at high refresh rates |
-| 2 | Static 64×64 images | Verify colour accuracy and panel mapping on the reference panel size |
-| 3 | Rotator | Geometric transformation test - rotating antialiased line |
-| 4 | Analog clock | Geometric transformation test - application of multiple rotating antialiased lines|
-| 5 | Colour gradient / plasma | Full-spectrum colour coverage |
-| 6 | Straight lines | Helps to detect mapping errors |
-| 7 | Grey-scale ramp | **Calibration tool** — equal R, G, B at every luminance step. Use this with the [CCM Tuning Procedure](docs/colour.md#tuning-procedure) to eliminate colour tints |
-
-> ⚠️ The demo has been tested on a **Raspberry Pi Pico 2 RP2350A** and **Raspberry Pi Pico 2 RP2350B**. On a RP2040 you may need to comment out some effects due to tighter memory constraints. Open an issue if you need help.
+Details on the implementation of this PWM panel driver can be found in [FM6363 explained](./docs/fm6363.md).
 
 ## Next Steps
 
@@ -436,4 +470,3 @@ The core driver pipeline is stable. Possible future directions include:
 For questions, bug reports, or feature discussions, feel free to open an issue on [GitHub](https://github.com/JuPfu/hub75).
 
 ---
-
