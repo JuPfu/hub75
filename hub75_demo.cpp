@@ -15,7 +15,7 @@ constexpr Hub75Config panel_cfg{
     .panel = {
         .matrix_panel_width = 64,                 // your matrix panel width
         .matrix_panel_height = 64,                // your matrix panel height
-        .chain_rows = 2,                          // number of chain rows stacked vertically (rows)
+        .chain_rows = 1,                          // number of chain rows stacked vertically (rows)
         .chain_cols = 1,                          // number of panels chained left-to-right in a single chain row (columns)
         .panel_class = PanelClass::PWM,           // it's a HUB75 panel not a PWM panel
         .chain_mode = Hub75ChainMode::SERPENTINE, // default is serpentine (U-Turn with compensation for 180° rotation)

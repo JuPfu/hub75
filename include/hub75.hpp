@@ -314,6 +314,11 @@ struct Hub75RowCmd
     uint32_t dark_cycles;
 } __attribute__((packed));
 
+struct Hub75RowAddress
+{
+    uint16_t row_address;
+};
+
 // Non-template base so all Hub75Driver<Cfg> instances - regardless of Cfg - can share the
 // single chip-wide DMA_IRQ_0 / DMA_IRQ_1 vectors. irq_set_exclusive_handler only allows one
 // handler per IRQ line for the whole MCU, so the two IRQ handlers are installed exactly
@@ -559,7 +564,7 @@ private:
 
     static constexpr auto BCM_SEQUENCE = compute_bcm_sequence();
     static constexpr size_t bcm_sequence_length = BCM_SEQUENCE.size();
-    static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint32_t);
+    static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint16_t);
 
     static constexpr uint32_t CCM_MAX_VAL = (1u << Cfg.color.bitplanes) - 1u;
     static constexpr uint32_t BRIGHTNESS_FP_SHIFT = 16u;
@@ -597,6 +602,7 @@ private:
     std::array<uint32_t, 2> compute_bcm_cycles(uint32_t bitplane, uint32_t split_factor, uint32_t brightness_fp);
     static uint32_t encode_row_address(uint32_t row);
     void build_row_cmd_buffer(uint32_t brightness_fp);
+    void build_row_address_buffer();
 
     // --- PIO / DMA setup ----------------------------------------------------------------------
     struct PioConfig
@@ -623,7 +629,6 @@ private:
     void setup_display_irq();
     void setup_bitplane_stream_irq();
 
-    
     void emit_frame_rate(); // activate for debug purpose only via ".frame_rate_debug = true"
 
     void handle_ctrl_irq() override;
@@ -654,6 +659,7 @@ private:
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
         alignas(4) uint8_t frame_buffer1_[PWM_FRAME_BYTES];
         alignas(4) uint8_t frame_buffer2_[PWM_FRAME_BYTES];
+        alignas(4) uint16_t row_address_buffer_[Cfg.panel.panel_chip== Hub75PanelChip::FM6363 ? SCAN_DEPTH + 1 : 0u];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;

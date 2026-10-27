@@ -143,6 +143,10 @@ void Hub75Driver<Cfg>::start()
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+    {
+        dma_channel_set_read_addr(row_chan_, storage_.row_address_buffer_, true);
+    }
 
     printf("START FINISHED\n");
 }
@@ -170,7 +174,6 @@ void Hub75Driver<Cfg>::setBasisBrightness(uint8_t factor)
     if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
     {
         basis_factor_ = (factor > 0u) ? factor : 1u;
-        // apply_brightness_();
     }
 }
 
@@ -244,7 +247,7 @@ std::array<uint32_t, 2> Hub75Driver<Cfg>::compute_bcm_cycles(uint32_t bitplane, 
 };
 
 template <Hub75Config Cfg>
-uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
+uint32_t inline Hub75Driver<Cfg>::encode_row_address(uint32_t row)
 {
     if constexpr (Cfg.panel.address_type == RowAddressing::ABCShiftRegister)
     {
@@ -263,6 +266,23 @@ uint32_t Hub75Driver<Cfg>::encode_row_address(uint32_t row)
     else
     {
         return row;
+    }
+}
+
+// Build row command buffer for a complete frame: timing + addressing sequences for all
+// bitplanes x all scan rows. Not swapped in immediately - swap_row_cmd_buffer_pending_ is
+// set and the swap happens in handle_ctrl_irq() at a safe point (frame boundary).
+template <Hub75Config Cfg>
+void Hub75Driver<Cfg>::build_row_address_buffer()
+{
+    uint32_t idx = 0;
+
+    storage_.row_address_buffer_[idx++] = SCAN_DEPTH - 1;
+
+    for (uint16_t row = 0; row < SCAN_DEPTH; ++row)
+    {
+        Hub75RowAddress *cmd = &storage_.row_address_buffer_[idx++];
+        cmd->row_address = (row << ROW_ADDR_BITS) | (row & ROW_ADDR_MASK);
     }
 }
 
@@ -409,7 +429,6 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
         {
             dma_channel_acknowledge_irq0(pixel_chan_);
 
-            // printf("ctrl_handler swap_frame_buffer_pending_=%b\n", swap_frame_buffer_pending_);
             if (swap_frame_buffer_pending_)
             {
                 uint8_t *new_front = frame_buffer_;
@@ -424,10 +443,10 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
             {
                 icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
             }
-            else
-            {
-                fm6363_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
-            }
+            // else
+            // {
+            //     fm6363_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
+            // }
 
             if constexpr (Cfg.frame_rate_debug)
             {
@@ -897,6 +916,34 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
     }
     else
     {
+        if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+        {
+            row_chan_ = dma_claim_unused_channel(true);
+            row_ctrl_chan_ = dma_claim_unused_channel(true);
+
+            // row channel
+            dma_setup_(row_chan_,
+                       DMA_SIZE_16,
+                       true,
+                       false,
+                       pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true),
+                       row_ctrl_chan_,
+                       &pio_config_.row_pio->txf[pio_config_.sm_row],
+                       &storage_.row_address_buffer_,
+                       (SCAN_DEPTH + 1) * row_cmd_struct_members);
+
+            // row ctrl channel
+            dma_setup_(row_ctrl_chan_,
+                       DMA_SIZE_32,
+                       false,
+                       false,
+                       DREQ_FORCE,
+                       row_chan_,
+                       &dma_hw->ch[row_chan_].read_addr,
+                       &storage_.row_address_buffer_,
+                       1);
+        }
+
         // icnd2153_pixel_stream or fm6363_pixel_stream receives pixel data fed by DMA
         pixel_chan_ = dma_claim_unused_channel(true);
 
