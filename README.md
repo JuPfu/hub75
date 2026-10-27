@@ -23,11 +23,17 @@ Most panels take the row number as a binary address on pins A–E. Some panels i
 
 See [Settings for a Hub75 Panel with Shift Register for Row Addressing](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing)
 
-### ICND2153-based (S)PWM panels
+### ICND2153-based (S)PWM panels with Shift Register for Row Addressing (Row Addressing ABCShiftRegister)
 
 PWM panels contain driver ICs (ICND2153) that **generate the grey levels themselves** from 16-bit values. The driver therefore does not produce bit-planes for these panels; it builds a 16-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
 
 See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
+
+### FM6363-based (S)PWM panels with Standard Row Addressing (Row Addressing Binary)
+
+PWM panels contain driver ICs (FM6363) that **generate the grey levels themselves** from 16-bit values. The driver therefore does not produce bit-planes for these panels; it builds a 16-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
+
+See [Settings for a FM6363 Based PWM Hub75 Panel](#settings-for-a-fm6363-based-pwm-hub75-panel)
 
 #### Video Sequence of ICND2153 Panel in Action
 
