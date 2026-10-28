@@ -24,65 +24,39 @@
 .side_set 1 ; Side-set pin drives GCLK.
 
 .wrap_target
-    ; STATUS is configured as TX FIFO level < 1:
-    ;   FIFO empty    -> Y = 0xFFFFFFFF
-    ;   FIFO nonempty -> Y = 0x00000000
+    ; STATUS is configured as "IRQ flag 4 set":
+    ;   pixel SM stalled in "irq wait 4" (frame fully shifted out) -> Y = 0xFFFFFFFF
+    ;   otherwise                                                  -> Y = 0x00000000
     mov y, status        side 0b0
 
-    ; If the FIFO is empty, Y is nonzero and the jump is taken.
-    ; Continue refreshing without waiting for a new frame token.
-    ; JMP Y-- decrements Y even when the jump is not taken.
-    jmp y--, seed_row    side 0b0
+    ; Flag not set: continue refreshing without a handshake.
+    jmp !y, seed_row     side 0b0
 
     ; --------------------------------------------------------------------------
-    ; FRAME-START HANDSHAKE
-    ; Reached only when the TX FIFO contains a frame-start token.
+    ; FRAME-START HANDSHAKE (only between two complete scans)
     ; --------------------------------------------------------------------------
+    ; Clearing flag 4 releases the pixel SM from "irq wait 4"; it runs VSYNC next.
+    irq clear 4          side 0b0
 
-    ; Consume the token. Its intended value is scan_rows - 1.
-    ; The blocking pull waits if the FIFO becomes empty.
-    pull block           side 0b0
-
-    ; Signal IRQ 2 to the pixel-stream state machine.
-    ; That state machine is responsible for its VSYNC/frame-start action.
-    irq nowait 2         side 0b0
-
-    ; Wait until the pixel-stream state machine signals IRQ 3.
-    ; This handshake must be completed by the other state machine.
+    ; Wait until the pixel SM signals that VSYNC is done.
     wait 1 irq 3         side 0b0
 
-    ; --------------------------------------------------------------------------
-    ; SEED ROW 0
-    ; Reload the row counter and apply the panel-specific row-0 sequence.
-    ; --------------------------------------------------------------------------
 seed_row:
-    ; OSR contains scan_rows - 1.
+    ; OSR was preloaded with scan_rows - 1 and is never shifted
     mov x, osr           side 0b0
 
-    ; Apply the panel-specific decoder reset/row-0 sequence.
     set pins, 0b101 [3]  side 0b0
     set pins, 0b000 [3]  side 0b0
 
-    ; --------------------------------------------------------------------------
-    ; ROW REFRESH LOOP
-    ; --------------------------------------------------------------------------
 row_loop:
-    ; ISR contains gclk_pulses_per_burst - 1.
-    ; Reload Y for every row so each row receives the same GCLK pulse count.
     mov y, isr           side 0b0
 
-    ; Generate the GCLK burst.
 gclk_loop:
-    nop             [3]  side 0b1 ; GCLK high for one PIO cycle.
-    jmp y--, gclk_loop [3]  side 0b0 ; GCLK low for one PIO cycle.
+    nop             [3]  side 0b1
+    jmp y--, gclk_loop [3] side 0b0
 
-    ; --------------------------------------------------------------------------
-    ; ROW ADVANCE
-    ; --------------------------------------------------------------------------
-
-    ; Apply the panel-specific row-advance sequence.
-    set pins, 0b001 [3]  side 0b0 ; RA=1, RB=0, RC=0.
-    set pins, 0b000 [3]  side 0b0 ; Return all row-select signals low.
+    set pins, 0b001 [3]  side 0b0
+    set pins, 0b000 [3]  side 0b0
 
     jmp x--, row_loop    side 0b0
 .wrap
@@ -103,62 +77,38 @@ static inline void icnd2153_row_program_init(
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
 
-    // Configure the three consecutive row-select GPIOs and the GCLK GPIO as outputs controlled by this PIO state machine.
     pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 3, true);
     pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
 
-    // Connect the GPIOs to the PIO peripheral.
     for (uint i = 0; i < 3; i++)
-    {
         pio_gpio_init(pio, rowsel_base_pin + i);
-    }
     pio_gpio_init(pio, gclk_pin);
 
     pio_sm_config c = icnd2153_row_program_get_default_config(offset);
-
-    // Map SET instructions to the three row-select GPIOs.
     sm_config_set_set_pins(&c, rowsel_base_pin, 3);
-
-    // Map side-set bit 0 to the GCLK output GPIO.
     sm_config_set_sideset_pins(&c, gclk_pin);
 
-    // Shift OUT data right; disable autopull.
-    // This program explicitly controls when words are pulled from the TX FIFO.
+    // No autopull: OSR keeps scan_rows - 1 for the whole run.
     sm_config_set_out_shift(&c, true, false, 32);
 
-    // MOV Y, STATUS returns all ones when TX FIFO level < 1, and zero otherwise. 
-    // With a threshold of 1, this detects an empty FIFO.
-    sm_config_set_mov_status(&c, STATUS_TX_LESSTHAN, 1);
+    // MOV Y, STATUS: all ones while IRQ flag 4 is set (pixel SM waits in "irq wait 4").
+    sm_config_set_mov_status(&c, STATUS_IRQ_SET, 4);
 
     pio_sm_init(pio, sm, offset, &c);
 
-    // --------------------------------------------------------------------------
-    // PRELOAD THE GCLK PULSE COUNT
-    // --------------------------------------------------------------------------
-
-    // Queue the GCLK pulse count minus one in the TX FIFO and wait for FIFO space if necessary.
+    // ISR = gclk_pulses_per_burst - 1, kept for all bursts.
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
-
-    // Execute a nonblocking PULL directly on the state machine.
-    // The FIFO contains a word, so the word is transferred into OSR.
-    // (If the FIFO were empty, this instruction would copy X into OSR instead.)
     pio_sm_exec(pio, sm, pio_encode_pull(false, false));
-
-    // Transfer the 32-bit GCLK pulse count from OSR into ISR.
-    // The ISR retains this value for subsequent row-refresh bursts.
     pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
+
+    // OSR = num_scan_rows - 1, kept; "mov x, osr" copies it without shifting.
+    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);
+    pio_sm_exec(pio, sm, pio_encode_pull(false, false));
 }
 
-static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
+static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t /*num_scan_rows*/)
 {
-    pio_sm_put_blocking(pio, sm, num_scan_rows - 1);       // first token: VSYNC + frame start
-    pio_sm_set_enabled(pio, sm, true);
-}
-
-static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_rows)
-{
-    if (pio_sm_is_tx_fifo_empty(pio, sm))                  // never block in the IRQ, never stack tokens
-        pio_sm_put(pio, sm, num_scan_rows - 1);
+    pio_sm_set_enabled(pio, sm, true);   // the pixel SM is already stalled in "irq wait 4"
 }
 %}
 
@@ -191,10 +141,10 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
 .side_set 2
 
 .wrap_target
-    ; Wait until the row SM signals that the pixel stream can begin.
-    wait 1 irq 2                side 0b00
+    ; Frame fully shifted out: raise IRQ 4 and stall until the row SM acknowledges
+    ; it at a scan boundary (irq clear 4). Replaces the old "wait 1 irq 2".
+    irq wait 4                  side 0b00
 
-    ; Generate three VSYNC pulses on LE/LAT.
     set x, 2                    side 0b00
 vsync_loop:
     nop             [3]         side 0b10  ; LE=1, DCLK=0

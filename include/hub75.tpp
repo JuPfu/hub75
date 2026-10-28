@@ -436,10 +436,6 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
             }
             __dmb();
             dma_channel_set_read_addr(pixel_chan_, dma_buffer_, true); // restart: count is reloaded
-            if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
-            {
-                icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
-            }
 
             if constexpr (Cfg.frame_rate_debug)
             {
