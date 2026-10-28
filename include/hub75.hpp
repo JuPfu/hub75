@@ -559,7 +559,7 @@ private:
 
     static constexpr auto BCM_SEQUENCE = compute_bcm_sequence();
     static constexpr size_t bcm_sequence_length = BCM_SEQUENCE.size();
-    static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint32_t);
+    static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint16_t);
 
     static constexpr uint32_t CCM_MAX_VAL = (1u << Cfg.color.bitplanes) - 1u;
     static constexpr uint32_t BRIGHTNESS_FP_SHIFT = 16u;
@@ -597,6 +597,7 @@ private:
     std::array<uint32_t, 2> compute_bcm_cycles(uint32_t bitplane, uint32_t split_factor, uint32_t brightness_fp);
     static uint32_t encode_row_address(uint32_t row);
     void build_row_cmd_buffer(uint32_t brightness_fp);
+    void build_row_address_buffer();
 
     // --- PIO / DMA setup ----------------------------------------------------------------------
     struct PioConfig
@@ -623,7 +624,6 @@ private:
     void setup_display_irq();
     void setup_bitplane_stream_irq();
 
-    
     void emit_frame_rate(); // activate for debug purpose only via ".frame_rate_debug = true"
 
     void handle_ctrl_irq() override;
@@ -654,6 +654,7 @@ private:
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
         alignas(4) uint8_t frame_buffer1_[PWM_FRAME_BYTES];
         alignas(4) uint8_t frame_buffer2_[PWM_FRAME_BYTES];
+        alignas(4) uint16_t row_address_buffer_[Cfg.panel.panel_chip == Hub75PanelChip::FM6363 ? SCAN_DEPTH + 1 : 0u];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;
@@ -663,6 +664,10 @@ private:
 
     alignas(4) Hub75RowCmd *row_cmd_buffer_ = nullptr;
     alignas(4) Hub75RowCmd *dma_row_cmd_buffer_ = nullptr;
+
+    const void *row_address_ptr_ = nullptr; // ctrl channel reads this pointer value
+    static constexpr uint32_t FM6363_ROW_ADDR_BITS = 5;
+    static_assert(FM6363_ROW_ADDR_BITS == 5, "fm6363_row PIO program hard-codes out pins,5 / out y,11");
 
     volatile bool swap_row_cmd_buffer_pending_ = false;
     volatile bool swap_frame_buffer_pending_ = false;

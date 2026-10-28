@@ -237,7 +237,11 @@ int main()
     // The Hub75 driver is constantly running on core 1 with a frequency usually much higher than 200Hz.
     // CPU load (on core 1) is low due to DMA and PIO usage.
     // The animated examples are updated at 100Hz.
+<<<<<<< HEAD
     const float fps = 75.0f;
+=======
+    const float fps = 60.0f;
+>>>>>>> fm6363_row_cmd
     const float frame_delay_ms = 1000.0f / fps;
 
     // set basis brightness of matrix panel
