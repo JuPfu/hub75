@@ -86,7 +86,7 @@ float Hub75Driver<Cfg>::pwm_clkdiv_(uint32_t sys_hz)
     {
 
         constexpr float m = -1.5f / 100.0f;
-        constexpr float n = 10.25f;
+        constexpr float n = 11.0f;
         const float clkdiv = (sys_hz / 1e6f) * m + n;
 
         return clkdiv;
@@ -132,14 +132,16 @@ void Hub75Driver<Cfg>::start()
     {
         uint32_t sys_clk_hz = clock_get_hz(clk_sys);
         float sm_clockdiv = pwm_clkdiv_(sys_clk_hz);
-        pio_sm_set_clkdiv(pio_config_.dclk_pio, pio_config_.sm_dclk, sm_clockdiv);
 
         if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         {
+            pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
             icnd2153_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
         }
         else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
+            pio_sm_set_clkdiv(pio_config_.dclk_pio, pio_config_.sm_dclk, sm_clockdiv);
+
             dma_channel_set_read_addr(row_chan_, storage_.row_address_buffer_, true);
 
             fm6363_dclk_start(pio_config_.dclk_pio, pio_config_.sm_dclk, Cfg.pins.clk_pin);
