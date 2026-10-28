@@ -25,7 +25,7 @@
 ;   2. lit_cycles  (OEn active → LEDs ON)
 ;   3. dark_cycles (OEn inactive → LEDs OFF)
 ;
-.program hub75_row
+.program hub75_row 
 
 .side_set 2
 

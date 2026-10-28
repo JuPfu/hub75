@@ -57,7 +57,12 @@ void Hub75Driver<Cfg>::create()
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         icnd2153_initialize(Cfg);
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+    {
         fm6363_initialize(Cfg);
+
+        build_row_address_buffer();
+        row_address_ptr_ = storage_.row_address_buffer_;
+    }
 
     configure_pio();
     setup_dma_transfers();
@@ -133,8 +138,10 @@ void Hub75Driver<Cfg>::start()
         {
             icnd2153_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
         }
-        else
+        else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
+            dma_channel_set_read_addr(row_chan_, storage_.row_address_buffer_, true);
+
             fm6363_dclk_start(pio_config_.dclk_pio, pio_config_.sm_dclk, Cfg.pins.clk_pin);
             fm6363_row_start(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
         }
@@ -143,12 +150,6 @@ void Hub75Driver<Cfg>::start()
     {
         dma_channel_set_read_addr(row_chan_, dma_row_cmd_buffer_, true);
     }
-    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
-    {
-        dma_channel_set_read_addr(row_chan_, storage_.row_address_buffer_, true);
-    }
-
-    printf("START FINISHED\n");
 }
 
 // -----------------------------------------------------------------------------------------
@@ -269,21 +270,18 @@ uint32_t inline Hub75Driver<Cfg>::encode_row_address(uint32_t row)
     }
 }
 
-// Build row command buffer for a complete frame: timing + addressing sequences for all
-// bitplanes x all scan rows. Not swapped in immediately - swap_row_cmd_buffer_pending_ is
-// set and the swap happens in handle_ctrl_irq() at a safe point (frame boundary).
+// Build row command buffer for a complete frame: GCKL count + addressing sequence
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::build_row_address_buffer()
 {
+    uint16_t *buf = reinterpret_cast<uint16_t *>(storage_.row_address_buffer_);
     uint32_t idx = 0;
 
-    storage_.row_address_buffer_[idx++] = SCAN_DEPTH - 1;
+    buf[idx++] = SCAN_DEPTH - 1; // header -> x (rows - 1), any row count
 
-    for (uint16_t row = 0; row < SCAN_DEPTH; ++row)
-    {
-        Hub75RowAddress *cmd = &storage_.row_address_buffer_[idx++];
-        cmd->row_address = (row << ROW_ADDR_BITS) | (row & ROW_ADDR_MASK);
-    }
+    constexpr uint32_t gclk = FM6363_GCLK_RISES - 1; // 11 bits max (2047)
+    for (uint32_t row = 0; row < SCAN_DEPTH; ++row)
+        buf[idx++] = static_cast<uint16_t>((gclk << 5) | (row & 0x1F));
 }
 
 // Build row command buffer for a complete frame: timing + addressing sequences for all
@@ -443,10 +441,6 @@ void inline Hub75Driver<Cfg>::handle_ctrl_irq()
             {
                 icnd2153_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
             }
-            // else
-            // {
-            //     fm6363_row_signal_frame(pio_config_.row_pio, pio_config_.sm_row, SCAN_DEPTH);
-            // }
 
             if constexpr (Cfg.frame_rate_debug)
             {
@@ -841,8 +835,8 @@ void Hub75Driver<Cfg>::configure_pio()
 
         if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
         {
-            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
-            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
         }
         else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
@@ -918,29 +912,22 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
     {
         if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
         {
+            static_assert(sizeof(storage_.row_address_buffer_[0]) == 2, "row words are 16 bit");
+
             row_chan_ = dma_claim_unused_channel(true);
             row_ctrl_chan_ = dma_claim_unused_channel(true);
 
-            // row channel
-            dma_setup_(row_chan_,
-                       DMA_SIZE_16,
-                       true,
-                       false,
+            dma_setup_(row_chan_, DMA_SIZE_16, true, false,
                        pio_get_dreq(pio_config_.row_pio, pio_config_.sm_row, true),
                        row_ctrl_chan_,
                        &pio_config_.row_pio->txf[pio_config_.sm_row],
-                       &storage_.row_address_buffer_,
-                       (SCAN_DEPTH + 1) * row_cmd_struct_members);
+                       storage_.row_address_buffer_,
+                       SCAN_DEPTH + 1); // halfwords, no multiplier
 
-            // row ctrl channel
-            dma_setup_(row_ctrl_chan_,
-                       DMA_SIZE_32,
-                       false,
-                       false,
-                       DREQ_FORCE,
+            dma_setup_(row_ctrl_chan_, DMA_SIZE_32, false, false, DREQ_FORCE,
                        row_chan_,
                        &dma_hw->ch[row_chan_].read_addr,
-                       &storage_.row_address_buffer_,
+                       &row_address_ptr_, // address of the POINTER
                        1);
         }
 

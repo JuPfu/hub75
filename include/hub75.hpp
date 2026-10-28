@@ -659,7 +659,7 @@ private:
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
         alignas(4) uint8_t frame_buffer1_[PWM_FRAME_BYTES];
         alignas(4) uint8_t frame_buffer2_[PWM_FRAME_BYTES];
-        alignas(4) uint16_t row_address_buffer_[Cfg.panel.panel_chip== Hub75PanelChip::FM6363 ? SCAN_DEPTH + 1 : 0u];
+        alignas(4) uint16_t row_address_buffer_[Cfg.panel.panel_chip == Hub75PanelChip::FM6363 ? SCAN_DEPTH + 1 : 0u];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;
@@ -669,6 +669,10 @@ private:
 
     alignas(4) Hub75RowCmd *row_cmd_buffer_ = nullptr;
     alignas(4) Hub75RowCmd *dma_row_cmd_buffer_ = nullptr;
+
+    const void *row_address_ptr_ = nullptr; // ctrl channel reads this pointer value
+    static constexpr uint32_t FM6363_ROW_ADDR_BITS = 5;
+    static_assert(FM6363_ROW_ADDR_BITS == 5, "fm6363_row PIO program hard-codes out pins,5 / out y,11");
 
     volatile bool swap_row_cmd_buffer_pending_ = false;
     volatile bool swap_frame_buffer_pending_ = false;
