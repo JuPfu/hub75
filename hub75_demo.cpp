@@ -17,12 +17,12 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_height = 64,                // your matrix panel height
         .chain_rows = 1,                          // number of chain rows stacked vertically (rows)
         .chain_cols = 1,                          // number of panels chained left-to-right in a single chain row (columns)
-        .panel_class = PanelClass::PWM,         // it's a HUB75 panel not a PWM panel
+        .panel_class = PanelClass::HUB75,         // it's a HUB75 panel not a PWM panel
         .chain_mode = Hub75ChainMode::SERPENTINE, // default is serpentine (U-Turn with compensation for 180° rotation)
         .panel_kind = RowMapping::Standard,       // how to map the rgb888 buffer onto the panel
         .address_type = RowAddressing::Binary,    // row addressing via address pins
         .scan_mode = 32,                          // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
-        .panel_chip = Hub75PanelChip::FM6363,    // mainly used for initialisation sequence but also for panel specific characteristics
+        .panel_chip = Hub75PanelChip::GENERIC,    // mainly used for initialisation sequence but also for panel specific characteristics
         .inverted_stb = false,                    // inverted pin signal for strobe (latch) pin
         .sm_clockdiv_factor = 1.0f,               // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                     // wait time in nano-seconds to stabilise latch
@@ -41,14 +41,14 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 13,        // GPIO for OE pin (GCKL for PWM panel class)
     },
     .color = {
-        .bitplanes = 16,               // number (count) of bit-planes
+        .bitplanes = 10,               // number (count) of bit-planes
         .separate_cie_channels = true, // use separate CIE channels for improved colour representation - needs more memory
         .balanced_light_output = true, // improves image quality but needs some more memory
         .swap_rb_pins = false,         // swap red and blue pins in software
         .ccm_rg_shift = 6,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
         .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     },
-    .frame_rate_debug = true, // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor
+    .frame_rate_debug = false, // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor
 };
 
 using Panel = Hub75Driver<panel_cfg>;
@@ -244,7 +244,7 @@ int main()
     driver.setBasisBrightness(8);
 
     // set full brightness of panel
-    float intensity = 0.45f;
+    float intensity = 1.0f;
     driver.setIntensity(intensity);
 
     float step = -0.005f;
