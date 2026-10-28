@@ -314,11 +314,6 @@ struct Hub75RowCmd
     uint32_t dark_cycles;
 } __attribute__((packed));
 
-struct Hub75RowAddress
-{
-    uint16_t row_address;
-};
-
 // Non-template base so all Hub75Driver<Cfg> instances - regardless of Cfg - can share the
 // single chip-wide DMA_IRQ_0 / DMA_IRQ_1 vectors. irq_set_exclusive_handler only allows one
 // handler per IRQ line for the whole MCU, so the two IRQ handlers are installed exactly

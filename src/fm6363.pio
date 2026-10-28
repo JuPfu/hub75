@@ -36,11 +36,9 @@
 
     irq clear 4        side 0b0    ; releases the pixel SM -> VSYNC
 
-
     ; Wait until the pixel-stream state machine signals IRQ 3.
     ; This handshake must be completed by the other state machine.
     wait 1 irq 3        side 0b0
-
 
     ; --------------------------------------------------------------------------
     ; SEED ROW 0
@@ -178,7 +176,7 @@ static inline void fm6363_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_r
 
 .wrap_target
     irq wait 4            side 0   ; frame fully shifted out; stall until the row SM acknowledges
-    set x, 2              side 0   ; (the old "wait 1 irq 2" is gone)
+    set x, 2              side 0   ;
     wait 1 pin 0          side 0
     wait 0 pin 0          side 0
 vsync_loop:
