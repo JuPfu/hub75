@@ -78,14 +78,13 @@ static inline void fm6363_row_program_init(
     PIO pio,
     uint sm,
     uint offset,
-    uint rowsel_base_pin,          // 
+    uint rowsel_base_pin,           
     uint rowsel_n_pins,
     uint gclk_pin,                 // HUB75 OE pin (FM6363 GCLK)
     uint32_t num_scan_rows,        // e.g. 32 for 1/32 scan
     uint32_t gclk_pulses_per_burst // e.g. 138
 )
 {
-
     // Configure the three consecutive row-select GPIOs and the GCLK GPIO as outputs controlled by this PIO state machine.
     pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, rowsel_n_pins, true);
     pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
@@ -116,34 +115,11 @@ static inline void fm6363_row_program_init(
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
 
     pio_sm_init(pio, sm, offset, &c);
-
-    // --------------------------------------------------------------------------
-    // PRELOAD THE GCLK PULSE COUNT
-    // --------------------------------------------------------------------------
-
-    // Queue the GCLK pulse count minus one in the TX FIFO and wait for FIFO space if necessary.
-    // pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
-
-    // Execute a nonblocking PULL directly on the state machine.
-    // The FIFO contains a word, so the word is transferred into OSR.
-    // (If the FIFO were empty, this instruction would copy X into OSR instead.)
-    // pio_sm_exec(pio, sm, pio_encode_pull(false, false));
-
-    // Transfer the 32-bit GCLK pulse count from OSR into ISR.
-    // The ISR retains this value for subsequent row-refresh bursts.
-    // pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
 }
 
 static inline void fm6363_row_start(PIO pio, uint sm, uint32_t num_scan_rows)
 {
-    // pio_sm_put_blocking(pio, sm, num_scan_rows - 1);       // first token: VSYNC + frame start
     pio_sm_set_enabled(pio, sm, true);
-}
-
-static inline void fm6363_row_signal_frame(PIO pio, uint sm, uint32_t num_scan_rows)
-{
-    if (pio_sm_is_tx_fifo_empty(pio, sm))                  // never block in the IRQ, never stack tokens
-        pio_sm_put(pio, sm, num_scan_rows - 1);
 }
 %}
 
