@@ -86,7 +86,7 @@ float Hub75Driver<Cfg>::pwm_clkdiv_(uint32_t sys_hz)
     {
 
         constexpr float m = -1.5f / 100.0f;
-        constexpr float n = 11.0f;
+        constexpr float n = 10.25f;
         const float clkdiv = (sys_hz / 1e6f) * m + n;
 
         return clkdiv;
@@ -947,6 +947,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         // icnd2153 or fm6363 row can run between 20 MHz and 35 MHz
         float sm_clockdiv = pwm_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
+        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
     }
 }
 

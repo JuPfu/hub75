@@ -24,8 +24,8 @@
 .side_set 1 ; Side-set pin drives GCLK.
 
 .wrap_target
-    ; STATUS is configured as "IRQ flag 4 set":
-    ;   pixel SM stalled in "irq wait 4" (frame fully shifted out) -> Y = 0xFFFFFFFF
+    ; STATUS is configured as "IRQ flag 2 set":
+    ;   pixel SM stalled in "irq wait 2" (frame fully shifted out) -> Y = 0xFFFFFFFF
     ;   otherwise                                                  -> Y = 0x00000000
     mov y, status        side 0b0
 
@@ -35,8 +35,8 @@
     ; --------------------------------------------------------------------------
     ; FRAME-START HANDSHAKE (only between two complete scans)
     ; --------------------------------------------------------------------------
-    ; Clearing flag 4 releases the pixel SM from "irq wait 4"; it runs VSYNC next.
-    irq clear 4          side 0b0
+    ; Clearing flag 2 releases the pixel SM from "irq wait 2"; it runs VSYNC next.
+    irq clear 2          side 0b0
 
     ; Wait until the pixel SM signals that VSYNC is done.
     wait 1 irq 3         side 0b0
@@ -45,18 +45,18 @@ seed_row:
     ; OSR was preloaded with scan_rows - 1 and is never shifted
     mov x, osr           side 0b0
 
-    set pins, 0b101 [3]  side 0b0
-    set pins, 0b000 [3]  side 0b0
+    set pins, 0b101      side 0b0
+    set pins, 0b000      side 0b0
 
 row_loop:
     mov y, isr           side 0b0
 
 gclk_loop:
-    nop             [3]  side 0b1
-    jmp y--, gclk_loop [3] side 0b0
+    nop                  side 0b1
+    jmp y--, gclk_loop     side 0b0
 
-    set pins, 0b001 [3]  side 0b0
-    set pins, 0b000 [3]  side 0b0
+    set pins, 0b001      side 0b0
+    set pins, 0b000      side 0b0
 
     jmp x--, row_loop    side 0b0
 .wrap
@@ -77,28 +77,41 @@ static inline void icnd2153_row_program_init(
     pio_sm_set_enabled(pio, sm, false);
     pio_sm_clear_fifos(pio, sm);
 
+    // Configure the three consecutive row-select GPIOs and the GCLK GPIO as outputs controlled by this PIO state machine.
     pio_sm_set_consecutive_pindirs(pio, sm, rowsel_base_pin, 3, true);
     pio_sm_set_consecutive_pindirs(pio, sm, gclk_pin, 1, true);
 
+    // Connect the GPIOs to the PIO peripheral.
     for (uint i = 0; i < 3; i++)
         pio_gpio_init(pio, rowsel_base_pin + i);
     pio_gpio_init(pio, gclk_pin);
 
     pio_sm_config c = icnd2153_row_program_get_default_config(offset);
+
+    // Map SET instructions to the three row-select GPIOs.
     sm_config_set_set_pins(&c, rowsel_base_pin, 3);
+
+    // Map side-set bit 0 to the GCLK output GPIO.
     sm_config_set_sideset_pins(&c, gclk_pin);
 
     // No autopull: OSR keeps scan_rows - 1 for the whole run.
     sm_config_set_out_shift(&c, true, false, 32);
 
-    // MOV Y, STATUS: all ones while IRQ flag 4 is set (pixel SM waits in "irq wait 4").
-    sm_config_set_mov_status(&c, STATUS_IRQ_SET, 4);
+    // MOV Y, STATUS: all ones while IRQ flag 2 is set (pixel SM waits in "irq wait 2").
+    sm_config_set_mov_status(&c, STATUS_IRQ_SET, 2);
 
     pio_sm_init(pio, sm, offset, &c);
 
     // ISR = gclk_pulses_per_burst - 1, kept for all bursts.
     pio_sm_put_blocking(pio, sm, gclk_pulses_per_burst - 1);
+
+    // Execute a nonblocking PULL directly on the state machine.
+    // The FIFO contains a word, so the word is transferred into OSR.
+    // (If the FIFO were empty, this instruction would copy X into OSR instead.)
     pio_sm_exec(pio, sm, pio_encode_pull(false, false));
+
+    // Transfer the 32-bit GCLK pulse count from OSR into ISR.
+    // The ISR retains this value for subsequent row-refresh bursts.
     pio_sm_exec(pio, sm, pio_encode_out(pio_isr, 32));
 
     // OSR = num_scan_rows - 1, kept; "mov x, osr" copies it without shifting.
@@ -108,7 +121,7 @@ static inline void icnd2153_row_program_init(
 
 static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t /*num_scan_rows*/)
 {
-    pio_sm_set_enabled(pio, sm, true);   // the pixel SM is already stalled in "irq wait 4"
+    pio_sm_set_enabled(pio, sm, true);   // the pixel SM is already stalled in "irq wait 2"
 }
 %}
 
@@ -141,14 +154,13 @@ static inline void icnd2153_row_start(PIO pio, uint sm, uint32_t /*num_scan_rows
 .side_set 2
 
 .wrap_target
-    ; Frame fully shifted out: raise IRQ 4 and stall until the row SM acknowledges
-    ; it at a scan boundary (irq clear 4). Replaces the old "wait 1 irq 2".
-    irq wait 4                  side 0b00
+    ; Frame fully shifted out: raise IRQ 2 and stall until the row SM acknowledgest at a scan boundary (irq clear 2)
+    irq wait 2                  side 0b00
 
     set x, 2                    side 0b00
 vsync_loop:
-    nop             [3]         side 0b10  ; LE=1, DCLK=0
-    jmp x--, vsync_loop  [3]    side 0b11  ; LE=1, DCLK=1
+    nop                         side 0b10  ; LE=1, DCLK=0
+    jmp x--, vsync_loop         side 0b11  ; LE=1, DCLK=1
 
     ; Tell the row SM that the VSYNC sequence has completed.
     irq nowait 3                side 0b00
@@ -165,14 +177,14 @@ transactions:
 
 normal_pulse:
     ; Output six RGB data bits, then generate a DCLK rising edge.
-    out pins, 6     [2]         side 0b00  ; RGB data valid; DCLK low
-    out null, 2     [3]         side 0b01  ; Consume clock bits; DCLK high
+    out pins, 6                 side 0b00  ; RGB data valid; DCLK low
+    out null, 2                 side 0b01  ; Consume clock bits; DCLK high
     jmp y--, normal_pulse       side 0b00  ; Repeat while Y was nonzero
 
     ; Output the final six RGB data bits for this transaction.
     ; Raise LE/LAT while generating the final clock pulse to latch the data.
-    out pins, 6     [3]         side 0b10  ; Final RGB data; LE high, DCLK low
-    out null, 2     [3]         side 0b11  ; LE high, DCLK high
+    out pins, 6                 side 0b10  ; Final RGB data; LE high, DCLK low
+    out null, 2                 side 0b11  ; LE high, DCLK high
 
     ; Repeat for the remaining transactions in the frame.
     jmp x--, transactions       side 0b00
