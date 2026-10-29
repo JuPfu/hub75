@@ -947,7 +947,10 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
         // icnd2153 or fm6363 row can run between 20 MHz and 35 MHz
         float sm_clockdiv = pwm_clkdiv_(sys_clk_hz);
         pio_sm_set_clkdiv(pio_config_.row_pio, pio_config_.sm_row, sm_clockdiv);
-        pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
+        if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
+        {
+            pio_sm_set_clkdiv(pio_config_.data_pio, pio_config_.sm_data, sm_clockdiv);
+        }
     }
 }
 

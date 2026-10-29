@@ -247,7 +247,6 @@ static inline void fm6363_dclk_program_init(PIO pio, uint sm, uint offset, uint 
 
 static inline void fm6363_dclk_start(PIO pio, uint sm, uint clk_pin) {
     pio_gpio_init(pio, clk_pin);
-    pio_sm_set_consecutive_pindirs(pio, sm, clk_pin, 1, true);
     pio_sm_set_enabled(pio, sm, true);
 }
 %}
