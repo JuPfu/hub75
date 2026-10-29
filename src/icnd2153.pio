@@ -60,8 +60,8 @@ seed_row:
     mov x, osr           side 0b0
 
     ; Apply the panel-specific decoder reset/row-0 sequence.
-    set pins, 0b101 [3]  side 0b0
-    set pins, 0b000 [3]  side 0b0
+    set pins, 0b101      side 0b0
+    set pins, 0b000      side 0b0
 
     ; --------------------------------------------------------------------------
     ; ROW REFRESH LOOP
@@ -73,16 +73,16 @@ row_loop:
 
     ; Generate the GCLK burst.
 gclk_loop:
-    nop             [3]  side 0b1 ; GCLK high for one PIO cycle.
-    jmp y--, gclk_loop [3]  side 0b0 ; GCLK low for one PIO cycle.
+    nop                  side 0b1 ; GCLK high for one PIO cycle.
+    jmp y--, gclk_loop   side 0b0 ; GCLK low for one PIO cycle.
 
     ; --------------------------------------------------------------------------
     ; ROW ADVANCE
     ; --------------------------------------------------------------------------
 
     ; Apply the panel-specific row-advance sequence.
-    set pins, 0b001 [3]  side 0b0 ; RA=1, RB=0, RC=0.
-    set pins, 0b000 [3]  side 0b0 ; Return all row-select signals low.
+    set pins, 0b001      side 0b0 ; RA=1, RB=0, RC=0.
+    set pins, 0b000      side 0b0 ; Return all row-select signals low.
 
     jmp x--, row_loop    side 0b0
 .wrap
@@ -197,8 +197,8 @@ static inline void icnd2153_row_signal_frame(PIO pio, uint sm, uint32_t num_scan
     ; Generate three VSYNC pulses on LE/LAT.
     set x, 2                    side 0b00
 vsync_loop:
-    nop             [3]         side 0b10  ; LE=1, DCLK=0
-    jmp x--, vsync_loop  [3]    side 0b11  ; LE=1, DCLK=1
+    nop                         side 0b10  ; LE=1, DCLK=0
+    jmp x--, vsync_loop         side 0b11  ; LE=1, DCLK=1
 
     ; Tell the row SM that the VSYNC sequence has completed.
     irq nowait 3                side 0b00
@@ -215,14 +215,14 @@ transactions:
 
 normal_pulse:
     ; Output six RGB data bits, then generate a DCLK rising edge.
-    out pins, 6     [2]         side 0b00  ; RGB data valid; DCLK low
-    out null, 2     [3]         side 0b01  ; Consume clock bits; DCLK high
+    out pins, 6                 side 0b00  ; RGB data valid; DCLK low
+    out null, 2                 side 0b01  ; Consume clock bits; DCLK high
     jmp y--, normal_pulse       side 0b00  ; Repeat while Y was nonzero
 
     ; Output the final six RGB data bits for this transaction.
     ; Raise LE/LAT while generating the final clock pulse to latch the data.
-    out pins, 6     [3]         side 0b10  ; Final RGB data; LE high, DCLK low
-    out null, 2     [3]         side 0b11  ; LE high, DCLK high
+    out pins, 6                 side 0b10  ; Final RGB data; LE high, DCLK low
+    out null, 2                 side 0b11  ; LE high, DCLK high
 
     ; Repeat for the remaining transactions in the frame.
     jmp x--, transactions       side 0b00
