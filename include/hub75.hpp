@@ -559,7 +559,7 @@ private:
 
     static constexpr auto BCM_SEQUENCE = compute_bcm_sequence();
     static constexpr size_t bcm_sequence_length = BCM_SEQUENCE.size();
-    static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint16_t);
+    static constexpr uint32_t row_cmd_struct_members = sizeof(Hub75RowCmd) / sizeof(uint32_t);
 
     static constexpr uint32_t CCM_MAX_VAL = (1u << Cfg.color.bitplanes) - 1u;
     static constexpr uint32_t BRIGHTNESS_FP_SHIFT = 16u;
