@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 #include "hardware/clocks.h"
 #include "pico/sync.h"
@@ -1182,17 +1183,43 @@ inline void Hub75Driver<Cfg>::write_pixel(size_t &fb, const uint8_t *src, int dx
     store_pixel_(fb, s[2], s[1], s[0]);
 }
 
-// v[0..5] = top R,G,B, bottom R,G,B (16-bit, already corrected). Writes 16 bytes, MSB first.
-__attribute__((optimize("unroll-loops"))) static inline void pwm_expand_channels_(const uint16_t *v, uint8_t *dst)
+struct SpreadPair
 {
-    for (uint32_t bit = 0; bit < 16; ++bit)
+    uint32_t lo, hi;
+}; // wire bytes 0..3 / 4..7 for one source byte
+
+static constexpr std::array<SpreadPair, 256> make_spread_lut()
+{
+    std::array<SpreadPair, 256> t{};
+    for (uint32_t b = 0; b < 256; ++b)
     {
-        const uint32_t sh = 15u - bit;
-        uint32_t w = 0;
-        for (uint32_t k = 0; k < 6; ++k)
-            w |= ((static_cast<uint32_t>(v[k]) >> sh) & 1u) << ICND2153_LANE_OF[k];
-        dst[bit] = static_cast<uint8_t>(w);
+        uint32_t lo = 0, hi = 0;
+        for (uint32_t j = 0; j < 4; ++j)
+        {
+            lo |= ((b >> (7 - j)) & 1u) << (8 * j); // bits 7..4
+            hi |= ((b >> (3 - j)) & 1u) << (8 * j); // bits 3..0
+        }
+        t[b] = {lo, hi};
     }
+    return t;
+}
+// Keep this in RAM (__not_in_flash) so XIP cache misses don't eat the gain.
+static constexpr auto SPREAD_LUT = make_spread_lut(); // compile time generation!
+
+static inline void pwm_expand_channels_(const uint16_t *v, uint8_t *dst)
+{
+    uint32_t w[4] = {0, 0, 0, 0};
+    for (uint32_t k = 0; k < 6; ++k)
+    {
+        const SpreadPair h = SPREAD_LUT[v[k] >> 8];
+        const SpreadPair l = SPREAD_LUT[v[k] & 0xFFu];
+        const uint32_t s = ICND2153_LANE_OF[k];
+        w[0] |= h.lo << s;
+        w[1] |= h.hi << s;
+        w[2] |= l.lo << s;
+        w[3] |= l.hi << s;
+    }
+    memcpy(__builtin_assume_aligned(dst, 4), w, 16); // dst: 4-byte aligned, see header layout
 }
 
 template <Hub75Config Cfg>
@@ -1488,7 +1515,9 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
     }
     else
     {
+        uint64_t t1 = time_us_32();
         build_pixel_stream();
+        printf("bps %u\n", absolute_time_diff_us(t1, time_us_32()));
     }
 }
 
@@ -1742,7 +1771,9 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
     }
     else
     {
+        uint64_t t1 = time_us_32();
         build_pixel_stream();
+        printf("bps %f\n", (absolute_time_diff_us(t1, time_us_32()) / 1000000.0f));
     }
 }
 #endif
