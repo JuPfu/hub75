@@ -121,6 +121,58 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 }
 
 // -----------------------------------------------------------------------------
+// panel_gain (percent, 0..100) -> CFG2 current-gain bits
+//
+// CFG2 bit 9 (I_DIV4N) and bits 8:1 (IGAIN) set the constant-current output
+// (FM6363 Programming Guide, CFG2 / "Current gain"):
+//   I_DIV4N = 1 (high gear):  Iout ~ IGAIN / 256
+//   I_DIV4N = 0 (low gear):   Iout ~ IGAIN / 1024
+//   IGAIN >= 64 is required.
+//
+// Both gears are put on ONE linear current scale I = IGAIN (low gear) or 4 * IGAIN
+// (high gear), so the gear switch is seamless:
+//   I =  64 ..  255   low gear   ->  12.5 % ..  49.8 % of the nominal current
+//   I = 256 .. 1020   high gear  ->  50.0 % .. 199.2 % of the nominal current
+// 100 % (I = 512, high gear with IGAIN = 128) is the current set by Rext.
+//
+// panel_gain is mapped linearly in current onto I_MIN .. I_MAX:
+//   panel_gain =   0 -> I_MIN: lowest current the chip allows (12.5 %) - NOT "off", use setIntensity(0) for that
+//   panel_gain = 100 -> I_MAX: 100 % nominal current. Raise I_MAX (up to 1020) only if the LEDs may be overdriven.
+// -----------------------------------------------------------------------------
+static constexpr uint32_t FM6363_GAIN_I_MIN = 64;
+static constexpr uint32_t FM6363_GAIN_I_MAX = 512;
+static_assert(FM6363_GAIN_I_MIN >= 64 && FM6363_GAIN_I_MAX <= 1020 && FM6363_GAIN_I_MIN < FM6363_GAIN_I_MAX,
+              "gain scale must stay inside IGAIN 64..255 of both current gears");
+
+static constexpr uint16_t FM6363_CFG2_GAIN_MASK = 0x03FE; // I_DIV4N (bit 9) + IGAIN (bits 8:1)
+
+// Returns the bits to be OR-ed into CFG2 (already positioned in bits 9:1).
+static constexpr uint16_t fm6363_gain_to_cfg2_bits(uint32_t percent)
+{
+    if (percent > 100u)
+        percent = 100u;
+
+    // common current scale, rounded to nearest
+    const uint32_t i = FM6363_GAIN_I_MIN + (percent * (FM6363_GAIN_I_MAX - FM6363_GAIN_I_MIN) + 50u) / 100u;
+
+    uint32_t gear = 0u; // I_DIV4N
+    uint32_t igain = i;
+    if (i > 255u)
+    {
+        gear = 1u;
+        igain = (i + 2u) / 4u; // high gear: one IGAIN step is worth 4 units of I
+    }
+    if (igain > 255u)
+        igain = 255u;
+
+    return static_cast<uint16_t>((gear << 9) | (igain << 1));
+}
+
+static_assert(fm6363_gain_to_cfg2_bits(0) == 0x0080, "0 %: low gear, IGAIN 64");
+static_assert(fm6363_gain_to_cfg2_bits(100) == 0x0300, "100 %: high gear, IGAIN 128");
+static_assert(fm6363_gain_to_cfg2_bits(250) == fm6363_gain_to_cfg2_bits(100), "values above 100 are clamped");
+
+// -----------------------------------------------------------------------------
 // fm6363_setup()
 //
 // Runs the configuration sequence for one fm6363 chain — see the sequence
@@ -139,8 +191,6 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
     uint32_t *cfg4_buf = register_slot(REGISTER_SLOT_CFG4, display_width);
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
-    uint32_t gain = 0x80;
-
     // not tested yet - set number of lines to half the physical rows of the panel
     uint16_t cfg1_lane[6];
     for (uint32_t n = 0; n < 6; ++n)
@@ -151,11 +201,13 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
 
     prepare_register_dma_lanes(cfg1_lane, cfg1_buf, display_width);
 
-    // REG2 carries the pre-charge level, which depends on the LED colour the lane drives.
+    // REG2: the blanking level ADJ (b14..b10) depends on the LED colour the lane drives,
+    // the current gain (b9..b1) comes from panel_gain and is the same for all colours.
+    const uint16_t gain_bits = fm6363_gain_to_cfg2_bits(cfg.panel.panel_gain);
     uint16_t cfg2_lane[6];
     for (uint32_t n = 0; n < 6; ++n)
     {
-        cfg2_lane[n] = static_cast<uint16_t>(FM6363_CFG2_BY_COLOUR[fm6363_lane_colour(n)]);
+        cfg2_lane[n] = static_cast<uint16_t>((FM6363_CFG2_BY_COLOUR[fm6363_lane_colour(n)] & ~FM6363_CFG2_GAIN_MASK) | gain_bits);
     }
     prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
 
@@ -166,7 +218,7 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
     {
         cfg4_lane[n] = static_cast<uint16_t>(FM6363_CFG4_BY_COLOUR[fm6363_lane_colour(n)]);
     }
-    prepare_register_dma_lanes(cfg4_lane, cfg2_buf, display_width);
+    prepare_register_dma_lanes(cfg4_lane, cfg4_buf, display_width);
 
     prepare_register_dma(FM6363_CFG5_VALUE, dbg_buf, display_width);
 

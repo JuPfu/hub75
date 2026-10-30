@@ -155,6 +155,8 @@ struct Hub75PanelConfig
 
     uint32_t base_latch_ns = 80; // wait time in nano-seconds to stabilise latch
     uint32_t base_addr_ns = 160; // wait time in nano-seconds to stabilise row addressing
+
+    uint32_t panel_gain = 50; // basis brightness of the panel in percent (range 0 - 100)
 };
 
 // Logical display orientation.
@@ -697,7 +699,7 @@ private:
     // PWM: linear scale 0..65536 (Q16) = fine intensity * (coarse factor / 255)
     uint32_t pwm_scale_q16_() const
     {
-        return static_cast<uint32_t>((static_cast<uint64_t>(brightness_fp_) * basis_factor_ + 127u) / 255u);
+        return static_cast<uint32_t>(brightness_fp_);
     }
 
     // Only touched when Cfg.frame_rate_debug is set.
