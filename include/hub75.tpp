@@ -1515,9 +1515,7 @@ void Hub75Driver<Cfg>::update_bgr(const uint8_t *src)
     }
     else
     {
-        uint64_t t1 = time_us_32();
         build_pixel_stream();
-        printf("bps %u\n", absolute_time_diff_us(t1, time_us_32()));
     }
 }
 
@@ -1771,9 +1769,7 @@ void Hub75Driver<Cfg>::update(pimoroni::PicoGraphics const *graphics)
     }
     else
     {
-        uint64_t t1 = time_us_32();
         build_pixel_stream();
-        printf("bps %f\n", (absolute_time_diff_us(t1, time_us_32()) / 1000000.0f));
     }
 }
 #endif
