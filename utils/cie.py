@@ -6,7 +6,7 @@ TABLE_SIZE = 256
 # Adjust these based on your specific panel's look
 # Usually Green is brightest, so we might pull it back to 0.9
 # Blue often needs to be stronger (1.0), Red around 0.8-0.9
-RED_CAP = 0.988
+RED_CAP = 0.97
 GREEN_CAP = 1.00
 BLUE_CAP = 1.00
 
@@ -14,7 +14,7 @@ BLUE_CAP = 1.00
 # In the template-driven version BITPLANES is a template parameter, not a
 # preprocessor macro, so every resolution's tables must exist unconditionally
 # and be selected at compile time (e.g. via if constexpr / partial specialization).
-RESOLUTIONS = [(16, 65536), (10, 1024), (8, 256)]
+RESOLUTIONS = [(16, 65536), (12, 4096), (10, 1024), (8, 256)]
 
 CHANNELS = [
     ("RED",   RED_CAP),

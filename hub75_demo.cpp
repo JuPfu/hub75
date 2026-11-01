@@ -16,20 +16,22 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_width = 64,                 // your matrix panel width
         .matrix_panel_height = 64,                // your matrix panel height
         .chain_rows = 1,                          // number of chain rows stacked vertically (rows)
-        .chain_cols = 1,                          // number of panels chained left-to-right in a single chain row (columns)
-        .panel_class = PanelClass::HUB75,         // it's a HUB75 panel not a PWM panel
+        .chain_cols = 2,                          // number of panels chained left-to-right in a single chain row (columns)
+        .panel_class = PanelClass::PWM,         // it's a HUB75 panel not a PWM panel
         .chain_mode = Hub75ChainMode::SERPENTINE, // default is serpentine (U-Turn with compensation for 180° rotation)
         .panel_kind = RowMapping::Standard,       // how to map the rgb888 buffer onto the panel
         .address_type = RowAddressing::Binary,    // row addressing via address pins
         .scan_mode = 32,                          // 0: try to automatically deduce scan_mode - <value>: take value as scan_mode
-        .panel_chip = Hub75PanelChip::GENERIC,    // mainly used for initialisation sequence but also for panel specific characteristics
+        .panel_chip = Hub75PanelChip::FM6363,     // mainly used for initialisation sequence but also for panel specific characteristics
+        .pwm_reverse_chain_order = false,
         .inverted_stb = false,                    // inverted pin signal for strobe (latch) pin
         .sm_clockdiv_factor = 1.0f,               // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                     // wait time in nano-seconds to stabilise latch
         .base_addr_ns = 260,                      // wait time in nano-seconds to stabilise row addressing
+        .panel_gain = 100                         // gain percentage - at the moment for FM6363 panels only
     },
     .screen = {
-        .rotation = Hub75Rotation::DEG_0, // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
+        .rotation = Hub75Rotation::DEG_180, // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
     },
     .pins = {
         .data_base_pin = 0,   // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
@@ -41,14 +43,14 @@ constexpr Hub75Config panel_cfg{
         .oen_pin = 13,        // GPIO for OE pin (GCKL for PWM panel class)
     },
     .color = {
-        .bitplanes = 10,               // number (count) of bit-planes
+        .bitplanes = 12,               // number (count) of bit-planes
         .separate_cie_channels = true, // use separate CIE channels for improved colour representation - needs more memory
         .balanced_light_output = true, // improves image quality but needs some more memory
         .swap_rb_pins = false,         // swap red and blue pins in software
-        .ccm_rg_shift = 6,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
-        .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
+        .ccm_rg_shift = 8,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
+        .ccm_gb_shift = 9,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     },
-    .frame_rate_debug = false, // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor
+    .frame_rate_debug = true, // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor
 };
 
 using Panel = Hub75Driver<panel_cfg>;
@@ -90,7 +92,8 @@ const uint8_t *demo_image()
 #include "grey_scale_stripes.hpp"
 #include "rectangle.hpp"
 
-static int demo_index = -1; ///< Example selector (-1 for auto-cycle)
+static int demo_index = 0
+-1; ///< Example selector (-1 for auto-cycle)
 
 // Perform initialisation
 int pico_led_init(void)
@@ -176,7 +179,7 @@ void core1_entry()
 void initialize()
 {
     // Set system clock to 266MHz - just to show that it is possible to drive the HUB75 panel with a high clock speed
-    set_sys_clock_khz(250000, true);
+    set_sys_clock_khz(200000, true);
 
     stdio_init_all(); // Initialize Pico SDK
 
@@ -222,7 +225,7 @@ int main()
     // Pico RAM is finite - due to your configuration of panel_cfg (dimensions, bitplanes,
     // balanced_light_output and separate_cie_channels) you have to select just a selection of demos!
 
-    // static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
+    static GreyScaleStripes<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> greyScaleStripes;
 
     // static Rectangle<Panel::SCREEN_WIDTH, Panel::SCREEN_HEIGHT> rectangle;
 
@@ -293,11 +296,11 @@ int main()
             pixelFill.fill();
             driver.update(&pixelFill);
         }
-        // else if (demo_index == 7)
-        // {
-        //     greyScaleStripes.drawStripes();
-        //     driver.update(&greyScaleStripes);
-        // }
+        else if (demo_index == 7)
+        {
+            greyScaleStripes.drawStripes();
+            driver.update(&greyScaleStripes);
+        }
         // else if (demo_index == 8)
         // {
         //     rectangle.draw();
@@ -305,11 +308,11 @@ int main()
         // }
 
         // matrix panel brightness will vary when you uncomment the following api call
-        //  driver.setIntensity(0.35, false);
+        driver.setIntensity(intensity, false);
 
         // Update intensity for next loop
         intensity += step;
-        if (intensity >= 0.45f)
+        if (intensity >= 1.0f)
         {
             step = -step;
         }

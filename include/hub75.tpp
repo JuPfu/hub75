@@ -95,7 +95,7 @@ float Hub75Driver<Cfg>::pwm_clkdiv_(uint32_t sys_hz)
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
     {
         constexpr float m = 1.25f / 100.0f;
-        constexpr float n = 8.125f;
+        constexpr float n = 8.5f;
         const float clkdiv = (sys_hz / 1e6f) * m + n;
 
         return clkdiv;
@@ -981,6 +981,8 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_red_table()
     {
         if constexpr (Cfg.color.bitplanes == 16)
             return CIE16_RED;
+        else if constexpr (Cfg.color.bitplanes == 12)
+            return CIE12_RED;
         else if constexpr (Cfg.color.bitplanes == 10)
             return CIE10_RED;
         else if constexpr (Cfg.color.bitplanes == 8)
@@ -995,6 +997,8 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_red_table()
     {
         if constexpr (Cfg.color.bitplanes == 16)
             return CIE16;
+        else if constexpr (Cfg.color.bitplanes == 12)
+            return CIE12;
         else if constexpr (Cfg.color.bitplanes == 10)
             return CIE10;
         else if constexpr (Cfg.color.bitplanes == 8)
@@ -1014,6 +1018,8 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_green_table()
     {
         if constexpr (Cfg.color.bitplanes == 16)
             return CIE16_GREEN;
+        else if constexpr (Cfg.color.bitplanes == 12)
+            return CIE12_GREEN;
         else if constexpr (Cfg.color.bitplanes == 10)
             return CIE10_GREEN;
         else if constexpr (Cfg.color.bitplanes == 8)
@@ -1206,20 +1212,45 @@ static constexpr std::array<SpreadPair, 256> make_spread_lut()
 // Keep this in RAM (__not_in_flash) so XIP cache misses don't eat the gain.
 static constexpr auto SPREAD_LUT = make_spread_lut(); // compile time generation!
 
+template <const uint8_t *LANE, uint32_t DEPTH>
 static inline void pwm_expand_channels_(const uint16_t *v, uint8_t *dst)
 {
+    static_assert(DEPTH == 12 || DEPTH == 16, "PWM value depth must be 12 or 16 bit");
+
     uint32_t w[4] = {0, 0, 0, 0};
     for (uint32_t k = 0; k < 6; ++k)
     {
-        const SpreadPair h = SPREAD_LUT[v[k] >> 8];
-        const SpreadPair l = SPREAD_LUT[v[k] & 0xFFu];
-        const uint32_t s = ICND2153_LANE_OF[k];
-        w[0] |= h.lo << s;
-        w[1] |= h.hi << s;
+        const uint32_t s = LANE[k];
+        const uint32_t x = v[k];
+
+        if constexpr (DEPTH == 16)
+        {
+            const SpreadPair h = SPREAD_LUT[x >> 8];
+            w[0] |= h.lo << s;
+            w[1] |= h.hi << s;
+        }
+        else
+        {
+            // x <= 4095: bits 15..12 are zero, so wire bytes 0..3 stay 0 and
+            // x >> 8 only carries bits 11..8 -> only the .hi word is needed
+            w[1] |= SPREAD_LUT[x >> 8].hi << s;
+        }
+
+        const SpreadPair l = SPREAD_LUT[x & 0xFFu];
         w[2] |= l.lo << s;
         w[3] |= l.hi << s;
     }
-    memcpy(__builtin_assume_aligned(dst, 4), w, 16); // dst: 4-byte aligned, see header layout
+    memcpy(__builtin_assume_aligned(dst, 4), w, 16);
+}
+
+template <Hub75Config Cfg>
+static inline void pwm_expand_(const uint16_t *v, uint8_t *dst)
+{
+    constexpr uint32_t DEPTH = Cfg.color.bitplanes; // 12 or 16
+    if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+        pwm_expand_channels_<FM6363_LANE_OF, DEPTH>(v, dst);
+    else
+        pwm_expand_channels_<ICND2153_LANE_OF, DEPTH>(v, dst);
 }
 
 template <Hub75Config Cfg>
@@ -1228,7 +1259,9 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
     if constexpr (Cfg.panel.panel_class == PanelClass::PWM)
     {
         static_assert(ROWS_IN_PARALLEL == 2, "PWM stream assumes 2 parallel rows");
-        static_assert(Cfg.color.bitplanes == 16, "PWM stream carries 16 bit per channel");
+        // bitplanes = value depth of the CIE tables (12 or 16).
+        // The wire format is always 16 bits per channel.
+        static_assert(Cfg.color.bitplanes == 12 || Cfg.color.bitplanes == 16, "PWM value depth must be 12 or 16 bit");
 
         const uint32_t scale = pwm_scale_q16_(); // 0..65536
 
@@ -1265,14 +1298,14 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
                     const uint32_t pos = chip * 16 + channel;
                     const uint16_t *p = &storage_.rgb_buffer_[((row * CHAIN_WIDTH + pos) * ROWS_IN_PARALLEL) * 3];
                     if (scale >= 65536u)
-                        pwm_expand_channels_(p, &out[fb_index]);
+                        pwm_expand_<Cfg>(p, &out[fb_index]);
                     else
                     {
                         // apply brightness before expanding
                         uint16_t v[6];
                         for (uint32_t k = 0; k < 6; ++k)
                             v[k] = static_cast<uint16_t>((static_cast<uint32_t>(p[k]) * scale + 32768u) >> 16);
-                        pwm_expand_channels_(v, &out[fb_index]);
+                        pwm_expand_<Cfg>(v, &out[fb_index]);
                     }
                     fb_index += 16;
                 }

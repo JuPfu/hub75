@@ -398,7 +398,7 @@ class Hub75Driver : public Hub75DriverBase
 private:
     static_assert(Cfg.panel.chain_rows >= 1, "chain_rows must be >= 1");
     static_assert(Cfg.panel.chain_cols >= 1, "chain_cols must be >= 1");
-    static_assert(Cfg.panel.panel_class == PanelClass::PWM ? Cfg.color.bitplanes == 16 : (Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10),
+    static_assert(Cfg.panel.panel_class == PanelClass::PWM ? (Cfg.color.bitplanes == 16  || Cfg.color.bitplanes == 12) : (Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10),
                   "Invalid bit depth for selected panel class");
 
     // Unrotated panel geometry: internal only. Callers should use SCREEN_WIDTH/SCREEN_HEIGHT

@@ -188,10 +188,6 @@ static inline void fm6363_pixel_stream_program_init(
     uint le_pin
 )
 {
-    // Configure the state machine from a known disabled state.
-    pio_sm_set_enabled(pio, sm, false);
-    pio_sm_clear_fifos(pio, sm);
-
     // Configure the six consecutive RGB data pins as outputs.
     pio_sm_set_consecutive_pindirs(pio, sm, rgb_base_pin, 6, true);
 
