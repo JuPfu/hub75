@@ -191,17 +191,10 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
     uint32_t *cfg4_buf = register_slot(REGISTER_SLOT_CFG4, display_width);
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
-    // not tested yet - set number of lines to half the physical rows of the panel
-    uint16_t cfg1_lane[6];
-    for (uint32_t n = 0; n < 6; ++n)
-    {
-        cfg1_lane[n] = static_cast<uint16_t>(FM6363_CFG1_BY_COLOUR[fm6363_lane_colour(n)]);
-        cfg1_lane[n] = (cfg1_lane[n] & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
-    }
+    *cfg1_buf = (*cfg1_buf & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8); // set number of scan lines
+    prepare_register_dma(FM6363_CFG1_VALUE, cfg1_buf, display_width);
 
-    prepare_register_dma_lanes(cfg1_lane, cfg1_buf, display_width);
-
-    // REG2: the blanking level ADJ (b14..b10) depends on the LED colour the lane drives,
+    // The blanking level ADJ (b14..b10) depends on the LED colour the lane drives,
     // the current gain (b9..b1) comes from panel_gain and is the same for all colours.
     const uint16_t gain_bits = fm6363_gain_to_cfg2_bits(cfg.panel.panel_gain);
     uint16_t cfg2_lane[6];
@@ -213,12 +206,7 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
 
     prepare_register_dma(FM6363_CFG3_VALUE, cfg3_buf, display_width);
 
-    uint16_t cfg4_lane[6];
-    for (uint32_t n = 0; n < 6; ++n)
-    {
-        cfg4_lane[n] = static_cast<uint16_t>(FM6363_CFG4_BY_COLOUR[fm6363_lane_colour(n)]);
-    }
-    prepare_register_dma_lanes(cfg4_lane, cfg4_buf, display_width);
+    prepare_register_dma(FM6363_CFG4_VALUE, cfg4_buf, display_width);
 
     prepare_register_dma(FM6363_CFG5_VALUE, dbg_buf, display_width);
 

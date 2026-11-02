@@ -33,20 +33,18 @@ static constexpr uint32_t FM6363_CMD_DIS_OP = 13;    // disable all output chann
 static constexpr uint32_t FM6363_CMD_PRE_ACT = 14;   // pre-active command          (no payload)
 
 // ---- Configuration register values -----------------------------------------
-static constexpr uint16_t FM6363_CFG1_VALUE = 0x3FF0;
+static constexpr uint16_t FM6363_CFG1_VALUE = 0x1F50;
 static constexpr uint16_t FM6363_CFG2_VALUE = 0xF39D;
-static constexpr uint16_t FM6363_CFG3_VALUE = 0x0304;
-static constexpr uint16_t FM6363_CFG4_VALUE = 0x5A00;
-static constexpr uint16_t FM6363_CFG5_VALUE = 0x5E00;
+static constexpr uint16_t FM6363_CFG3_VALUE = 0x4082; 
+static constexpr uint16_t FM6363_CFG4_VALUE = 0x6F74;
+static constexpr uint16_t FM6363_CFG5_VALUE = 0x5600;
 
 // ---- REG2 per LED colour --------------------------------------------------
 // From the register-map examples: only b14..b10 (ghost-eliminate level) differs per colour.
 // Bits 9..1 (I_DIV4N + IGAIN, the current gain) of the CFG2 values below are OVERWRITTEN in
 // fm6363_setup() with the value derived from Hub75PanelConfig::panel_gain (fm6363.cpp).
 
-static constexpr uint16_t FM6363_CFG1_BY_COLOUR[3] = {0x1F50 /*R*/, 0x1F50 /*G*/, 0x1F50 /*B*/};
 static constexpr uint16_t FM6363_CFG2_BY_COLOUR[3] = {0xFC01 /*R*/, 0xE001 /*G*/, 0xDC01 /*B*/};
-static constexpr uint16_t FM6363_CFG4_BY_COLOUR[3] = {0x0F36 /*R*/, 0x0F36 /*G*/, 0x0F36 /*B*/};
 
 static constexpr uint8_t FM6363_LANE_OF[6] = {0, 1, 2, 3, 4, 5};
 

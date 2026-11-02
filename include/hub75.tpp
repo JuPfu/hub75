@@ -95,7 +95,7 @@ float Hub75Driver<Cfg>::pwm_clkdiv_(uint32_t sys_hz)
     else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
     {
         constexpr float m = 1.25f / 100.0f;
-        constexpr float n = 8.5f;
+        constexpr float n = 8.25f;
         const float clkdiv = (sys_hz / 1e6f) * m + n;
 
         return clkdiv;
