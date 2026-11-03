@@ -24,40 +24,47 @@ Hub75Driver<panel_cfg> driver;
 Everything you leave out has this value:
 
 ```cpp
+// hub75_demo.cpp / your own .cpp file
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width  = 64,
-        .matrix_panel_height = 64,
-        .chain_rows = 1,
-        .chain_cols = 1,
-        .panel_class = PanelClass::HUB75,
-        .chain_mode  = Hub75ChainMode::SERPENTINE,
-        .panel_kind  = RowMapping::Standard,
-        .address_type = RowAddressing::Binary,
-        .scan_mode = 0,                            // 0 = deduce
-        .panel_chip = Hub75PanelChip::GENERIC,
-        .pwm_reverse_chain_order = false,
-        .inverted_stb = false,
-        .sm_clockdiv_factor = 1.0f,
-        .base_latch_ns = 80,
-        .base_addr_ns  = 160,
+        .matrix_panel_width = 64,                  // your matrix panel width
+        .matrix_panel_height = 64,                 // your matrix panel height
+        .chain_rows = 1,                           // number of chain rows stacked vertically (rows)
+        .chain_cols = 1,                           // number of panels chained left-to-right in a single chain row (columns)
+        .panel_class = PanelClass::HUB75,          // standard HUB75 panel - another value is PWM
+        .chain_mode = Hub75ChainMode::SERPENTINE,  // default is serpentine (U-Turn with compensation for 180° rotation)
+        .panel_kind = RowMapping::Standard,        // how to map the rgb888 buffer onto the panel 
+        .address_type = RowAddressing::Binary,     // row addressing via address pins
+        .scan_mode = 0,                            // 0 tries to automatically deduce scan_mode else specify a value
+        .panel_chip = Hub75PanelChip::GENERIC,     // mainly used for initialisation sequence but also for panel specific characteristics
+        .pwm_reverse_chain_order = false,          // PWM panels only - reverse the order of the panels inside a chain
+        .inverted_stb = false,                     // inverted pin signal for strobe (latch) pin
+        .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
+        .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
+        .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
+        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for FM6363 panels only
     },
-    .screen = { .rotation = Hub75Rotation::DEG_0 },
+    .screen = {
+        .rotation = Hub75Rotation::DEG_0,          // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
+    },
     .pins = {
-        .data_base_pin = 0,  .data_n_pins = 6,
-        .rowsel_base_pin = 6, .rowsel_n_pins = 5,
-        .clk_pin = 11, .strobe_pin = 12, .oen_pin = 13,
+        .data_base_pin = 0,                        // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
+        .data_n_pins = 6,                          // number (count) of colour pins (usually 6: R0, G0, B0, R1, G1, B1)
+        .rowsel_base_pin = 6,                      // base GPIO row select pin (aka start index) of A, B (, C, D. E) GPIO pins
+        .rowsel_n_pins = 5,                        // row select pin count 
+        .clk_pin = 11,                             // GPIO pin for CLK 
+        .strobe_pin = 12,                          // GPIO pin for STROBE (LATCH)
+        .oen_pin = 13,                             // GPIO for OE pin (GCLK for PWM panel class)
     },
     .color = {
-        .bitplanes = 10,
-        .separate_cie_channels = false,
-        .balanced_light_output = true,
-        .swap_rb_pins = false,
-        .ccm_rg_shift = 31, .ccm_rb_shift = 31,    // 31 = off
-        .ccm_gr_shift = 31, .ccm_gb_shift = 31,
-        .ccm_br_shift = 31, .ccm_bg_shift = 31,
+        .bitplanes = 10,               // number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values are 8, 10 for HUB75 panels and 16 for PWM panels
+        .separate_cie_channels = true, // use separate CIE channels for improved colour representation - needs more memory
+        .balanced_light_output = true, // improves image quality but needs some more memory
+        .swap_rb_pins = false,         // swap red and blue pins in software
+        .ccm_rg_shift = 6,             // CCM Cross-channel mixing - mix ~1.6% green into the red channel
+        .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     },
-    .frame_rate_debug = false,
+    .frame_rate_debug = false,         // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
 };
 ```
 
@@ -84,6 +91,7 @@ Describes **the physical panel**: its size, how several panels are chained, how 
 | [`sm_clockdiv_factor`](#sm_clockdiv_factor) | `float` | `1.0f` | Slow the PIO state machines down |
 | [`base_latch_ns`](#base_latch_ns--base_addr_ns) | `uint32_t` | `80` | Latch settle time in ns |
 | [`base_addr_ns`](#base_latch_ns--base_addr_ns) | `uint32_t` | `160` | Row-address settle time in ns |
+| [`panel_gain`](#panel-gain) | `uint32_t` | `100` | Presetting of brightness - currently only for FM6363 based PWM chip |
 
 ### `matrix_panel_width` / `matrix_panel_height`
 
@@ -257,6 +265,15 @@ Wait times that give the panel electronics time to settle. The driver converts t
 | `base_addr_ns` | `160` | Row address lines to stabilise |
 
 Increase them (e.g. `180` / `260` as in `hub75_demo.cpp`) if you see ghosting, a faint image of the neighbouring row or flicker - typically with long cables or slow panels. Keep them as low as possible: they cost refresh rate.
+
+### `panel_gain`
+
+Constant current source output to regulate the basic brightness of the panel. Currently only effective for FM6363 based PWM panel.
+
+| Value | Effect |
+|---|---|
+| `100` *(default)* | Full brightness |
+| `0` | Minimal brightness (dark) |
 
 ### Shortcut: Panel Profiles
 
