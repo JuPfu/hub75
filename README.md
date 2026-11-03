@@ -141,7 +141,6 @@ See [CMakeLists.txt Settings](#docs/cmakelists.md) for detais.
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
 See [`hub75_demo.cpp`](hub75_demo.cpp#14) how to set the values of the [`Hub75Config`](include/hub75.hpp#95) structure to your needs.
-Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLists.txt).
 
 ### CMakeLists.txt Settings for Pico (RP2040) or Pico 2 (RP2430)
 
