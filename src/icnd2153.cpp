@@ -122,6 +122,62 @@ static void prepare_register_dma(uint16_t value, uint32_t *dst, uint32_t display
 }
 
 // -----------------------------------------------------------------------------
+// panel_gain (percent, 0..100) -> CFG2 current-gain bits
+//
+// Same CFG2 layout and same mapping as fm6363.cpp: CFG2 bit 9 (I_DIV4N) and
+// bits 8:1 (IGAIN) set the constant-current output:
+//   I_DIV4N = 1 (high gear):  Iout ~ IGAIN / 256
+//   I_DIV4N = 0 (low gear):   Iout ~ IGAIN / 1024
+//   IGAIN >= 64 is required.
+//
+// Both gears are put on ONE linear current scale I = IGAIN (low gear) or 4 * IGAIN
+// (high gear), so the gear switch is seamless:
+//   I =  64 ..  255   low gear   ->  12.5 % ..  49.8 % of the nominal current
+//   I = 256 .. 1020   high gear  ->  50.0 % .. 199.2 % of the nominal current
+// 100 % (I = 512, high gear with IGAIN = 128) is the current set by Rext.
+//
+// panel_gain is mapped linearly in current onto I_MIN .. I_MAX:
+//   panel_gain =   0 -> I_MIN: lowest current the chip allows (12.5 %) - NOT "off", use setIntensity(0) for that
+//   panel_gain = 100 -> I_MAX: 100 % nominal current. Raise I_MAX (up to 1020) only if the LEDs may be overdriven.
+//
+// NOTE: the CFG2 value used before panel_gain existed (0xFF9C, high gear, IGAIN = 206)
+// corresponds to I = 824, i.e. about 161 % on this scale. With I_MAX = 512 the panel is
+// therefore driven with less current than before at panel_gain = 100.
+// -----------------------------------------------------------------------------
+static constexpr uint32_t ICND2153_GAIN_I_MIN = 64;
+static constexpr uint32_t ICND2153_GAIN_I_MAX = 512;
+static_assert(ICND2153_GAIN_I_MIN >= 64 && ICND2153_GAIN_I_MAX <= 1020 && ICND2153_GAIN_I_MIN < ICND2153_GAIN_I_MAX,
+              "gain scale must stay inside IGAIN 64..255 of both current gears");
+
+static constexpr uint16_t ICND2153_CFG2_GAIN_MASK = 0x03FE; // I_DIV4N (bit 9) + IGAIN (bits 8:1)
+
+// Returns the bits to be OR-ed into CFG2 (already positioned in bits 9:1).
+static constexpr uint16_t icnd2153_gain_to_cfg2_bits(uint32_t percent)
+{
+    if (percent > 100u)
+        percent = 100u;
+
+    // common current scale, rounded to nearest
+    const uint32_t i = ICND2153_GAIN_I_MIN + (percent * (ICND2153_GAIN_I_MAX - ICND2153_GAIN_I_MIN) + 50u) / 100u;
+
+    uint32_t gear = 0u; // I_DIV4N
+    uint32_t igain = i;
+    if (i > 255u)
+    {
+        gear = 1u;
+        igain = (i + 2u) / 4u; // high gear: one IGAIN step is worth 4 units of I
+    }
+    if (igain > 255u)
+        igain = 255u;
+
+    return static_cast<uint16_t>((gear << 9) | (igain << 1));
+}
+
+static_assert(icnd2153_gain_to_cfg2_bits(0) == 0x0080, "0 %: low gear, IGAIN 64");
+static_assert(icnd2153_gain_to_cfg2_bits(100) == 0x0300, "100 %: high gear, IGAIN 128");
+static_assert(icnd2153_gain_to_cfg2_bits(250) == icnd2153_gain_to_cfg2_bits(100), "values above 100 are clamped");
+
+// -----------------------------------------------------------------------------
 // icnd2153_setup()
 //
 // Runs the configuration sequence for one ICND2153 chain — see the sequence
@@ -144,12 +200,18 @@ static void icnd2153_setup(PIO pio, uint sm, uint offset)
     const uint16_t cfg1_value = (ICND2153_CFG1_VALUE & 0xE0FFu) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8);
     prepare_register_dma(cfg1_value, cfg1_buf, display_width);
 
-    // REG2 carries the pre-charge level, which depends on the LED colour the lane drives.
+    // REG2 carries the pre-charge / blanking level (b14..b10), which depends on the LED colour the
+    // lane drives, and the current gain (b9..b1), which comes from panel_gain and is the same for
+    // all colours. The gain bits of the base value are overwritten.
+    const uint16_t gain_bits = icnd2153_gain_to_cfg2_bits(cfg.panel.panel_gain);
     uint16_t cfg2_lane[6];
     for (uint32_t n = 0; n < 6; ++n)
-        cfg2_lane[n] = ICND2153_CFG2_PER_COLOUR
-                           ? static_cast<uint16_t>(ICND2153_CFG2_BY_COLOUR[icnd2153_lane_colour(n)] | ICND2153_CFG2_EXTRA)
-                           : ICND2153_CFG2_VALUE;
+    {
+        const uint16_t base = ICND2153_CFG2_PER_COLOUR
+                                  ? static_cast<uint16_t>(ICND2153_CFG2_BY_COLOUR[icnd2153_lane_colour(n)] | ICND2153_CFG2_EXTRA)
+                                  : ICND2153_CFG2_VALUE;
+        cfg2_lane[n] = static_cast<uint16_t>((base & ~ICND2153_CFG2_GAIN_MASK) | gain_bits);
+    }
     prepare_register_dma_lanes(cfg2_lane, cfg2_buf, display_width);
 
     prepare_register_dma(ICND2153_CFG3_VALUE, cfg3_buf, display_width);

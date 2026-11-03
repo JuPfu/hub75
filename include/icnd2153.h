@@ -35,13 +35,16 @@ static constexpr uint32_t ICND2153_CMD_PRE_ACT = 14;   // pre-active command    
 
 // ---- Configuration register values -----------------------------------------
 static constexpr uint16_t ICND2153_CFG1_VALUE = 0x1F70;
-static constexpr uint16_t ICND2153_CFG2_VALUE = 0xFF9C;
+static constexpr uint16_t ICND2153_CFG2_VALUE = 0xFF9C; // used if ICND2153_CFG2_PER_COLOUR is false; bits 9..1 (gain) are overwritten from panel_gain
 static constexpr uint16_t ICND2153_CFG3_VALUE = 0x40F7;
 static constexpr uint16_t ICND2153_CFG4_VALUE = 0x0040;
 static constexpr uint16_t ICND2153_CFG5_VALUE = 0x0008;
 
 // ---- REG2 per LED colour --------------------------------------------------
 // From the register-map examples: only b14..b10 (ghost-eliminate level) differs per colour.
+// Bits 9..1 (I_DIV4N + IGAIN, the current gain) of the CFG2 values below are OVERWRITTEN in
+// icnd2153_setup() with the value derived from Hub75PanelConfig::panel_gain (icnd2153.cpp),
+// exactly as fm6363_setup() does for the FM6363 (same CFG2 gain bits).
 static constexpr uint16_t ICND2153_CFG2_BY_COLOUR[3] = {0x7F9C /*R*/, 0x679C /*G*/, 0x5F9C /*B*/};
 
 static constexpr uint16_t ICND2153_CFG2_EXTRA = 0x8000;
