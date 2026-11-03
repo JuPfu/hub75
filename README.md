@@ -21,14 +21,13 @@ Once started, the driver streams the panel autonomously; only hardware-triggered
 
 Most panels take the row number as a binary address on pins A–E. Some panels instead advance the active row through a **shift register** (SM5368, 74HC595-type row switchers).
 
-See [Settings for a Hub75 Panel with Shift Register for Row Addressing](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing)
+See [Settings for a Hub75 Panel with Shift Register for Row Addressing](#settings-for-a-hub75-panel-with-shift-register-for-row-addressing) 
 
-### ICND2153-based (S)PWM panels with Shift Register for Row Addressing (Row Addressing ABCShiftRegister)
+### ICND2153-based PWM panel with Shift Register for Row Addressing (Row Addressing ABCShiftRegister)
 
 PWM panels contain driver ICs (ICND2153) that **generate the grey levels themselves** from 16-bit values. The driver therefore does not produce bit-planes for these panels; it builds a 16-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
 
-See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel)
-
+See [Settings for a ICND2153 Based PWM Hub75 Panel](#settings-for-a-icnd2153-based-pwm-hub75-panel-with-shift-register-for-row-addressing)
 
 #### Video Sequence of ICND2153 Panel in Action
 
@@ -38,11 +37,11 @@ Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: B
 
 *Demo video: colours are much brighter, more vivid and more brilliant in reality.*
 
-### FM6363-based (S)PWM panels with Standard Row Addressing (Row Addressing Binary)
+### FM6363-based (e)PWM panels with Standard Row Addressing (Row Addressing Binary)
 
-PWM panels contain driver ICs (FM6363) that **generate the grey levels themselves** from 16-bit values. The driver therefore does not produce bit-planes for these panels; it builds a 16-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
+PWM panels contain driver ICs (FM6363C) that **generate the grey levels themselves** from 16-bit values. The FM6363 utilizes ePWM technology to enhance the control of LED displays, allowing for precise adjustments in brightness and color. The driver therefore does not produce bit-planes for these panels; it builds a 12-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
 
-See [Settings for a FM6363 Based PWM Hub75 Panel](#settings-for-a-fm6363-based-pwm-hub75-panel)
+See [Settings for a FM6363 Based PWM Hub75 Panel](#settings-for-a-fm6363-based-pwm-hub75-panel-with-standard-row-addressing)
 
 ## Where to go
 
@@ -77,53 +76,21 @@ If you're interested in specific details — such as how to improve output quali
 - **Host OS:** Linux, macOS, or Windows (WSL recommended on Windows)
 
 ## Wiring Details
-
-### Default Mapping for HUB75 Connector → Raspberry Pico GPIOs
-
-The diagram shows the default mapping as defined in the hub75.cpp file.
   
 <img src="assets/pico_wiring.svg">
 
-### Colour Data Pins
+### Pin Assignment (default)
 
-⚠️ It is a requirement of the `Hub75 driver` that the **colour pins** must be arranged in a continuous block in ascending order!
+⚠️ The driver requires the **colour pins**, the **address pins** and the **control pins** each to be a **continuous block in ascending GPIO order**.
 
-- `pins.data_base_pin` = **GPIO 0** (first in a consecutive block)
-- `pins.data_n_pins` = **6** (for R0, G0, B0, R1, G1, B1)
+| Group | Signal → Pico GPIO | Config attributes |
+|:------|:-------------------|:------------------|
+| **Colour data** (6 pins) | R0 → **0**, G0 → **1**, B0 → **2**, R1 → **3**, G1 → **4**, B1 → **5** | `pins.data_base_pin = 0`<br>`pins.data_n_pins = 6` |
+| **Address / row select** (5 pins) | A (A0) → **6**, B (A1) → **7**, C (A2) → **8**, D (A3) → **9**, E (A4) → **10** | `pins.rowsel_base_pin = 6`<br>`pins.rowsel_n_pins = 5` |
+| **Control** (3 pins) | CLK → **11**, STROBE (latch) → **12**, OE (output enable) → **13** | `pins.clk_pin = 11`<br>`pins.strobe_pin = 12`<br>`pins.oen_pin = 13` |
 
-| Hub75 Colour Bit   | connected to      | Pico GPIO |
-|:-------------------|-------------------|:-----:|
-| R0                 |                   | 0    |
-| G0                 |                   | 1    |
-| B0                 |                   | 2    |
-| R1                 |                   | 3    |
-| G1                 |                   | 4    |
-| B1                 |                   | 5    |
-
-### Address (Row Select) Pins
-
-⚠️ It is a requirement of the `Hub75 driver` that the **address pins** must be arranged in a continuous block in ascending order!
-
-- `pins.rowsel_base_pin` = **GPIO 6**
-- `pins.rowsel_n_pins` = **5** (A0–A4)
-
-| Address bit |  connected to      | Pico GPIO |
-| ----------- |--------------------|:---------:|
-| A0 (A)      |                    | 6    |
-| A1 (B)      |                    | 7    |
-| A2 (C)      |                    | 8    |
-| A3 (D)      |                    | 9    |
-| A4 (E)      |                    | 10   |
-
-### Control Pins
-
-⚠️ It is a requirement of the `Hub75 driver` that the **control pins** must be arranged in a continuous block in ascending order!
-
-- **`pins.clk_pin`** (clock): GPIO 11
-- **`pins.strobe_pin`** (latch): GPIO 12
-- **`pins.oen_pin`** (output enable): GPIO 13
-
----
+GPIO order at a glance: `0 1 2 3 4 5 │ 6 7 8 9 10 │ 11 12 13`
+                         `R0 G0 B0 R1 G1 B1 │ A B C D E │ CLK STB OE`
 
 # Configuration in Code
 
@@ -222,7 +189,7 @@ as panel dimensions 64x64 (64 rows and 64 columns) is the default.
 
 ## How to Use This Project in VSCode
 
-You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. Follow these steps:
+You can easily use this project with VSCode, especially with the **Raspberry Pi Pico plugin** installed. The following step-wise description is verified for **MacOS** and **Linux** but **Windows with/without WSL** should (hopefully) work, too:
 
 1. **Open VSCode and start a new window**.
 2. **Clone the repository**:
@@ -274,14 +241,14 @@ You can easily use this project with VSCode, especially with the **Raspberry Pi 
 
 ## Demo Effects
 
-The demo effects in `hub75_demo.cpp` are included to exercise the driver and showcase colour fidelity. They eefects cycle automatically.
+The demo effects in `hub75_demo.cpp` are designed to test the driver and demonstrate color accuracy. The effects cycle automatically every 15 seconds.
 
 | # | Effect | Purpose |
 | --- | -------- | --------- |
 | 0 | Bouncing balls with text | Tests real-time animation; text position is hard-coded for 64×64 |
 | 1 | Fire effect | Demonstrates per-pixel colour blending at high refresh rates |
 | 2 | Static 64×64 images | Verify colour accuracy and panel mapping on the reference panel size |
-| 3 | Rotator | Geometric transformation test - rotating antialiased line |
+| 3 | Rotator | Geometric transformation test - rotating antialiased line - now ghosting should occur|
 | 4 | Analog clock | Geometric transformation test - application of multiple rotating antialiased lines |
 | 5 | Colour gradient / plasma | Full-spectrum colour coverage |
 | 6 | Straight lines | Helps to detect mapping errors |
@@ -312,6 +279,7 @@ constexpr Hub75Config panel_cfg{
         .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
         .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
+        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for FM6363 panels only
     },
     .screen = {
         .rotation = Hub75Rotation::DEG_0,          // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
@@ -405,7 +373,7 @@ constexpr Hub75Config panel_cfg{
 }
 ```
 
-### Settings for a ICND2153 Based PWM Hub75 Panel with Shift Register for Row Addressing (RowAddressing ABCShiftRegister)
+### Settings for a ICND2153 Based PWM Hub75 Panel with Shift Register for Row Addressing
 
 PWM modules generate the pulse width modulation themselves – in contrast, the BCM (Binary Coded Modulation), including the balanced light output, is generated by the `Hub75 driver` for Hub75 panels (`.panel_class = PanelClass::HUB75`). The `Hub75 driver` implementation for the ICND2153 PWM panel therefore is different. This is reflected in three configuration attributes `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::ICND2153`. and `.bitplanes = 16`.
 
@@ -436,22 +404,23 @@ If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_orde
 
 Details on the implementation of this PWM panel driver can be found in [INCD2153 explained](./docs/icnd2153.md).
 
-### Settings for a FM6363 Based PWM Hub75 Panel with Standard Row Addressing (RowAddressing Binary)
+### Settings for a FM6363 Based PWM Hub75 Panel with Standard Row Addressing
 
-PWM modules generate the pulse width modulation themselves – in contrast, the BCM (Binary Coded Modulation), including the balanced light output, is generated by the `Hub75 driver` for Hub75 panels (`.panel_class = PanelClass::HUB75`). The `Hub75 driver` implementation for the FM6363 PWM panel therefore is different. This is reflected in three configuration attributes `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::FM6363`. and `.bitplanes = 16`.
+PWM modules generate the pulse width modulation themselves – in contrast, the BCM (Binary Coded Modulation), including the balanced light output, is generated by the `Hub75 driver` for Hub75 panels (`.panel_class = PanelClass::HUB75`). The `Hub75 driver` implementation for the FM6363 PWM panel therefore is different. This is reflected in three configuration attributes `.panel_class = PanelClass::PWM`, `.panel_chip = Hub75PanelChip::FM6363`. and `.bitplanes = 12`.
 
 ```cpp
 constexpr Hub75Config panel_cfg{
     .panel = {
-        .matrix_panel_width = 64,                 // your matrix panel width
+        .matrix_panel_width = 64,                  // your matrix panel width
         .matrix_panel_height = 64,                 // your matrix panel height
         .panel_class = PanelClass::PWM,            // it's a PWM panel
         .address_type = RowAddressing::Binary,     // row addressing via address pins
         .panel_chip = Hub75PanelChip::FM3636,      // mainly used for initialisation sequence but also for panel specific characteristics
-        .pwm_reverse_chain_order = false           // PWM panels only - reverse the order of the panels inside a chain
+        .pwm_reverse_chain_order = false,          // PWM panels only - reverse the order of the panels inside a chain
+        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for FM6363 panels only
      },
     .color = {
-        .bitplanes = 16,                           // number (count) of bit-planes for a ICND2153 PWM panel
+        .bitplanes = 12,                           // number (count) of bit-planes for a FM6363 ePWM panel
         .separate_cie_channels = true,             // use separate CIE channels for improved colour representation - needs more memory
         .balanced_light_output = true,             // ⚠️ setting is ignored for PWM panels  
      },
@@ -461,7 +430,7 @@ constexpr Hub75Config panel_cfg{
 
 **Tested panel:** ??? (64×64, 1/32 scan).
 
-**Memory:** this configuration needs ample memory – a Pico (RP2040) might do but plan for an Pico 2 (RP2350). Chaining of two such panels should work for Pico 2 but is not verified.
+**Memory:** this configuration needs ample memory – a Pico (RP2040) might do but plan for an Pico 2 (RP2350). Chaining of two such panels for Pico 2 is verified. A third panel might be chained, too, but is not yet verified.
 
 If the panels of a chain appear in the wrong order, set `.pwm_reverse_chain_order = true`.
 
