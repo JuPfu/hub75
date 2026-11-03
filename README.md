@@ -60,6 +60,7 @@ mistakes and multiple (different) displays can operate independently off a singl
 
 If you're interested in specific details — such as how to improve output quality or configure chained panels — the following links should help you explore the capabilities of the `Hub75 driver`
 
+- [CMakeLists.txt configuration](docs/cmakelist.md) - Pico board definition, multicore usage and RP2350B specification
 - [Configuration reference](docs/configuration.md) – reference for all attributes
 - [Pixel mapping](docs/pixel-mapping.md) – choose the correct pixel mapping for your matrix panel
 - [Colour pipeline](docs/colour.md) – balanced light output, CIE1931, colour correction matrix, brightness
@@ -135,8 +136,7 @@ value** declared directly in the struct definition in `hub75.hpp` (see
 A **small number of build-system-level flags** remain in `CMakeLists.txt` — these control how
 the project is *built*, not how the panel is *wired or timed*, so they stay as
 `target_compile_definitions`: `PICO_RP2350A`, `USE_PICO_GRAPHICS`, and `HUB75_MULTICORE`.
-See [Configuration in Code — Quick Reference](#configuration-in-code--quick-reference) for the
-complete, current list.
+See [CMakeLists.txt Settings](#docs/cmakelists.md) for detais.
 
 ## Configuration Examples  <a id='allowed_deviations_anchor'></a>
 
@@ -145,20 +145,20 @@ Only a handful of build-system-level flags remain in [`CMakeLists.txt`](CMakeLis
 
 ### CMakeLists.txt Settings for Pico (RP2040) or Pico 2 (RP2430)
 
-The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt#26) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
+The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt#26) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPHICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
 
 Here is the default configuration in the [`CMakeLists.txt`](CMakeLists.txt) file that comes with this library.
 
 ```cmake
 
-# ⚠️ look at or near line 26
+# ⚠️ look at or near line 28
 set(PICO_BOARD pico2 CACHE STRING "Board type")  # depending on your pico hardware switch pico 2 (RP2430) to pico (RP2040)
 
 # The following two lines must be uncommented to compile for bare RP2350 without a board
 # set(PICO_PLATFORM rp2350)
 # set(PICO_BOARD none CACHE STRING "Board type")
 
-# ⚠️ look at or near line 78
+# ⚠️ look at or near line 79
 target_compile_definitions(hub75_demo PRIVATE
     # PICO_RP2350A=0             # uncomment for RP2350B microcontrollers only
     USE_PICO_GRAPHICS=true       # set to false if you use hub75 as a library
@@ -291,7 +291,7 @@ constexpr Hub75Config panel_cfg{
         .rowsel_n_pins = 5,                        // row select pin count 
         .clk_pin = 11,                             // GPIO pin for CLK 
         .strobe_pin = 12,                          // GPIO pin for STROBE (LATCH)
-        .oen_pin = 13,                             // GPIO for OE pin (GCKL for PWM panel class)
+        .oen_pin = 13,                             // GPIO for OE pin (GCLK for PWM panel class)
     },
     .color = {
         .bitplanes = 10,               // number (count) of bit-planes used for BCM (Binary Code Modulation) - valid values are 8, 10 for HUB75 panels and 16 for PWM panels
@@ -302,48 +302,6 @@ constexpr Hub75Config panel_cfg{
         .ccm_gb_shift = 7,             // CCM Cross-channel mixing - mix ~0.8% blue into the green channel
     },
     .frame_rate_debug = false,         // for testing and debugging purpose only: output frame rate information (printf) e.g. in VS Code monitor - set to `false` for production
-};
-```
-
-### CMakeLists.txt Settings for RP2350B
-
-To use a `RP2350B` microcontroller adapt `CMakeLists.txt` as shown below.
-
-```cmake
-# ⚠️ look at or near line 26
-# set(PICO_BOARD pico2 CACHE STRING "Board type")
-
-# The following two lines must be uncommented to compile for bare RP2350 without a board
-set(PICO_PLATFORM rp2350)
-set(PICO_BOARD none CACHE STRING "Board type")
-
-# ⚠️ look at or near line 78
-target_compile_definitions(hub75_demo PRIVATE
-    PICO_RP2350A=0               # uncomment for RP2350B microcontrollers only
-    USE_PICO_GRAPHICS=true       # set to false if you use hub75 as a library
-    HUB75_MULTICORE=true         # use core1 for the hub75 driver
-)
-```
-
-### Driver Configuration for RP2350B
-
-Since the `RP2350B` microcontroller has more pins available as the `pico2` in this example we use pins 30 up to pin 43 to connect to the matrix panel.
-
-```cpp
-constexpr Hub75Config panel_cfg{
-    .panel = {
-        .matrix_panel_width = 64,   // your matrix panel width
-        .matrix_panel_height = 64,  // your matrix panel height
-    },
-    .pins = {
-        .data_base_pin = 30,        // base GPIO pin (aka start index) of R0, G0, B0, R1, G1, B1 GPIO pins
-        .data_n_pins = 6,           // number (count) of colour pins (usually 6: R0, G0, B0, R1, G1, B1)
-        .rowsel_base_pin = 36,      // base GPIO row select pin (aka start index) of A, B (, C, D. E) GPIO pins
-        .rowsel_n_pins = 5,         // row select pin count 
-        .clk_pin = 41,              // GPIO pin for CLK 
-        .strobe_pin = 42,           // GPIO pin for STROBE (LATCH)
-        .oen_pin = 43,              // GPIO for OE pin (GCKL for PWM panel class)
-    },
 };
 ```
 
@@ -415,7 +373,7 @@ constexpr Hub75Config panel_cfg{
         .matrix_panel_height = 64,                 // your matrix panel height
         .panel_class = PanelClass::PWM,            // it's a PWM panel
         .address_type = RowAddressing::Binary,     // row addressing via address pins
-        .panel_chip = Hub75PanelChip::FM3636,      // mainly used for initialisation sequence but also for panel specific characteristics
+        .panel_chip = Hub75PanelChip::FM6363,      // mainly used for initialisation sequence but also for panel specific characteristics
         .pwm_reverse_chain_order = false,          // PWM panels only - reverse the order of the panels inside a chain
         .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for FM6363 panels only
      },
