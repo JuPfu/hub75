@@ -156,7 +156,7 @@ struct Hub75PanelConfig
     uint32_t base_latch_ns = 80; // wait time in nano-seconds to stabilise latch
     uint32_t base_addr_ns = 160; // wait time in nano-seconds to stabilise row addressing
 
-    uint32_t panel_gain = 50; // basis brightness of the panel in percent (range 0 - 100)
+    uint32_t panel_gain = 80; // basis brightness of the panel in percent (range 0 - 100)
 };
 
 // Logical display orientation.

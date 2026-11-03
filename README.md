@@ -278,7 +278,7 @@ constexpr Hub75Config panel_cfg{
         .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
         .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
-        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for PWM panels with ICND2153 or FM6363 chip only
+        .panel_gain = 80                           // gain percentage (integer range from 0 to 100) - at the moment for PWM panels with ICND2153 or FM6363 chip only
     },
     .screen = {
         .rotation = Hub75Rotation::DEG_0,          // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
@@ -374,7 +374,7 @@ constexpr Hub75Config panel_cfg{
         .address_type = RowAddressing::Binary,     // row addressing via address pins
         .panel_chip = Hub75PanelChip::FM6363,      // mainly used for initialisation sequence but also for panel specific characteristics
         .pwm_reverse_chain_order = false,          // PWM panels only - reverse the order of the panels inside a chain
-        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for FM6363 panels only
+        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for ICND2153 and FM6363 panels only
      },
     .color = {
         .bitplanes = 12,                           // number (count) of bit-planes for a FM6363 ePWM panel

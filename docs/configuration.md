@@ -42,7 +42,7 @@ constexpr Hub75Config panel_cfg{
         .sm_clockdiv_factor = 1.0f,                // the driver is fast - to prevent flicker or ghosting it might be worth a try to reduce state machine speed
         .base_latch_ns = 180,                      // wait time in nano-seconds to stabilise latch
         .base_addr_ns = 260,                       // wait time in nano-seconds to stabilise row addressing
-        .panel_gain = 100                          // gain percentage (integer range from 0 to 100) - at the moment for PWM panels with ICND2153 or FM6363 chip only
+        .panel_gain = 80                           // gain percentage (integer range from 0 to 100) - at the moment for PWM panels with ICND2153 or FM6363 chip only
     },
     .screen = {
         .rotation = Hub75Rotation::DEG_0,          // display rotation (DEG_0, DEG_90, DEG_180 or DEG_270)
@@ -91,7 +91,7 @@ Describes **the physical panel**: its size, how several panels are chained, how 
 | [`sm_clockdiv_factor`](#sm_clockdiv_factor) | `float` | `1.0f` | Slow the PIO state machines down |
 | [`base_latch_ns`](#base_latch_ns--base_addr_ns) | `uint32_t` | `80` | Latch settle time in ns |
 | [`base_addr_ns`](#base_latch_ns--base_addr_ns) | `uint32_t` | `160` | Row-address settle time in ns |
-| [`panel_gain`](#panel-gain) | `uint32_t` | `100` | Presetting of brightness - currently only for ICND2153 and FM6363 based PWM chips |
+| [`panel_gain`](#panel-gain) | `uint32_t` | `80` | Presetting of brightness - currently only for ICND2153 and FM6363 based PWM chips |
 
 ### `matrix_panel_width` / `matrix_panel_height`
 
@@ -270,9 +270,10 @@ Increase them (e.g. `180` / `260` as in `hub75_demo.cpp`) if you see ghosting, a
 
 Constant current source output to regulate the basic brightness of the panel. Currently only effective for ICND2153 and FM6363 based PWM panels.
 
-| Value | Effect |
+| Value | Effect|
 |---|---|
-| `100` *(default)* | Full brightness |
+| `100` | Maximum brightness (full brightness) |
+| `80` | *(default)*  (bright) |
 | `0` | Minimal brightness (dark) |
 
 ### Shortcut: Panel Profiles
