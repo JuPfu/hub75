@@ -39,7 +39,7 @@ Here a brief sequence of the ICND2153 PWM panel in action (Taylor Swift image: B
 
 ### FM6363-based (e)PWM panels with Standard Row Addressing (Row Addressing Binary)
 
-PWM panels contain driver ICs (FM6363C) that **generate the grey levels themselves** from 16-bit values. The FM6363 utilizes ePWM technology to enhance the control of LED displays, allowing for precise adjustments in brightness and color. The driver therefore does not produce bit-planes for these panels; it builds a 12-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
+PWM panels contain driver ICs (FM6363C) that **generate the grey levels themselves**. The FM6363 utilizes ePWM technology to enhance the control of LED displays, allowing for precise adjustments in brightness and color. The driver therefore does not produce bit-planes for these panels; it builds a 12-bit pixel stream, and the OE pin carries the grey-scale clock (GCLK). Wiring is identical to a standard panel.
 
 See [Settings for a FM6363 Based PWM Hub75 Panel](#settings-for-a-fm6363-based-pwm-hub75-panel-with-standard-row-addressing)
 
