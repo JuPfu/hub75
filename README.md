@@ -142,7 +142,7 @@ See [CMakeLists.txt Settings](#docs/cmakelists.md) for detais.
 
 See [`hub75_demo.cpp`](hub75_demo.cpp#14) how to set the values of the [`Hub75Config`](include/hub75.hpp#95) structure to your needs.
 
-### CMakeLists.txt Settings for Pico (RP2040) or Pico 2 (RP2430)
+### CMakeLists.txt Settings for Pico (RP2040) or Pico 2 (RP2350)
 
 The following excerpt from file [`CMakeLists.txt`](CMakeLists.txt#26) shows that `pico2` is selected as the “Board type”. The `Hub75 driver` uses Pimoroni’s PicoGraphics library (`USE_PICO_GRAPHICS`). The `Hub75 driver` runs on the second core `core1` of the `pico2`, while the first core (`core0`) is used by your application logic, which typically draws using Pimoroni’s graphics library.
 
@@ -151,7 +151,7 @@ Here is the default configuration in the [`CMakeLists.txt`](CMakeLists.txt) file
 ```cmake
 
 # ⚠️ look at or near line 28
-set(PICO_BOARD pico2 CACHE STRING "Board type")  # depending on your pico hardware switch pico 2 (RP2430) to pico (RP2040)
+set(PICO_BOARD pico2 CACHE STRING "Board type")  # depending on your pico hardware switch pico 2 (RP2350) to pico (RP2040)
 
 # The following two lines must be uncommented to compile for bare RP2350 without a board
 # set(PICO_PLATFORM rp2350)
@@ -165,7 +165,7 @@ target_compile_definitions(hub75_demo PRIVATE
 )
 ```
 
-### Driver Configuration for Pico (RP2040) or Pico 2 (RP2430)
+### Driver Configuration for Pico (RP2040) or Pico 2 (RP2350)
 
 As mentioned earlier, the rest of your panel’s configuration is done in your application program. This is easier than it seems at first glance! The `Hub75 driver` has default values for all attributes. You only need to change an attribute if it does not match this default value. If you have a “standard” Hub75 matrix panel with 64 rows and 64 columns and have chosen to wire the pins as described earlier, you do not need to specify a single attribute, since the fallbacks in the `Hub75 driver` have already preset them accordingly. Your configuration therefore reduces to the minimal case listed here
 
