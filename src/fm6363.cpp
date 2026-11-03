@@ -97,7 +97,6 @@ static inline uint32_t *register_slot(uint32_t slot, uint32_t display_width)
 // support yet for giving different chips different WR_CFG*/WR_DBG values.
 // -----------------------------------------------------------------------------
 
-
 // Expands six 16-bit lane values into `display_width` words (one per CLK pulse), MSB first,
 // repeated once per chained chip. Bit n of every word goes to data lane n (data_base_pin + n).
 static void prepare_register_dma_lanes(const uint16_t lane_value[6], uint32_t *dst, uint32_t display_width)
@@ -191,8 +190,8 @@ static void fm6363_setup(PIO pio, uint sm, uint offset)
     uint32_t *cfg4_buf = register_slot(REGISTER_SLOT_CFG4, display_width);
     uint32_t *dbg_buf = register_slot(REGISTER_SLOT_DBG, display_width);
 
-    *cfg1_buf = (*cfg1_buf & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8); // set number of scan lines
-    prepare_register_dma(FM6363_CFG1_VALUE, cfg1_buf, display_width);
+    const uint16_t cg1_value = (FM6363_CFG1_VALUE & 0xC0FF) | (((cfg.panel.matrix_panel_height >> 1) - 1) << 8); // set number of scan lines
+    prepare_register_dma(cg1_value, cfg1_buf, display_width);
 
     // The blanking level ADJ (b14..b10) depends on the LED colour the lane drives,
     // the current gain (b9..b1) comes from panel_gain and is the same for all colours.
