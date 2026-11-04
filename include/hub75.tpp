@@ -1034,6 +1034,8 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_green_table()
     {
         if constexpr (Cfg.color.bitplanes == 16)
             return CIE16;
+        else if constexpr (Cfg.color.bitplanes == 12)
+            return CIE12;
         else if constexpr (Cfg.color.bitplanes == 10)
             return CIE10;
         else if constexpr (Cfg.color.bitplanes == 8)
@@ -1053,6 +1055,8 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_blue_table()
     {
         if constexpr (Cfg.color.bitplanes == 16)
             return CIE16_BLUE;
+        else if constexpr (Cfg.color.bitplanes == 12)
+            return CIE12_BLUE;
         else if constexpr (Cfg.color.bitplanes == 10)
             return CIE10_BLUE;
         else if constexpr (Cfg.color.bitplanes == 8)
@@ -1067,6 +1071,8 @@ constexpr const uint16_t *Hub75Driver<Cfg>::cie_blue_table()
     {
         if constexpr (Cfg.color.bitplanes == 16)
             return CIE16;
+        else if constexpr (Cfg.color.bitplanes == 12)
+            return CIE12;
         else if constexpr (Cfg.color.bitplanes == 10)
             return CIE10;
         else if constexpr (Cfg.color.bitplanes == 8)
