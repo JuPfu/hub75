@@ -107,7 +107,7 @@ static inline void fm6363_row_program_init(
 
     // MOV Y, STATUS returns all ones when TX FIFO level < 4, and zero otherwise. 
     // With a threshold of 4, this detects an empty FIFO.
-    sm_config_set_mov_status(&c, STATUS_IRQ_SET, 4);
+    sm_config_set_mov_status(&c, STATUS_IRQ_SET, 2);
 
     // Use the entire FIFO for TX buffering; RX FIFO capacity is not needed.
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_TX);
