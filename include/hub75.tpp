@@ -25,7 +25,11 @@
 template <Hub75Config Cfg>
 Hub75Driver<Cfg>::~Hub75Driver()
 {
+    // Reverse of create(): silence DMA first (its IRQs must not be dispatched to a dying instance),
+    // then leave the IRQ registry, then give back the PIO state machines and programs.
+    release_dma_resources_();
     unregister_instance();
+    release_pio_resources_();
 }
 
 // -----------------------------------------------------------------------------------------
@@ -92,7 +96,7 @@ float Hub75Driver<Cfg>::pwm_clkdiv_(uint32_t sys_hz)
 
         return clkdiv;
     }
-    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+    else
     {
         constexpr float m = 1.25f / 100.0f;
         constexpr float n = 8.25f;
@@ -202,6 +206,10 @@ void Hub75Driver<Cfg>::setIntensity(float intensity, bool linear_brightness_cont
             y = cie1931_inverse(intensity);
         }
         brightness_fp_ = (uint32_t)(y * (float)(1u << BRIGHTNESS_FP_SHIFT) + 0.5f);
+    }
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        build_row_cmd_buffer(brightness_fp_);
     }
 }
 
@@ -594,22 +602,131 @@ inline bool hub75_claim_on_pio(PIO target, ClaimFn &&claim_fn)
     return ok;
 }
 
+// -----------------------------------------------------------------------------------------
+// Resource ownership: one place that knows how to give things back
+//
+// configure_pio() uses release_pio_resources_() to roll back a candidate PIO block that did
+// not work out, the destructor uses it (together with release_dma_resources_()) to tear the
+// whole driver down. Both rely on the same convention: a PioConfig entry with pio == nullptr
+// (or a DMA channel number of -1) means "not claimed" and is skipped, so the functions are
+// safe to call at any stage of construction and more than once.
+// -----------------------------------------------------------------------------------------
+
+// PIO program that streams the pixel data for the configured panel.
+template <Hub75Config Cfg>
+const pio_program_t *Hub75Driver<Cfg>::stream_program_()
+{
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+        return &hub75_bitplane_stream_program;
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
+        return &icnd2153_pixel_stream_program;
+    else
+        return &fm6363_pixel_stream_program;
+}
+
+// PIO program that drives row addressing (and GCLK for PWM panels).
+template <Hub75Config Cfg>
+const pio_program_t *Hub75Driver<Cfg>::row_program_()
+{
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
+        if constexpr (Cfg.panel.address_type == RowAddressing::ABCShiftRegister)
+            return &hub75_row_abc_shift_register_program;
+        else
+            return &hub75_row_program;
+    }
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
+        return &icnd2153_row_program;
+    else
+        return &fm6363_row_program;
+}
+
+// Stops, removes and unclaims every PIO state machine/program this instance holds, in reverse
+// order of acquisition, and returns the row/stream block reservation.
+template <Hub75Config Cfg>
+void Hub75Driver<Cfg>::release_pio_resources_()
+{
+    auto release = [](const pio_program_t *program, PIO &pio, uint &sm, uint &offset)
+    {
+        if (pio == nullptr)
+            return;
+        pio_sm_set_enabled(pio, sm, false);
+        pio_remove_program_and_unclaim_sm(program, pio, sm, offset);
+        pio = nullptr;
+        sm = 0;
+        offset = 0;
+    };
+
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+        release(&hub75_bitplane_setup_program, pio_config_.pio_read, pio_config_.sm_read, pio_config_.offs_read);
+
+    if constexpr (Cfg.panel.panel_class == PanelClass::PWM && Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+        release(&fm6363_dclk_program, pio_config_.dclk_pio, pio_config_.sm_dclk, pio_config_.dclk_prog_offs);
+
+    release(row_program_(), pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs);
+    release(stream_program_(), pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
+
+    if (claimed_pio_block_ >= 0)
+    {
+        release_pio_block_for_row_stream(static_cast<uint>(claimed_pio_block_));
+        claimed_pio_block_ = -1;
+    }
+}
+
+// Silences and unclaims every DMA channel this instance holds. IRQs are disabled first, so
+// nothing is dispatched to an instance that is going away, and all channels are aborted in
+// one write, so chained channels cannot re-trigger each other half-way through.
+template <Hub75Config Cfg>
+void Hub75Driver<Cfg>::release_dma_resources_()
+{
+    int *const channels[] = {&row_ctrl_chan_, &row_chan_, &pixel_ctrl_chan_, &pixel_chan_, &write_chan_, &read_chan_};
+
+    uint32_t mask = 0;
+    for (int *ch : channels)
+    {
+        if (*ch < 0)
+            continue;
+        dma_channel_set_irq0_enabled(static_cast<uint>(*ch), false);
+        dma_channel_set_irq1_enabled(static_cast<uint>(*ch), false);
+        mask |= 1u << *ch;
+    }
+    if (mask == 0)
+        return;
+
+    dma_hw->abort = mask;
+    while (dma_hw->abort & mask)
+        tight_loop_contents(); // the register reads non-zero until in-flight transfers are flushed
+
+    for (int *ch : channels)
+    {
+        if (*ch < 0)
+            continue;
+        dma_channel_acknowledge_irq0(static_cast<uint>(*ch));
+        dma_channel_acknowledge_irq1(static_cast<uint>(*ch));
+        dma_channel_unclaim(static_cast<uint>(*ch));
+        *ch = -1;
+    }
+}
+
 // Configures the PIO state machines responsible for shifting pixel data and controlling
 // row addressing, and claims hardware resources for them.
 //
-// hub75_bitplane_stream + hub75_row(_inverted) must share one 32-word PIO block
-// (see hub75_claim_on_pio() above), and no two Hub75Driver instances can share a block
-// for their pairs (IRQ-flag collision, see claim_pio_block_for_row_stream()).
-// Each instance tries its own preferred block first (spreads instances apart when nothing
-// else is competing for PIO), then falls back through the remaining blocks in turn instead of
-// panicking. Block occupancy isn't only ours to plan: another PIO consumer (e.g. cyw43's wifi
-// SPI state machine on a pico2_w, may already be sitting on the preferred block, or a prior
-// instance's bitplane_setup program may have sneaked into it. If the row claim fails after
-// the stream claim already succeeded on a candidate, the stream claim is rolled back before
-// moving to the next candidate, so no candidate is left half-claimed.
+// Stream and row program must share one 32-word PIO block (see hub75_claim_on_pio() above), and
+// no two Hub75Driver instances can share a block for their pairs (IRQ-flag collision, see
+// claim_pio_block_for_row_stream()). Each instance tries its own preferred block first (spreads
+// instances apart when nothing else is competing for PIO), then falls back through the remaining
+// blocks in turn instead of panicking. Block occupancy isn't only ours to plan: another PIO
+// consumer (e.g. cyw43's wifi SPI state machine on a pico2_w) may already be sitting on the
+// preferred block, or a prior instance's bitplane_setup program may have sneaked into it.
+//
+// A candidate is only accepted when ALL of its claims succeed (stream, row and, for FM6363, the
+// DCLK generator). Otherwise release_pio_resources_() undoes whatever was claimed so far,
+// including the block reservation, before the next candidate is tried.
 template <Hub75Config Cfg>
 void Hub75Driver<Cfg>::configure_pio()
 {
+    constexpr bool is_pwm = Cfg.panel.panel_class == PanelClass::PWM;
+
     const size_t my_index = instance_count();
     const uint preferred = (uint)(NUM_PIOS - 1 - (my_index % (size_t)NUM_PIOS));
 
@@ -619,86 +736,91 @@ void Hub75Driver<Cfg>::configure_pio()
         if (i != preferred)
             candidates[n++] = i;
 
+    // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
+    // side-set/CLK/LE here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
+    // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
+    constexpr uint32_t data_hi = Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1;
+    constexpr uint32_t stream_lo = is_pwm ? std::min({Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin})
+                                          : std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+    constexpr uint32_t stream_hi = is_pwm ? std::max({data_hi, Cfg.pins.clk_pin, Cfg.pins.strobe_pin})
+                                          : std::max(data_hi, Cfg.pins.clk_pin);
+
+    constexpr uint32_t rowsel_hi = Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1;
+    constexpr uint32_t row_lo = is_pwm ? std::min(Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin)
+                                       : std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+    constexpr uint32_t row_hi = is_pwm ? std::max(rowsel_hi, Cfg.pins.oen_pin)
+                                       : std::max({rowsel_hi, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
+
     bool placed = false;
 
-    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
     {
-        for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
+        const uint pio_index = candidates[c];
+        if (!claim_pio_block_for_row_stream(pio_index))
+            continue; // another instance already dedicated this block to its own row+stream pair
+        claimed_pio_block_ = static_cast<int>(pio_index);
+
+        PIO candidate = pio_get_instance(pio_index);
+
+        // Claims `program` on the candidate block. A failed claim leaves *pio == nullptr, so
+        // release_pio_resources_() skips it.
+        auto claim = [&](const pio_program_t *program, PIO *pio, uint *sm, uint *offset, uint32_t lo, uint32_t hi)
         {
-            const uint pio_index = candidates[c];
-            if (!claim_pio_block_for_row_stream(pio_index))
-                continue; // another instance already dedicated this block to its own row+stream pair
+            const bool ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
+                                               { return pio_claim_free_sm_and_add_program_for_gpio_range(
+                                                     program, pio, sm, offset, lo, hi - lo + 1, true); });
+            if (!ok)
+                *pio = nullptr;
+            return ok;
+        };
 
-            PIO candidate = pio_get_instance(pio_index);
+        // Short-circuit: a later claim is only attempted if the earlier ones succeeded.
+        bool ok = claim(stream_program_(), &pio_config_.data_pio, &pio_config_.sm_data, &pio_config_.data_prog_offs, stream_lo, stream_hi) &&
+                  claim(row_program_(), &pio_config_.row_pio, &pio_config_.sm_row, &pio_config_.row_prog_offs, row_lo, row_hi);
 
-            static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
-            static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin);
-
-            // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
-            // side-set/CLK here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
-            // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
-            bool stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - 	all variables used in the lambda are captured by reference
-                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &hub75_bitplane_stream_program,
-                                                      &pio_config_.data_pio,
-                                                      &pio_config_.sm_data,
-                                                      &pio_config_.data_prog_offs,
-                                                      stream_lo,
-                                                      stream_hi - stream_lo + 1,
-                                                      true); });
-
-            if (stream_ok)
+        if constexpr (is_pwm && Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+        {
+            // The DCLK generator uses no PIO IRQ flags, so it is not tied to the row/stream block.
+            if (ok)
             {
-                static constexpr uint32_t row_lo = std::min({Cfg.pins.rowsel_base_pin, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
-                static constexpr uint32_t row_hi = std::max({Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.strobe_pin, Cfg.pins.oen_pin});
-
-                // Inverted-STB panels are handled by inverting the STROBE pin at the GPIO pad
-                // level (see hub75_row_program_init), so there is only one row program.
-                bool row_ok = false;
-                if constexpr (Cfg.panel.address_type == RowAddressing::ABCShiftRegister)
-                {
-                    row_ok = hub75_claim_on_pio(candidate, [&]
-                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &hub75_row_abc_shift_register_program,
-                                                      &pio_config_.row_pio,
-                                                      &pio_config_.sm_row,
-                                                      &pio_config_.row_prog_offs,
-                                                      row_lo,
-                                                      row_hi - row_lo + 1,
-                                                      true); });
-                }
-                else
-                {
-                    row_ok = hub75_claim_on_pio(candidate, [&]
-                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &hub75_row_program,
-                                                      &pio_config_.row_pio,
-                                                      &pio_config_.sm_row,
-                                                      &pio_config_.row_prog_offs,
-                                                      row_lo,
-                                                      row_hi - row_lo + 1,
-                                                      true); });
-                }
-
-                if (row_ok)
-                {
-                    placed = true;
-                    break;
-                }
-
-                pio_remove_program_and_unclaim_sm(&hub75_bitplane_stream_program, pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs);
+                ok = pio_claim_free_sm_and_add_program_for_gpio_range(
+                    &fm6363_dclk_program,
+                    &pio_config_.dclk_pio, &pio_config_.sm_dclk, &pio_config_.dclk_prog_offs,
+                    Cfg.pins.clk_pin, 1, true);
+                if (!ok)
+                    pio_config_.dclk_pio = nullptr;
             }
-
-            release_pio_block_for_row_stream(pio_index);
         }
 
-        if (!placed)
+        if (ok)
+        {
+            placed = true;
+            break; // the block stays reserved for this instance
+        }
+
+        release_pio_resources_(); // undo partial claims and the block reservation, then try the next block
+    }
+
+    if (!placed)
+    {
+        if constexpr (!is_pwm)
         {
             panic("Failed to find a PIO block with room for hub75_bitplane_stream_program + "
                   "hub75_row_program (checked all %d blocks)\n",
                   (int)NUM_PIOS);
         }
+        else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
+        {
+            panic("Failed to find a PIO block with room for icnd2153_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
+        }
+        else
+        {
+            panic("Failed to find a PIO block with room for fm6363_pixel_stream_program + fm6363_row_program + fm6363_dclk_program (checked all %d blocks)\n", (int)NUM_PIOS);
+        }
+    }
 
+    if constexpr (Cfg.panel.panel_class == PanelClass::HUB75)
+    {
         hub75_bitplane_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, BITPLANE_STREAM_LENGTH);
 
         // Implementation of Pimoronis anti ghosting solution: https://github.com/pimoroni/pimoroni-pico/commit/9e7c2640d426f7b97ca2d5e9161d3f0a00f21abf
@@ -712,6 +834,7 @@ void Hub75Driver<Cfg>::configure_pio()
         {
             hub75_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.strobe_pin, timing_config_.latch_cycles, Cfg.panel.inverted_stb);
         }
+
         // State machine for "parallelized" building of the bit-plane structure. No IRQ/GPIO use
         // (see src/hub75.pio), so unlike stream/row it isn't restricted to any particular block or
         // exclusive to one instance - the plain claim call already searches every block itself.
@@ -721,127 +844,22 @@ void Hub75Driver<Cfg>::configure_pio()
                 &pio_config_.sm_read,
                 &pio_config_.offs_read))
         {
+            pio_config_.pio_read = nullptr;
+            release_pio_resources_(); // hand back stream + row before giving up
             panic("Failed to claim PIO SM for hub75_bitplane_setup_program\n");
         }
         hub75_bitplane_setup_program_init(pio_config_.pio_read, pio_config_.sm_read, pio_config_.offs_read);
     }
-    else
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
     {
-        for (uint c = 0; c < (uint)NUM_PIOS && !placed; ++c)
-        {
-            const uint pio_index = candidates[c];
-            if (!claim_pio_block_for_row_stream(pio_index))
-                continue; // another instance already dedicated this block to its own row+stream pair
-
-            PIO candidate = pio_get_instance(pio_index);
-
-            static constexpr uint32_t stream_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
-            static constexpr uint32_t stream_hi = std::max(Cfg.pins.data_base_pin + Cfg.pins.data_n_pins - 1, Cfg.pins.clk_pin + 1);
-
-            // gpio_count must span from the lowest to the highest GPIO actually used (out pins AND
-            // side-set/CLK+LE here), not just count them - pio_claim_free_sm_and_add_program_for_gpio_range()
-            // uses it to pick/configure a PIO instance whose GPIO_BASE window covers both ends.
-            bool stream_ok = false;
-            if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
-            {
-                stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                                               { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                     &icnd2153_pixel_stream_program,
-                                                     &pio_config_.data_pio,
-                                                     &pio_config_.sm_data,
-                                                     &pio_config_.data_prog_offs,
-                                                     stream_lo,
-                                                     stream_hi - stream_lo + 1,
-                                                     true); });
-            }
-            else
-            {
-                stream_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                                               { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                     &fm6363_pixel_stream_program,
-                                                     &pio_config_.data_pio,
-                                                     &pio_config_.sm_data,
-                                                     &pio_config_.data_prog_offs,
-                                                     stream_lo,
-                                                     stream_hi - stream_lo + 1,
-                                                     true); });
-            }
-
-            if (stream_ok)
-            {
-                // icnd2153_row only ever touches rowsel_base_pin's 3 pins (RA/RB/RC)
-                static constexpr uint32_t row_lo = std::min(Cfg.pins.data_base_pin, Cfg.pins.oen_pin);
-                static constexpr uint32_t row_hi = std::max(Cfg.pins.rowsel_base_pin + Cfg.pins.rowsel_n_pins - 1, Cfg.pins.oen_pin);
-
-                bool row_ok = false;
-                if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
-                {
-                    row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &icnd2153_row_program,
-                                                      &pio_config_.row_pio,
-                                                      &pio_config_.sm_row,
-                                                      &pio_config_.row_prog_offs,
-                                                      row_lo,
-                                                      row_hi - row_lo + 1,
-                                                      true); });
-                }
-                else
-                {
-                    row_ok = hub75_claim_on_pio(candidate, [&] // λ-function - all variables used in the lambda are captured by reference
-                                                { return pio_claim_free_sm_and_add_program_for_gpio_range(
-                                                      &fm6363_row_program,
-                                                      &pio_config_.row_pio,
-                                                      &pio_config_.sm_row,
-                                                      &pio_config_.row_prog_offs,
-                                                      row_lo,
-                                                      row_hi - row_lo + 1,
-                                                      true); });
-                }
-                if (row_ok)
-                {
-
-                    if (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
-                    {
-                        bool clk_ok = pio_claim_free_sm_and_add_program_for_gpio_range(
-                            &fm6363_dclk_program,
-                            &pio_config_.dclk_pio, &pio_config_.sm_dclk, &pio_config_.dclk_prog_offs,
-                            Cfg.pins.clk_pin, 1, true);
-                    }
-
-                    if (row_ok)
-                    {
-                        placed = true;
-                        break;
-                    }
-                }
-                release_pio_block_for_row_stream(pio_index);
-            }
-        }
-
-        if (!placed)
-        {
-            if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
-            {
-                panic("Failed to find a PIO block with room for icnd2153_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
-            }
-            else
-            {
-                panic("Failed to find a PIO block with room for fm6363_pixel_stream_program + icnd2153_row_program (checked all %d blocks)\n", (int)NUM_PIOS);
-            }
-        }
-
-        if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::ICND2153)
-        {
-            icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
-            icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
-        }
-        else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
-        {
-            fm6363_dclk_program_init(pio_config_.dclk_pio, pio_config_.sm_dclk, pio_config_.dclk_prog_offs, Cfg.pins.clk_pin);
-            fm6363_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
-            fm6363_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin, SCAN_DEPTH, FM6363_GCLK_RISES);
-        }
+        icnd2153_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.oen_pin, SCAN_DEPTH, ICND2153_GCLK_RISES);
+        icnd2153_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin);
+    }
+    else if constexpr (Cfg.panel.panel_chip == Hub75PanelChip::FM6363)
+    {
+        fm6363_dclk_program_init(pio_config_.dclk_pio, pio_config_.sm_dclk, pio_config_.dclk_prog_offs, Cfg.pins.clk_pin);
+        fm6363_pixel_stream_program_init(pio_config_.data_pio, pio_config_.sm_data, pio_config_.data_prog_offs, Cfg.pins.data_base_pin, Cfg.pins.clk_pin, Cfg.pins.strobe_pin);
+        fm6363_row_program_init(pio_config_.row_pio, pio_config_.sm_row, pio_config_.row_prog_offs, Cfg.pins.rowsel_base_pin, Cfg.pins.rowsel_n_pins, Cfg.pins.oen_pin);
     }
 }
 
@@ -961,7 +979,7 @@ void Hub75Driver<Cfg>::setup_dma_transfers()
 
 // Derives a 256-entry gamma table for an arbitrary bitplane depth from a 16-bit master
 // table by right-shifting each entry - used for any Cfg.color.bitplanes value that doesn't
-// have its own hand-generated table (currently: anything other than 8, 10, or 16). This
+// have its own hand-generated table (currently: anything other than 8, 10, 12 or 16). This
 // avoids needing to run cie.py and add a new CIEnn/_RED/_GREEN/_BLUE table to cie.hpp every
 // time a different bitplane depth is tried; 8 and 10 stay on their existing, separately
 // hand-tuned tables below since those are already in use by other panel configs.
@@ -1215,7 +1233,7 @@ static constexpr std::array<SpreadPair, 256> make_spread_lut()
     }
     return t;
 }
-// Keep this in RAM (__not_in_flash) so XIP cache misses don't eat the gain.
+
 static constexpr auto SPREAD_LUT = make_spread_lut(); // compile time generation!
 
 template <const uint8_t *LANE, uint32_t DEPTH>
@@ -1269,7 +1287,7 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         // The wire format is always 16 bits per channel.
         static_assert(Cfg.color.bitplanes == 12 || Cfg.color.bitplanes == 16, "PWM value depth must be 12 or 16 bit");
 
-        const uint32_t scale = pwm_scale_q16_(); // 0..65536
+        const uint32_t scale = static_cast<uint32_t>(brightness_fp_); // PWM: linear scale 0..65536 (Q16)
 
         uint8_t *const out = frame_buffer_;
 
@@ -1280,10 +1298,10 @@ __attribute__((optimize("unroll-loops"))) void Hub75Driver<Cfg>::build_pixel_str
         uint32_t fb_index = 0;
 
         // DMA header
-        // first word into higher 16 bits: scan depth - 1
+        // first word into lower 16 bits: scan depth - 1
         out[fb_index++] = (SCAN_DEPTH * 16 - 1) & 0xFF;
         out[fb_index++] = ((SCAN_DEPTH * 16 - 1) >> 8) & 0xFF;
-        // second word into lower 16 bits: (display width - 1) reduced further by 1 to treat the last 6 values separately
+        // second word into higher 16 bits: (display width - 1) reduced further by 1 to treat the last 6 values separately
         out[fb_index++] = (CHAIN_WIDTH - 2) & 0xFF;
         out[fb_index++] = ((CHAIN_WIDTH - 2) >> 8) & 0xFF;
 

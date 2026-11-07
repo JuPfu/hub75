@@ -100,8 +100,8 @@ struct Hub75PanelConfig
     uint32_t matrix_panel_width = 64;
     uint32_t matrix_panel_height = 64;
 
-    // chain_rows: number of panels chained left-to-right in a single chain row.
-    // chain_cols: number of chain rows stacked vertically (U-type / serpentine).
+    // chain_rows: number of chain rows stacked vertically (U-type / serpentine)
+    // chain_cols: number of panels chained left-to-right in a single chain row
     //
     // Currently only serpentine (U-turn) chained topologies are supported.
     // Arbitrary panel rotations or non-serpentine cable layouts are not supported.
@@ -156,7 +156,7 @@ struct Hub75PanelConfig
     uint32_t base_latch_ns = 80; // wait time in nano-seconds to stabilise latch
     uint32_t base_addr_ns = 160; // wait time in nano-seconds to stabilise row addressing
 
-    uint32_t panel_gain = 80; // basis brightness of the panel in percent (range 0 - 100)
+    uint32_t panel_gain = 100; // basis brightness of the panel in percent (range 0 - 100)
 };
 
 // Logical display orientation.
@@ -193,7 +193,7 @@ struct Hub75PinConfig
 //   shift=31 -> add  0%   (disabled / identity, use this to turn off a term)
 struct Hub75ColorConfig
 {
-    uint32_t bitplanes = 10; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 16 for some PWM boards
+    uint32_t bitplanes = 10; // number of bit-planes used for BCM (Binary Code Modulation) - valid values are 8 or 10 and 12 or 16 for some PWM boards
 
     // Use separate CIE channels for improved color representation - needs more memory.
     bool separate_cie_channels = false;
@@ -398,7 +398,7 @@ class Hub75Driver : public Hub75DriverBase
 private:
     static_assert(Cfg.panel.chain_rows >= 1, "chain_rows must be >= 1");
     static_assert(Cfg.panel.chain_cols >= 1, "chain_cols must be >= 1");
-    static_assert(Cfg.panel.panel_class == PanelClass::PWM ? (Cfg.color.bitplanes == 16  || Cfg.color.bitplanes == 12) : (Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10),
+    static_assert(Cfg.panel.panel_class == PanelClass::PWM ? (Cfg.color.bitplanes == 16 || Cfg.color.bitplanes == 12) : (Cfg.color.bitplanes == 8 || Cfg.color.bitplanes == 10),
                   "Invalid bit depth for selected panel class");
 
     // Unrotated panel geometry: internal only. Callers should use SCREEN_WIDTH/SCREEN_HEIGHT
@@ -408,6 +408,12 @@ private:
     static_assert(DISPLAY_WIDTH % 2 == 0, "HUB75 bitstream expects even pixel pairs");
 
     DriverState driver_state_ = DriverState::Invalid;
+
+    int claimed_pio_block_ = -1; // block reserved via claim_pio_block_for_row_stream(), -1 = none
+    static const pio_program_t *stream_program_();
+    static const pio_program_t *row_program_();
+    void release_pio_resources_();
+    void release_dma_resources_();
 
 public:
     static constexpr size_t TOTAL_PIXELS = static_cast<size_t>(DISPLAY_WIDTH * DISPLAY_HEIGHT);
@@ -656,7 +662,7 @@ private:
         alignas(4) uint16_t rgb_buffer_[TOTAL_PIXELS * 3];
         alignas(4) uint8_t frame_buffer1_[PWM_FRAME_BYTES];
         alignas(4) uint8_t frame_buffer2_[PWM_FRAME_BYTES];
-        alignas(4) uint16_t row_address_buffer_[Cfg.panel.panel_chip == Hub75PanelChip::FM6363 ? SCAN_DEPTH + 1 : 0u];
+        alignas(4) uint16_t row_address_buffer_[Cfg.panel.panel_chip == Hub75PanelChip::FM6363 ? SCAN_DEPTH + 1 : 1u];
     };
 
     Hub75Storage<Cfg.panel.panel_class, Cfg> storage_;
@@ -668,8 +674,6 @@ private:
     alignas(4) Hub75RowCmd *dma_row_cmd_buffer_ = nullptr;
 
     const void *row_address_ptr_ = nullptr; // ctrl channel reads this pointer value
-    static constexpr uint32_t FM6363_ROW_ADDR_BITS = 5;
-    static_assert(FM6363_ROW_ADDR_BITS == 5, "fm6363_row PIO program hard-codes out pins,5 / out y,11");
 
     volatile bool swap_row_cmd_buffer_pending_ = false;
     volatile bool swap_frame_buffer_pending_ = false;
@@ -695,12 +699,6 @@ private:
     uint32_t basis_factor_ = (Cfg.panel.panel_class == PanelClass::PWM) ? 255u : 6u;
 
     void apply_brightness_();
-
-    // PWM: linear scale 0..65536 (Q16) = fine intensity * (coarse factor / 255)
-    uint32_t pwm_scale_q16_() const
-    {
-        return static_cast<uint32_t>(brightness_fp_);
-    }
 
     // Only touched when Cfg.frame_rate_debug is set.
     int frame_count_ = 0;
